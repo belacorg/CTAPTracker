@@ -370,8 +370,6 @@ function buildDashboard() {
     ${isCurrentWeek ? `<div class="dash-greeting" id="greeting-text" data-greeting="${greeting}">${greetDisplay}</div>` : ''}
     ${dateStr ? `<div class="date-header">${dateStr}</div>` : ''}
     ${week.note ? `<div class="dash-note">${week.note}</div>` : ''}
-    <div id="ticker-wrap">${buildTickerStrip()}</div>
-
     <div class="hero-jobs-card">
       <div class="ctap-hero-label" style="margin-bottom:10px">JOB CREDITS</div>
       <div class="hero-three-row">
@@ -923,43 +921,6 @@ function buildInsightsCard(dailyTarget, todayHours, weekTarget, weekEarned, toda
 }
 
 // ── Ticker Strip ───────────────────────────────────────────────────────────
-const TICKER_TIPS = [
-  'Hive fit + sale combo = 2.32h — highest ROI single visit available',
-  'Long Duration (completed) = 2.45h — your biggest single-job credit',
-  'First Visit (BBF/WAU/WAW) earns 0.85h — more than a standard Annual Service',
-  'Boiler lead (HI Lead) earns 0.69h with no parts required',
-  'Inhibitor fit + SGO = 0.61h — look out for the opportunity after any First Visit',
-  'Annual Service (BBF/WAU/WAW/AGA) earns 0.75h vs 0.48h for CHB',
-  'Breakdown First Fix and OCA both earn 0.67h each',
-  'Linked Breakdown earns the same as a standard Breakdown — 0.67h',
-  'First Visit (CHB) = 0.57h · First Visit (BBF/WAU/WAW) = 0.85h',
-  'Upgrade Work earns 0.72h per quoted hour — variable, check the job sheet',
-  'EV Charging earns 0.36h — small but it counts, always log it',
-  'CO alarm sell earns 0.12h — add up across the week',
-  'Mark Annual Leave in Schedule to keep your weekly target accurate',
-  'Log NPT and Early Finish entries so your daily gaps stay honest',
-  'CTAP personalises to your rolling average after 4 completed weeks',
-  'Coach Mode surfaces live opportunities based on jobs logged today',
-];
-
-function buildTickerStrip() {
-  const sep      = '<span class="ticker-sep">·</span>';
-  const itemsHTML = TICKER_TIPS.map(t => `<span class="ticker-item">${t}</span>`).join(sep);
-  const track    = itemsHTML + sep + itemsHTML + sep;
-
-  return `
-    <div class="ticker-strip">
-      <div class="ticker-track" style="animation-duration:90s">
-        ${track}
-      </div>
-    </div>`;
-}
-
-function refreshTicker() {
-  const wrap = document.getElementById('ticker-wrap');
-  if (wrap) wrap.innerHTML = buildTickerStrip();
-}
-
 function buildDayBlock(dayKey, jobs, isToday, week) {
   const total = jobs.reduce((s, j) => s + j.creditMins, 0);
   const totalHours = total / 60;
@@ -1968,12 +1929,6 @@ function attachListeners() {
         }
       }, 52);
     }
-  }
-
-  // Auto-refresh ticker every 60 seconds while on dashboard
-  clearInterval(window._tickerTimer);
-  if (activeTab === 'dashboard') {
-    window._tickerTimer = setInterval(refreshTicker, 60000);
   }
 
   // Bottom nav
