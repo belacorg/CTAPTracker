@@ -1495,7 +1495,11 @@ function refreshSheetInPlace(sheetId) {
   const panel = sheet.querySelector('.forecast-panel');
   if (!panel) return;
   const tmp = document.createElement('div');
-  tmp.innerHTML = sheetId === 'forecast-sheet' ? buildWeekForecastSheet() : buildWeekSummarySheet();
+  tmp.innerHTML = sheetId === 'forecast-sheet'
+    ? buildWeekForecastSheet()
+    : sheetId === 'cashout-sheet'
+      ? buildCashOutSheet()
+      : buildWeekSummarySheet();
   const newPanel = tmp.querySelector('.forecast-panel');
   if (!newPanel) return;
   const scrollTop = panel.scrollTop;
@@ -2280,19 +2284,19 @@ function attachListeners() {
   if (cashoutClose) cashoutClose.addEventListener('click', closeCashOutSheet);
   const cashoutBackdrop = document.getElementById('cashout-backdrop');
   if (cashoutBackdrop) cashoutBackdrop.addEventListener('click', closeCashOutSheet);
-  document.querySelectorAll('.cashout-mult-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      cashOutMultiplier = parseFloat(btn.dataset.mult);
-      render();
-      if (cashOutSheetOpen) document.getElementById('cashout-sheet').classList.remove('hidden');
-    });
-  });
-  document.querySelectorAll('.cashout-tax-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      cashOutTaxRate = btn.dataset.tax;
-      render();
-      if (cashOutSheetOpen) document.getElementById('cashout-sheet').classList.remove('hidden');
-    });
+  const cashoutSheet = document.getElementById('cashout-sheet');
+  if (cashoutSheet) cashoutSheet.addEventListener('click', e => {
+    const multBtn = e.target.closest('.cashout-mult-btn');
+    if (multBtn) {
+      cashOutMultiplier = parseFloat(multBtn.dataset.mult);
+      refreshSheetInPlace('cashout-sheet');
+      return;
+    }
+    const taxBtn = e.target.closest('.cashout-tax-btn');
+    if (taxBtn) {
+      cashOutTaxRate = taxBtn.dataset.tax;
+      refreshSheetInPlace('cashout-sheet');
+    }
   });
 
   // Modal
