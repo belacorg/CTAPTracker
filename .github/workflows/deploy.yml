@@ -40,7 +40,7 @@ jobs:
 
       - name: Copy static assets to dist
         run: |
-          cp app/app.js app/data.js app/sw.js app/manifest.json dist/
+          cp app/app.js app/data.cjs app/sw.js app/manifest.json dist/
           cp -r app/icons dist/
 
       - name: Setup Pages
