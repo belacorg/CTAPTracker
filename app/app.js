@@ -1332,8 +1332,8 @@ function buildWeekForecastSheet() {
     summary = `No jobs logged yet this week. Target is ${targetHours.toFixed(1)}h.`;
   } else {
     summary = projGap >= 0
-      ? `On current pace you'll finish at ~${projected.toFixed(2)}h — ${projGap.toFixed(2)}h above your ${targetHours.toFixed(1)}h target.`
-      : `On current pace you'll finish at ~${projected.toFixed(2)}h — ${Math.abs(projGap).toFixed(2)}h short of your ${targetHours.toFixed(1)}h target.`;
+      ? `At your current pace, you'll finish on ~${projected.toFixed(2)}h — ${projGap.toFixed(2)}h above your ${targetHours.toFixed(1)}h target.`
+      : `At your current pace, you'll finish on ~${projected.toFixed(2)}h — ${Math.abs(projGap).toFixed(2)}h short of your ${targetHours.toFixed(1)}h target.`;
   }
 
   // Needed per day notice
@@ -2595,7 +2595,7 @@ function buildCoachCard() {
       const remainDays = wkDays5.filter(dk => dk > todayKey && !dayIsLeave(week, dk)).length;
       if (workedDays > 0 && remainDays > 0) {
         const projected = earnedHours + (earnedHours / workedDays) * remainDays;
-        msgs.push(`On current pace you'll finish at ${projected.toFixed(2)}h — ${(projected - targetHours).toFixed(2)}h above target.`);
+        msgs.push(`At your current pace, you'll finish on ${projected.toFixed(2)}h — ${(projected - targetHours).toFixed(2)}h above target.`);
       } else {
         msgs.push(`CTAP balance: +${bal.toFixed(2)}h — you're in credit. Keep the consistency going.`);
       }
