@@ -3110,6 +3110,78 @@ details[open] .info-chevron { transform: rotate(90deg); }
   font-weight: 600;
   cursor: pointer;
 }
+.settings-delete-btn {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px;
+  background: transparent;
+  color: var(--red);
+  border: 1px solid var(--red);
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.settings-delete-confirm {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--red);
+  border-radius: 12px;
+  background: rgba(239, 68, 68, 0.06);
+}
+.settings-delete-warn {
+  font-size: 0.78rem;
+  color: var(--text);
+  line-height: 1.45;
+  margin-bottom: 10px;
+}
+.settings-delete-label { font-size: 0.72rem; color: var(--muted); display: block; margin-bottom: 6px; }
+.settings-delete-input {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--surface2);
+  border: 1px solid var(--sep);
+  border-radius: 8px;
+  color: var(--fg);
+  font-size: 16px;
+  font-weight: 600;
+  font-family: inherit;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  box-sizing: border-box;
+  outline: none;
+}
+.settings-delete-btns { display: flex; gap: 8px; margin-top: 10px; }
+.settings-delete-cancel {
+  flex: 1;
+  padding: 10px;
+  background: var(--surface2);
+  color: var(--text);
+  border: none;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.settings-delete-confirm-btn {
+  flex: 1;
+  padding: 10px;
+  background: var(--red);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.settings-delete-confirm-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.settings-delete-note {
+  margin-top: 10px;
+  font-size: 0.68rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
 
 .settings-sync-title {
   font-size: 0.95rem;

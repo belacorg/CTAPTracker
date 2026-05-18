@@ -1,5 +1,5 @@
 import { supabase } from './supabase.js';
-import { ensureProfile, loadStateFromSupabase, syncStateToSupabase, syncWeekJobLogs, syncWeekMeta, updateProfileField } from './db.js';
+import { deleteAllUserData, ensureProfile, loadStateFromSupabase, syncStateToSupabase, syncWeekJobLogs, syncWeekMeta, updateProfileField } from './db.js';
 import { checkAndMigrate } from './migrate.js';
 import { showAuthScreen } from './auth.js';
 
@@ -87,6 +87,18 @@ window.__ctapSyncWeek = async function(weekKey) {
 };
 
 window.__ctapSignOut = async function() {
+  await supabase.auth.signOut();
+  _currentUser = null;
+  if (window.__ctapOnSignOut) window.__ctapOnSignOut();
+};
+
+window.__ctapDeleteAccountData = async function() {
+  if (!_currentUser) throw new Error('Not signed in');
+  await deleteAllUserData(_currentUser);
+  try {
+    localStorage.removeItem('jct_state');
+    Object.keys(localStorage).filter(k => k.startsWith('jcpd_')).forEach(k => localStorage.removeItem(k));
+  } catch {}
   await supabase.auth.signOut();
   _currentUser = null;
   if (window.__ctapOnSignOut) window.__ctapOnSignOut();

@@ -158,6 +158,20 @@ export async function syncWeekJobLogs(user, state, weekKey) {
   }
 }
 
+// ── Delete all rows for a user ────────────────────────────────────────────
+// Wipes everything the app stores (job_logs, weeks, users_profile). Does NOT
+// delete the auth.users record — that requires a service-role edge function
+// (see docs/edge-function-delete-auth.md).
+
+export async function deleteAllUserData(user) {
+  const { error: jobsErr } = await supabase.from('job_logs').delete().eq('user_id', user.id);
+  if (jobsErr) throw jobsErr;
+  const { error: weeksErr } = await supabase.from('weeks').delete().eq('user_id', user.id);
+  if (weeksErr) throw weeksErr;
+  const { error: profileErr } = await supabase.from('users_profile').delete().eq('id', user.id);
+  if (profileErr) throw profileErr;
+}
+
 // ── Sync week metadata only (no jobs) ─────────────────────────────────────
 
 export async function syncWeekMeta(user, state, weekKey) {

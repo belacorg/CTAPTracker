@@ -20,6 +20,7 @@ let weekendExpanded = false;
 let openSettingsInfo = null;
 let creditsInfoExpanded = false;
 let legalInfoExpanded = false;
+let deleteAccountStep = 'idle';
 let howToExpanded = false;
 let graphWeekKey = getWeekKey(new Date());
 let graphSelectedDay = null;
@@ -1003,6 +1004,20 @@ function buildSettings() {
       <div class="settings-account-name">${_ctapDisplayName || _ctapUser.email}</div>
       <div class="settings-account-email">${_ctapUser.email}</div>
       <button id="sign-out-btn" class="settings-signout-btn">Sign out</button>
+      ${deleteAccountStep === 'idle' ? `
+        <button id="delete-account-btn" class="settings-delete-btn">Delete account &amp; data</button>
+      ` : `
+        <div class="settings-delete-confirm">
+          <div class="settings-delete-warn">This wipes every job, week, shift and setting from your account on our servers and signs you out. It can't be undone.</div>
+          <label class="settings-delete-label">Type <b>DELETE</b> to confirm</label>
+          <input type="text" id="delete-confirm-input" class="settings-delete-input" autocapitalize="characters" autocomplete="off" spellcheck="false">
+          <div class="settings-delete-btns">
+            <button id="delete-cancel-btn" class="settings-delete-cancel">Cancel</button>
+            <button id="delete-confirm-btn" class="settings-delete-confirm-btn" disabled>Permanently delete</button>
+          </div>
+          <div class="settings-delete-note">Your sign-in record is removed within 24h once we deploy our cleanup function — message Jake on Teams if you need it sooner.</div>
+        </div>
+      `}
     </div>` : `
     <div class="dashboard-card settings-account-card">
       <div class="settings-sync-title">Sync across devices</div>
@@ -1996,6 +2011,42 @@ function attachListeners() {
       showToast('Sign out unavailable');
       signOutBtn.textContent = 'Sign out';
       signOutBtn.disabled = false;
+    }
+  });
+
+  // Delete account & data — two-step confirm
+  const deleteBtn = document.getElementById('delete-account-btn');
+  if (deleteBtn) deleteBtn.addEventListener('click', () => {
+    deleteAccountStep = 'confirm';
+    render();
+    const inp = document.getElementById('delete-confirm-input');
+    if (inp) inp.focus();
+  });
+  const deleteCancelBtn = document.getElementById('delete-cancel-btn');
+  if (deleteCancelBtn) deleteCancelBtn.addEventListener('click', () => {
+    deleteAccountStep = 'idle';
+    render();
+  });
+  const deleteInput = document.getElementById('delete-confirm-input');
+  const deleteConfirmBtn = document.getElementById('delete-confirm-btn');
+  if (deleteInput && deleteConfirmBtn) {
+    deleteInput.addEventListener('input', () => {
+      deleteConfirmBtn.disabled = deleteInput.value.trim().toUpperCase() !== 'DELETE';
+    });
+  }
+  if (deleteConfirmBtn) deleteConfirmBtn.addEventListener('click', async () => {
+    if (deleteInput && deleteInput.value.trim().toUpperCase() !== 'DELETE') return;
+    deleteConfirmBtn.textContent = 'Deleting…';
+    deleteConfirmBtn.disabled = true;
+    try {
+      if (!window.__ctapDeleteAccountData) throw new Error('Delete unavailable — not signed in');
+      await window.__ctapDeleteAccountData();
+      deleteAccountStep = 'idle';
+      showToast('Account data deleted');
+    } catch (e) {
+      showToast('Delete failed: ' + (e.message || 'unknown error'));
+      deleteConfirmBtn.textContent = 'Permanently delete';
+      deleteConfirmBtn.disabled = false;
     }
   });
 
