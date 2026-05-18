@@ -129,7 +129,7 @@ body {
 }
 .top-title { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-start; }
 .top-title-main { font-size: 0.75rem; font-weight: 700; line-height: 1; letter-spacing: -0.5px; }
-.top-title-sub  { font-size: 0.72rem; color: var(--muted); letter-spacing: 0.02em; margin-top: 4px; }
+.top-title-sub  { font-size: 0.58rem; color: var(--muted); letter-spacing: 0.02em; margin-top: 2px; }
 .top-greeting {
   font-size: 0.66rem;
   font-weight: 700;
