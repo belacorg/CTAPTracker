@@ -61,7 +61,6 @@ const JOB_META = {
   hvr_the:    { short: 'Hive Repair',          sub: 'Thermostat' },
   hvr_trv:    { short: 'Hive Repair',          sub: 'TRV' },
   hvu_the:    { short: 'Hive Uninstall',       sub: 'Thermostat' },
-  inshv_trv:  { short: 'Hive TRV Install',     sub: 'Solvers · variable' },
   rchv_thr:   { short: 'Recall Hive',          sub: 'Thermostat' },
   rchv_trv:   { short: 'Recall Hive',          sub: 'TRVs' },
   // Sales

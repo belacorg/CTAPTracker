@@ -31,7 +31,6 @@ const JOB_TYPES = {
     { id: 'hvr_the', code: 'HVR-THE', name: 'Hive Repair – Thermostat', minutes: 56, credits: 0.67, variable: false },
     { id: 'hvr_trv', code: 'HVR-TRV', name: 'Hive Repair – TRV', minutes: 56, credits: 0.67, variable: false },
     { id: 'hvu_the', code: 'HVU-THE', name: 'Hive Uninstall – Thermostat', minutes: 90, credits: 1.08, variable: false },
-    { id: 'inshv_trv', code: 'INSHV-TRV', name: 'Install Hive TRVs (Solvers)', minutes: 0, credits: 0, variable: true, variableType: 'minutes', variablePrompt: 'Charge time in minutes' },
     { id: 'rchv_thr', code: 'RCHV-THR', name: 'Recall Hive Thermostat', minutes: 56, credits: 0.67, variable: false },
     { id: 'rchv_trv', code: 'RCHV-TRV', name: 'Recall Hive TRVs', minutes: 56, credits: 0.67, variable: false }
   ],
