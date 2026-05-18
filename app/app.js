@@ -19,6 +19,7 @@ let expandedZeroWeek = null;
 let weekendExpanded = false;
 let openSettingsInfo = null;
 let creditsInfoExpanded = false;
+let legalInfoExpanded = false;
 let howToExpanded = false;
 let graphWeekKey = getWeekKey(new Date());
 let graphSelectedDay = null;
@@ -981,9 +982,19 @@ function buildSettings() {
         <div class="st-kv"><span class="st-k">Storage</span><span class="st-v">${_ctapUser ? 'Synced to your account.' : 'All data is on this device.'}</span></div>
       </div>` : ''}
       ${rowDiv()}
+      <button class="st-nav-row" id="toggle-legal-info">
+        <span class="st-row-label">Legal &amp; data</span>
+        <span class="st-chevron${legalInfoExpanded ? ' open' : ''}">›</span>
+      </button>
+      ${legalInfoExpanded ? `<div class="st-credits-body">
+        <p class="st-legal-p">Numbers shown here are personal estimates and may not match official Centrica or British Gas systems. Always check your CTAP balance and pay against your payslip and company tools before acting on them.</p>
+        <p class="st-legal-p">This app isn't affiliated with, endorsed by, or representative of Centrica plc, British Gas, or any employer. It's a personal tool, provided as-is with no warranty.</p>
+        <p class="st-legal-p">Anything you enter is kept on your device${_ctapUser ? ' and synced to your personal account on Supabase (EU)' : ' — sign in to also sync to your personal account on Supabase (EU)'}. Nothing is shared with third parties. You can delete your account and all your data at any time — just message Jake on Teams.</p>
+      </div>` : ''}
+      ${rowDiv()}
       <div class="st-row">
-        <span class="st-row-label">Created & designed by</span>
-        <a href="mailto:jake.rainford@britishgas.co.uk" class="st-row-link">Jake Rainford</a>
+        <span class="st-row-label">Made by</span>
+        <span class="st-row-value">Jake Rainford · say hi on Teams</span>
       </div>
     </div>
 
@@ -1002,7 +1013,7 @@ function buildSettings() {
       </div>
     </div>`}
 
-    <div class="st-footer">Questions? <a href="mailto:jake.rainford@britishgas.co.uk" class="st-footer-link">jake.rainford@britishgas.co.uk</a></div>
+    <div class="st-footer">Personal estimates only — verify against official systems.</div>
   `;
 }
 
@@ -2159,6 +2170,8 @@ function attachListeners() {
   // How credits work — expand/collapse
   const creditsBtn = document.getElementById('toggle-credits-info');
   if (creditsBtn) creditsBtn.addEventListener('click', () => { creditsInfoExpanded = !creditsInfoExpanded; render(); });
+  const legalBtn = document.getElementById('toggle-legal-info');
+  if (legalBtn) legalBtn.addEventListener('click', () => { legalInfoExpanded = !legalInfoExpanded; render(); });
 
   // History item click → navigate to that week; show summary for past weeks
   document.querySelectorAll('[data-goto-week]').forEach(el => {

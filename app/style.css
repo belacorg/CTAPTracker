@@ -733,6 +733,7 @@ body {
 .st-kv { display: flex; gap: 10px; font-size: 0.78rem; }
 .st-k { color: var(--muted); flex-shrink: 0; min-width: 110px; }
 .st-v { color: var(--text); line-height: 1.4; }
+.st-legal-p { font-size: 0.74rem; line-height: 1.45; color: var(--muted); margin: 0; }
 
 /* Footer */
 .st-footer {
