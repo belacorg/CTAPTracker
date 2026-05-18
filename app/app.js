@@ -1331,9 +1331,10 @@ function buildWeekForecastSheet() {
   } else if (isFutureWeek || daysWorked === 0) {
     summary = `No jobs logged yet this week. Target is ${targetHours.toFixed(1)}h.`;
   } else {
+    const targetTrim = Number(targetHours.toFixed(1));
     summary = projGap >= 0
-      ? `At your current pace, you'll finish on ~${projected.toFixed(2)}h — ${projGap.toFixed(2)}h above your ${targetHours.toFixed(1)}h target.`
-      : `At your current pace, you'll finish on ~${projected.toFixed(2)}h — ${Math.abs(projGap).toFixed(2)}h short of your ${targetHours.toFixed(1)}h target.`;
+      ? `At your current pace, you'll finish on ${projected.toFixed(2)} hours. This is ${projGap.toFixed(2)} hours above your ${targetTrim}-hour target.`
+      : `At your current pace, you'll finish on ${projected.toFixed(2)} hours. This is ${Math.abs(projGap).toFixed(2)} hours short of your ${targetTrim}-hour target.`;
   }
 
   // Needed per day notice
@@ -2595,7 +2596,7 @@ function buildCoachCard() {
       const remainDays = wkDays5.filter(dk => dk > todayKey && !dayIsLeave(week, dk)).length;
       if (workedDays > 0 && remainDays > 0) {
         const projected = earnedHours + (earnedHours / workedDays) * remainDays;
-        msgs.push(`At your current pace, you'll finish on ${projected.toFixed(2)}h — ${(projected - targetHours).toFixed(2)}h above target.`);
+        msgs.push(`At your current pace, you'll finish on ${projected.toFixed(2)} hours. This is ${(projected - targetHours).toFixed(2)} hours above target.`);
       } else {
         msgs.push(`CTAP balance: +${bal.toFixed(2)}h — you're in credit. Keep the consistency going.`);
       }
