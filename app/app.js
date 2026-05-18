@@ -970,7 +970,7 @@ function buildSettings() {
     <div class="st-card">
       <div class="st-row">
         <span class="st-row-label">Version</span>
-        <span class="st-row-value">v0.6.0 · ${_ctapUser ? 'synced' : 'local'}</span>
+        <span class="st-row-value">v0.6.1 · ${_ctapUser ? 'synced' : 'local'}</span>
       </div>
       ${rowDiv()}
       <button class="st-nav-row" id="toggle-legal-info">
