@@ -7,6 +7,9 @@ let pendingJob = null;
 let lastGreeting = '';
 let weekSummaryKey = null;
 let forecastSheetOpen = false;
+let cashOutSheetOpen = false;
+let cashOutMultiplier = 1.4;
+let cashOutTaxRate = 'basic';
 let activeDayKey = null;
 let dayEditMode = false;
 let activeLogDay = getTodayKey();
@@ -160,6 +163,7 @@ function buildApp() {
     ${buildModal()}
     ${buildWeekForecastSheet()}
     ${buildWeekSummarySheet()}
+    ${buildCashOutSheet()}
     <div class="toast" id="toast"></div>
   `;
 }
@@ -384,7 +388,7 @@ function buildDashboard() {
     ${isCurrentWeek ? buildCoachCard() : ''}
 
     <div class="split-cards">
-      <div class="split-card">
+      <div class="split-card" id="ctap-tile" style="cursor:pointer">
         <div class="split-card-top">
           <span class="split-card-label">CTAP</span>
           <span class="status-badge ${balColour}" style="font-size:0.55rem;padding:2px 7px">${displayBal >= 0 ? 'In credit' : 'Deficit'}</span>
@@ -1388,6 +1392,86 @@ function buildWeekForecastSheet() {
   `;
 }
 
+const CASH_OUT_HOURLY_RATE = 19.39;
+const CASH_OUT_MULTIPLIERS = [0, 0.8, 1.4, 2];
+const CASH_OUT_TAX_BANDS = {
+  gross:  { label: 'Gross',  deduction: 0,    sub: 'No deductions' },
+  basic:  { label: 'Basic',  deduction: 0.28, sub: '20% tax + 8% NI' },
+  higher: { label: 'Higher', deduction: 0.42, sub: '40% tax + 2% NI' },
+};
+
+function buildCashOutSheet() {
+  const bal = cumulativeBalance(state);
+  const payableHours = Math.max(0, bal);
+  const multiplier = CASH_OUT_MULTIPLIERS.includes(cashOutMultiplier) ? cashOutMultiplier : 1.4;
+  const band = CASH_OUT_TAX_BANDS[cashOutTaxRate] || CASH_OUT_TAX_BANDS.basic;
+  const gross = payableHours * CASH_OUT_HOURLY_RATE * multiplier;
+  const net = gross * (1 - band.deduction);
+  const fmt = n => n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const multBtns = CASH_OUT_MULTIPLIERS.map(m => `
+    <button class="cashout-mult-btn${m === multiplier ? ' active' : ''}" data-mult="${m}">${m}×</button>
+  `).join('');
+
+  const taxBtns = Object.entries(CASH_OUT_TAX_BANDS).map(([key, b]) => `
+    <button class="cashout-tax-btn${key === cashOutTaxRate ? ' active' : ''}" data-tax="${key}">
+      <span class="cashout-tax-label">${b.label}</span>
+      <span class="cashout-tax-sub">${b.sub}</span>
+    </button>
+  `).join('');
+
+  return `
+    <div class="forecast-sheet${cashOutSheetOpen ? '' : ' hidden'}" id="cashout-sheet">
+      <div class="forecast-backdrop" id="cashout-backdrop"></div>
+      <div class="forecast-panel">
+        <div class="forecast-handle"></div>
+        <div class="forecast-header">
+          <span class="forecast-title">CTAP Cash-Out</span>
+          <button class="forecast-close" id="cashout-close">✕</button>
+        </div>
+        <div class="forecast-body">
+          <div class="cashout-balance-row">
+            <span class="cashout-balance-label">Payable balance</span>
+            <span class="cashout-balance-val">${payableHours.toFixed(2)}h</span>
+          </div>
+          ${bal < 0 ? `<div class="cashout-deficit-note">Balance is ${bal.toFixed(2)}h in deficit — nothing to cash out yet.</div>` : ''}
+
+          <div class="cashout-section-label">Your multiplier</div>
+          <div class="cashout-mult-row">${multBtns}</div>
+
+          <div class="cashout-section-label">Tax band</div>
+          <div class="cashout-tax-row">${taxBtns}</div>
+
+          <div class="cashout-result-card">
+            <div class="cashout-result-row">
+              <span class="cashout-result-label">Gross</span>
+              <span class="cashout-result-val">£${fmt(gross)}</span>
+            </div>
+            <div class="cashout-result-row cashout-result-net">
+              <span class="cashout-result-label">Take-home (${band.label})</span>
+              <span class="cashout-result-val cashout-result-net-val">£${fmt(net)}</span>
+            </div>
+            <div class="cashout-result-breakdown">
+              ${payableHours.toFixed(2)}h × £${CASH_OUT_HOURLY_RATE.toFixed(2)} × ${multiplier}× ${band.deduction > 0 ? `− ${Math.round(band.deduction * 100)}% deductions` : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function openCashOutSheet() {
+  cashOutSheetOpen = true;
+  document.getElementById('cashout-sheet').classList.remove('hidden');
+}
+
+function closeCashOutSheet() {
+  cashOutSheetOpen = false;
+  document.getElementById('cashout-sheet').classList.add('hidden');
+  render();
+}
+
 function openForecastSheet() {
   forecastSheetOpen = true;
   const todayKey = getTodayKey();
@@ -2184,8 +2268,32 @@ function attachListeners() {
   }
   const forecastPanel = document.querySelector('#forecast-sheet .forecast-panel');
   const summaryPanel  = document.querySelector('#week-summary-sheet .forecast-panel');
+  const cashoutPanel  = document.querySelector('#cashout-sheet .forecast-panel');
   addSheetSwipe(forecastPanel, closeForecastSheet);
   addSheetSwipe(summaryPanel,  closeWeekSummary);
+  addSheetSwipe(cashoutPanel,  closeCashOutSheet);
+
+  // CTAP tile → cash-out sheet
+  const ctapTile = document.getElementById('ctap-tile');
+  if (ctapTile) ctapTile.addEventListener('click', openCashOutSheet);
+  const cashoutClose = document.getElementById('cashout-close');
+  if (cashoutClose) cashoutClose.addEventListener('click', closeCashOutSheet);
+  const cashoutBackdrop = document.getElementById('cashout-backdrop');
+  if (cashoutBackdrop) cashoutBackdrop.addEventListener('click', closeCashOutSheet);
+  document.querySelectorAll('.cashout-mult-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      cashOutMultiplier = parseFloat(btn.dataset.mult);
+      render();
+      if (cashOutSheetOpen) document.getElementById('cashout-sheet').classList.remove('hidden');
+    });
+  });
+  document.querySelectorAll('.cashout-tax-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      cashOutTaxRate = btn.dataset.tax;
+      render();
+      if (cashOutSheetOpen) document.getElementById('cashout-sheet').classList.remove('hidden');
+    });
+  });
 
   // Modal
   const overlay = document.getElementById('modal-overlay');

@@ -1,4 +1,4 @@
-const CACHE = 'jct-v58';
+const CACHE = 'jct-v59';
 const BASE  = '/CTAPTracker';
 
 self.addEventListener('install', e => {
