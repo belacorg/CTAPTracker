@@ -440,13 +440,13 @@ function buildDashboard() {
               <span class="job-credits" style="color:var(--accent)">${todayMentor === 'full' ? 'Target 0h' : '−20%'}</span>
               <button class="del-mentor-btn" data-day="${todayKey}" title="Remove">×</button>
             </div>` : '')
-          : '<button id="go-log-tab-empty" class="empty-log-btn">+ Add a job</button>'
+          : ''
         }
         ${hasPrevDayJobs ? `
-          <div style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--sep);display:flex;justify-content:space-between;align-items:center">
+          <div style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--sep)">
             <span style="font-size:0.72rem;color:var(--muted)">+${prevDayHours.toFixed(2)}h earlier this week</span>
-            <button id="go-log-tab-footer" style="background:none;border:none;padding:0;font-size:0.78rem;font-weight:600;color:var(--accent);cursor:pointer;-webkit-tap-highlight-color:transparent">Log Job →</button>
           </div>` : ''}
+        <button id="go-log-tab-empty" class="empty-log-btn">+ Add a job</button>
       </div>
     </details>
 
@@ -1910,10 +1910,8 @@ function attachListeners() {
     if (window.__ctapShowAuth) window.__ctapShowAuth('signup');
   });
 
-  // "No jobs logged today" empty state + "Log Job →" footer → Log tab
-  [document.getElementById('go-log-tab-empty'), document.getElementById('go-log-tab-footer')].forEach(btn => {
-    if (btn) btn.addEventListener('click', () => { activeTab = 'log'; render(); });
-  });
+  const addJobBtn = document.getElementById('go-log-tab-empty');
+  if (addJobBtn) addJobBtn.addEventListener('click', () => { activeTab = 'log'; render(); });
 
   // CTAP projected toggle
   const ctapProjToggle = document.getElementById('ctap-proj-toggle');
