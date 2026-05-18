@@ -240,6 +240,17 @@ function buildDashboard() {
   const rosteredH = rosteredHours(state, week);
   const weekPct = targetH > 0 ? Math.min((earnedHours / targetH) * 100, 100) : 0;
   const bonus = earnedHours >= targetH;
+
+  // ── Today's stats ──
+  const todayKey = getTodayKey();
+  const todayDedMins = (week.deductionLog || [])
+    .filter(d => d.date === todayKey)
+    .reduce((s, d) => s + d.mins, 0);
+  const pctFactor = typeof state.weeklyTargetPct === 'number' ? state.weeklyTargetPct : 0.8;
+  const dailyTargetHours = Math.max(0, getDailyTarget(state, week, todayKey) * pctFactor - todayDedMins / 60);
+  const todayJobs = (week.days || {})[todayKey] || [];
+  const todayHours = todayJobs.reduce((s, j) => s + j.creditMins, 0) / 60;
+
   // Pace-aware colour for the current week: compare weekPct against expected
   // pace based on completed working days (days strictly before today, excluding
   // leave). Past/future weeks keep the absolute three-band thresholds since
@@ -256,16 +267,6 @@ function buildDashboard() {
   } else {
     weekColour = weekPct >= 90 ? 'green' : weekPct >= 70 ? 'amber' : 'red';
   }
-
-  // ── Today's stats ──
-  const todayKey = getTodayKey();
-  const todayDedMins = (week.deductionLog || [])
-    .filter(d => d.date === todayKey)
-    .reduce((s, d) => s + d.mins, 0);
-  const pctFactor = typeof state.weeklyTargetPct === 'number' ? state.weeklyTargetPct : 0.8;
-  const dailyTargetHours = Math.max(0, getDailyTarget(state, week, todayKey) * pctFactor - todayDedMins / 60);
-  const todayJobs = (week.days || {})[todayKey] || [];
-  const todayHours = todayJobs.reduce((s, j) => s + j.creditMins, 0) / 60;
 
   // ── CTAP balance ──
   const bal = cumulativeBalance(state);
