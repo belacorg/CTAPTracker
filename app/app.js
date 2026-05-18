@@ -994,8 +994,13 @@ function buildSettings() {
       </div>` : ''}
       ${rowDiv()}
       <div class="st-row">
-        <span class="st-row-label">Made by</span>
-        <span class="st-row-value">Jake Rainford · say hi on Teams</span>
+        <span class="st-row-label">Built by</span>
+        <span class="st-row-value">Jake Rainford</span>
+      </div>
+      ${rowDiv()}
+      <div class="st-row">
+        <span class="st-row-label">Questions or feedback?</span>
+        <span class="st-row-value">Reach out on Teams or <a href="mailto:jakerainford04@gmail.com" class="st-row-link">email</a></span>
       </div>
     </div>
 
