@@ -30,40 +30,46 @@ let _isOffline = false;
 
 // ── Job tile display metadata ───────────────────────────────────────────────
 const JOB_META = {
-  // Core
-  ib_ff:               { short: 'Breakdown',            sub: 'First fix · all appliances' },
-  linked_ib:           { short: 'Linked Breakdown',     sub: 'Same appliance as ann. service' },
-  asv_chb_cir_wh_swh:  { short: 'Annual Service',       sub: 'CHB, CIR, WH, SWH' },
-  asv_fre:             { short: 'Annual Service',        sub: 'FRE' },
-  fv_chb:              { short: 'First Visit',           sub: 'CHB' },
-  ld_completed:        { short: 'Long Duration',         sub: 'Completed' },
-  oca:                 { short: 'OCA',                   sub: 'All appliance types' },
-  remedial_safety:     { short: 'Remedial Safety',       sub: 'First visit only' },
-  asv_bbf_wau_waw_aga: { short: 'Annual Service',        sub: 'BBF, WAU, WAW, AGA' },
-  fv_bbf_wau_waw:      { short: 'First Visit',           sub: 'BBF, WAU, WAW' },
-  as_inst:             { short: 'Annual Service INST',   sub: 'Landlords inspection' },
-  standalone_quote:    { short: 'Quote Job',             sub: 'Standalone' },
-  free_gas_safety:     { short: 'Gas Safety Check',      sub: 'Free check' },
-  upgrade_work:        { short: 'Upgrade Work',          sub: 'Variable · per hour quoted' },
-  trace_repair:        { short: 'Trace & Repair',        sub: 'Variable · mins on completion' },
-  install_cod:         { short: 'Install COD',           sub: '' },
-  hive_install_generic:{ short: 'Hive Install',          sub: 'Generic' },
-  asv_mwh_wal:         { short: 'Annual Service',        sub: 'MWH, WAL' },
-  asv_hob_ckr_ovn:     { short: 'Annual Service',        sub: 'HOB, CKR, OVN' },
+  // Gas (core)
+  asv_chb_cir_wh_swh:  { short: 'Gas Service',          sub: 'CHB, CIR, WH, SWH' },
+  asv_fre:             { short: 'Gas Service',          sub: 'Gas Fire' },
+  asv_hob_ckr_ovn:     { short: 'Gas Service',          sub: 'Hob, Cooker, Oven' },
+  asv_bbf_wau_waw_aga: { short: 'Gas Service',          sub: 'Warm Air, Back Boiler' },
+  asv_mwh_wal:         { short: 'Gas Service',          sub: 'MWH, WAL' },
+  gas_repair:          { short: 'Gas Repair',           sub: 'Any appliance · contract' },
+  linked_ib:           { short: 'Gas Repair',           sub: 'Fire, linked to service' },
+  od_chb:              { short: 'Gas Repair',           sub: 'Non-contract · on-demand' },
+  oow_chb:             { short: 'Gas Repair',           sub: 'Warranty · one-off' },
+  ods_chb:             { short: 'Gas Service',          sub: 'One-off · non-contract' },
+  fv_chb:              { short: 'First Visit',          sub: 'CHB' },
+  fv_bbf_wau_waw:      { short: 'First Visit',          sub: 'Back Boiler' },
+  ib_ff:               { short: 'First Fix',            sub: 'CHB, Back Boiler' },
+  remedial_safety:     { short: 'Remedial Safety',      sub: 'First visit only' },
+  ld_completed:        { short: 'Long Duration',        sub: 'CHB · completed' },
+  ld_unv:              { short: 'Long Duration',        sub: 'Unvented · completed' },
+  oca:                 { short: 'OCA',                  sub: 'All appliances' },
+  free_gas_safety:     { short: 'Gas Safety Check',     sub: 'Free check' },
+  as_inst:             { short: 'Landlords Inspection', sub: 'LGSC · gas tightness' },
+  trace_repair:        { short: 'Trace & Repair',       sub: 'Variable · mins on completion' },
   // Hive
-  hvi_hub:    { short: 'Hive Install',         sub: 'OpenTherm upgrade' },
-  hvi_iio:    { short: 'Inday Install',        sub: 'Hive offer' },
-  hvi_min:    { short: 'Hive Install',         sub: 'Mini thermostat' },
-  hvi_imz:    { short: 'Hive Install',         sub: 'Multizone' },
-  hvi_trv:    { short: 'Hive Install',         sub: 'TRV' },
-  hvi_wls:    { short: 'Hive Install',         sub: 'Wireless thermostat' },
-  hvi_wrd:    { short: 'Hive Install',         sub: 'Wired thermostat' },
-  hvr_the:    { short: 'Hive Repair',          sub: 'Thermostat' },
-  hvr_trv:    { short: 'Hive Repair',          sub: 'TRV' },
-  hvu_the:    { short: 'Hive Uninstall',       sub: 'Thermostat' },
-  rchv_thr:   { short: 'Recall Hive',          sub: 'Thermostat' },
-  rchv_trv:   { short: 'Recall Hive',          sub: 'TRVs' },
-  // Sales
+  hvi_hub:     { short: 'Hive OpenTherm',    sub: 'Upgrade · prepaid' },
+  hvi_min:     { short: 'Hive Install',      sub: 'Mini thermostat' },
+  hvi_wls:     { short: 'Hive Install',      sub: 'Wireless thermostat' },
+  hvi_wrd:     { short: 'Hive Install',      sub: 'Wired thermostat' },
+  hvi_imz:     { short: 'Hive Add Zone',     sub: 'Per extra zone' },
+  hvi_trv:     { short: 'Hive Install',      sub: 'TRV · 1 action / 2 TRVs' },
+  hvi_iio:     { short: 'Hive Inday Install', sub: 'Faulty controls · van stock' },
+  hvu_the:     { short: 'Hive Uninstall',    sub: 'Thermostat' },
+  hive_repair: { short: 'Hive Repair',       sub: 'Thermostat / TRV' },
+  recall_hive: { short: 'Recall Hive',       sub: 'Thermostat / TRV' },
+  inshv_min:   { short: 'Install Hive Mini', sub: 'Sold via Services' },
+  inshv_thr:   { short: 'Install Hive',      sub: 'Thermostat · sold via Services' },
+  inshv_trv:   { short: 'Install Hive TRVs', sub: 'Variable · sold via Services' },
+  // Quotes / SGO (sales)
+  standalone_quote: { short: 'Provide Quote',   sub: 'Gas · standalone' },
+  him_upgrade:      { short: 'HIM Upgrade',     sub: 'Variable · quoted mins' },
+  add_inhibitor:    { short: 'Add Inhibitor',   sub: 'In-day action' },
+  cod_gas:          { short: 'COD / CO Detector', sub: 'In-day action' },
   hi_lead:        { short: 'HI Lead',          sub: 'Boiler lead' },
   inhibitor:      { short: 'Inhibitor',         sub: 'Fit + SGO credit' },
   hive_sale_sgo:  { short: 'Hive Sale',         sub: 'SGO credit' },
@@ -791,9 +797,9 @@ function buildLogJobs() {
     ${searchHTML}
     ${recentBarHTML}
     <div class="tab-bar">
-      <button class="${activeJobTab === 'core' ? 'active' : ''}" data-jobtab="core">Core</button>
+      <button class="${activeJobTab === 'core' ? 'active' : ''}" data-jobtab="core">Gas</button>
       <button class="${activeJobTab === 'hive' ? 'active' : ''}" data-jobtab="hive">Hive</button>
-      <button class="${activeJobTab === 'sales' ? 'active' : ''}" data-jobtab="sales">Sales</button>
+      <button class="${activeJobTab === 'sales' ? 'active' : ''}" data-jobtab="sales">SGO</button>
       <button class="${activeJobTab === 'absent' ? 'active' : ''}" data-jobtab="absent">Absence</button>
     </div>
     ${activeJobTab === 'core' ? buildCoachLogBanner() : ''}
@@ -2703,8 +2709,8 @@ function buildBestAdviceStrip(stillNeeded, todayJobs, week, todayKey) {
   const inhibitorJ = findSales('inhibitor');
   const boilerJ    = findSales('hi_lead');
 
-  const serviceBreakdownIds = new Set(['ib_ff','linked_ib','asv_chb_cir_wh_swh','asv_fre','asv_bbf_wau_waw_aga','asv_mwh_wal','asv_hob_ckr_ovn','as_inst','fv_chb','fv_bbf_wau_waw']);
-  const boilerTriggerIds    = new Set(['asv_chb_cir_wh_swh','asv_fre','asv_bbf_wau_waw_aga','asv_mwh_wal','asv_hob_ckr_ovn','as_inst','fv_chb','fv_bbf_wau_waw','ib_ff','linked_ib']);
+  const serviceBreakdownIds = new Set(['ib_ff','gas_repair','linked_ib','od_chb','oow_chb','ods_chb','asv_chb_cir_wh_swh','asv_fre','asv_bbf_wau_waw_aga','asv_mwh_wal','asv_hob_ckr_ovn','oca','as_inst','fv_chb','fv_bbf_wau_waw']);
+  const boilerTriggerIds    = new Set(['asv_chb_cir_wh_swh','asv_fre','asv_bbf_wau_waw_aga','asv_mwh_wal','asv_hob_ckr_ovn','oca','ods_chb','as_inst','fv_chb','fv_bbf_wau_waw','ib_ff','gas_repair','od_chb','oow_chb','linked_ib']);
 
   let opp = null;
 

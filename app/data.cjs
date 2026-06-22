@@ -1,40 +1,60 @@
+// Catalogue mirrors Centrica sheet "ID1923 – Job Codes & Credits".
+// `minutes` = the sheet's Credit (mins); credits = minutes / 83.58 to 2dp.
+// Tiles are grouped only where the sheet's minutes are identical (e.g. every
+// Gas Repair is 56). See ADR-0006: this is policy, expected to drift.
+// Lines marked CARRY were not in the supplied screenshots (sheet rows 9–12 and
+// 43–47) — values preserved from the prior catalogue, pending verification.
 const JOB_TYPES = {
   core: [
-    { id: 'ib_ff', name: 'Breakdown, First Fix (All Appliance Types)', minutes: 56, credits: 0.67, variable: false },
-    { id: 'linked_ib', name: 'Linked Breakdown (Same appliance as Ann. Service Visit)', minutes: 56, credits: 0.67, variable: false },
-    { id: 'asv_chb_cir_wh_swh', name: 'Annual Service Visit (CHB, CIR, WH, SWH)', minutes: 40, credits: 0.48, variable: false },
-    { id: 'asv_fre', name: 'Annual Service Visit (FRE)', minutes: 47, credits: 0.56, variable: false },
-    { id: 'fv_chb', name: 'First Visit (CHB)', minutes: 48, credits: 0.57, variable: false },
-    { id: 'ld_completed', name: 'Long Duration (Completed)', minutes: 205, credits: 2.45, variable: false },
-    { id: 'oca', name: 'OCA (All Appliance Types)', minutes: 56, credits: 0.67, variable: false },
-    { id: 'remedial_safety', name: 'Remedial Safety (First Visit only)', minutes: 30, credits: 0.36, variable: false },
-    { id: 'asv_bbf_wau_waw_aga', name: 'Annual Service Visit (BBF, WAU, WAW, AGA)', minutes: 63, credits: 0.75, variable: false },
-    { id: 'fv_bbf_wau_waw', name: 'First Visit (BBF, WAU, WAW)', minutes: 71, credits: 0.85, variable: false },
-    { id: 'as_inst', name: 'Annual Service - INST (Landlords Inspection)', minutes: 21, credits: 0.25, variable: false },
-    { id: 'standalone_quote', name: 'Standalone Quote Job', minutes: 31, credits: 0.37, variable: false },
-    { id: 'free_gas_safety', name: 'Free Gas Safety Check', minutes: 30, credits: 0.36, variable: false },
-    { id: 'upgrade_work', name: 'Upgrade Work (per hour quoted)', minutes: 60, credits: 0.72, variable: true, variableType: 'hours', variablePrompt: 'Hours quoted' },
-    { id: 'trace_repair', name: 'Trace & Repair', minutes: 1, credits: 0.01, variable: true, variableType: 'minutes', variablePrompt: 'Minutes on completion' },
-    { id: 'install_cod', name: 'Install COD', minutes: 5, credits: 0.06, variable: false },
-    { id: 'hive_install_generic', name: 'Hive Install', minutes: 90, credits: 1.08, variable: false },
-    { id: 'asv_mwh_wal', name: 'Annual Service Visit (MWH, WAL)', minutes: 35, credits: 0.42, variable: false },
-    { id: 'asv_hob_ckr_ovn', name: 'Annual Service Visit (HOB, CKR, OVN)', minutes: 23, credits: 0.28, variable: false }
+    // ── Services (time varies by appliance) ──
+    { id: 'asv_chb_cir_wh_swh',  code: 'GS-CHB',          name: 'Gas Service (CHB, CIR, WH, SWH)',      minutes: 40, credits: 0.48, variable: false },
+    { id: 'asv_fre',             code: 'GS-FRE',          name: 'Gas Service (Gas Fire)',                minutes: 47, credits: 0.56, variable: false },
+    { id: 'asv_hob_ckr_ovn',     code: 'GS-HOB / GS-CKR', name: 'Gas Service (Hob, Cooker)',             minutes: 23, credits: 0.28, variable: false },
+    { id: 'asv_bbf_wau_waw_aga', code: 'GS-WAU / GS-BBU', name: 'Gas Service (Warm Air, Back Boiler)',   minutes: 63, credits: 0.75, variable: false },
+    { id: 'asv_mwh_wal',         code: 'GS-MWH / GS-WAL', name: 'Gas Service (MWH, WAL)',                minutes: 35, credits: 0.42, variable: false }, // CARRY — not on ID1923
+    // ── Repairs (every contract GR-* on the sheet is 56) ──
+    { id: 'gas_repair',          code: 'GR-*',            name: 'Gas Repair (any appliance)',            minutes: 56, credits: 0.67, variable: false },
+    { id: 'linked_ib',           code: 'GR-FRE (linked)', name: 'Gas Repair – Fire, linked to service',  minutes: 35, credits: 0.42, variable: false },
+    // ── One-off / non-contract (CHB) ──
+    { id: 'od_chb',  code: 'OD-CHB',  name: 'Gas Repair – Non-Contract (on-demand)', minutes: 1, credits: 0.01, variable: true, variableType: 'minutes', variablePrompt: 'CTAP mins — 20 (job ≤20 min) or 56 (over 20 min)' },
+    { id: 'oow_chb', code: 'OOW-CHB', name: 'Gas Repair – Warranty (one-off)',       minutes: 56, credits: 0.67, variable: false },
+    { id: 'ods_chb', code: 'ODS-CHB', name: 'Gas Service – One-Off (non-contract)',   minutes: 40, credits: 0.48, variable: false },
+    // ── First visit / first fix ──
+    { id: 'fv_chb',              code: 'FV-CHB',          name: 'First Visit (CHB)',                     minutes: 48, credits: 0.57, variable: false },
+    { id: 'fv_bbf_wau_waw',      code: 'FV-BBU',          name: 'First Visit (Back Boiler)',             minutes: 71, credits: 0.85, variable: false },
+    { id: 'ib_ff',               code: 'FF-CHB / FF-BBU', name: 'First Fix (CHB, Back Boiler)',          minutes: 56, credits: 0.67, variable: false },
+    { id: 'remedial_safety',     code: 'FV-REM',          name: 'Remedial Safety Works',                 minutes: 30, credits: 0.36, variable: false },
+    // ── Long duration ──
+    { id: 'ld_completed',        code: 'LD-CHB',          name: 'Long Duration – CHB (completed)',       minutes: 205, credits: 2.45, variable: false },
+    { id: 'ld_unv',              code: 'LD-UNV',          name: 'Long Duration – Unvented (completed)',  minutes: 330, credits: 3.95, variable: false },
+    // ── Other core (CARRY — not on ID1923) ──
+    { id: 'oca',                 code: 'OCA',             name: 'OCA (all appliances)',                  minutes: 56, credits: 0.67, variable: false }, // CARRY — not on ID1923
+    { id: 'free_gas_safety',     code: 'FGS',             name: 'Free Gas Safety Check',                 minutes: 30, credits: 0.36, variable: false }, // CARRY — not on ID1923
+    { id: 'as_inst',             code: 'LI-INS',          name: 'Landlords Gas Inspection (LGSC)',        minutes: 21, credits: 0.25, variable: false },
+    { id: 'trace_repair',        code: 'TR-CHB',          name: 'Trace & Repair (min-for-min)',          minutes: 1, credits: 0.01, variable: true, variableType: 'minutes', variablePrompt: 'Minutes on completion' }
   ],
   hive: [
-    { id: 'hvi_hub', code: 'HVI-HUB', name: 'Hive Install – OpenTherm Upgrade', minutes: 40, credits: 0.48, variable: false },
-    { id: 'hvi_iio', code: 'HVI-IIO', name: 'Hive Inday Install Offer', minutes: 34, credits: 0.41, variable: false },
-    { id: 'hvi_min', code: 'HVI-MIN', name: 'Hive Install – Mini Thermostat', minutes: 90, credits: 1.08, variable: false },
-    { id: 'hvi_imz', code: 'HVI-IMZ', name: 'Hive Install – Multizone', minutes: 30, credits: 0.36, variable: false },
-    { id: 'hvi_trv', code: 'HVI-TRV', name: 'Hive Install – TRV', minutes: 30, credits: 0.36, variable: false },
-    { id: 'hvi_wls', code: 'HVI-WLS', name: 'Hive Install – Wireless Thermostat', minutes: 90, credits: 1.08, variable: false },
-    { id: 'hvi_wrd', code: 'HVI-WRD', name: 'Hive Install – Wired Thermostat', minutes: 60, credits: 0.72, variable: false },
-    { id: 'hvr_the', code: 'HVR-THE', name: 'Hive Repair – Thermostat', minutes: 56, credits: 0.67, variable: false },
-    { id: 'hvr_trv', code: 'HVR-TRV', name: 'Hive Repair – TRV', minutes: 56, credits: 0.67, variable: false },
-    { id: 'hvu_the', code: 'HVU-THE', name: 'Hive Uninstall – Thermostat', minutes: 90, credits: 1.08, variable: false },
-    { id: 'rchv_thr', code: 'RCHV-THR', name: 'Recall Hive Thermostat', minutes: 56, credits: 0.67, variable: false },
-    { id: 'rchv_trv', code: 'RCHV-TRV', name: 'Recall Hive TRVs', minutes: 56, credits: 0.67, variable: false }
+    { id: 'hvi_hub',     code: 'HVI-HUB',           name: 'Hive OpenTherm Upgrade (prepaid)',        minutes: 40, credits: 0.48, variable: false },
+    { id: 'hvi_min',     code: 'HVI-MIN',           name: 'Hive Install – Mini Thermostat',          minutes: 90, credits: 1.08, variable: false },
+    { id: 'hvi_wls',     code: 'HVI-WLS',           name: 'Hive Install – Wireless Thermostat',      minutes: 90, credits: 1.08, variable: false },
+    { id: 'hvi_wrd',     code: 'HVI-WRD',           name: 'Hive Install – Wired Thermostat',         minutes: 60, credits: 0.72, variable: false },
+    { id: 'hvi_imz',     code: 'HVI-IMZ',           name: 'Hive Additional Zone (per extra zone)',   minutes: 30, credits: 0.36, variable: false },
+    { id: 'hvi_trv',     code: 'HVI-TRV',           name: 'Hive Install – TRV (1 action / 2 TRVs)',  minutes: 30, credits: 0.36, variable: false },
+    { id: 'hvi_iio',     code: 'HVI-IIO',           name: 'Hive Faulty-Controls Install (van stock)', minutes: 34, credits: 0.41, variable: false },
+    { id: 'hvu_the',     code: 'HVU-THE',           name: 'Hive Uninstall – Thermostat',             minutes: 90, credits: 1.08, variable: false },
+    { id: 'hive_repair', code: 'HVR-THE / HVR-TRV', name: 'Hive Repair – Thermostat / TRV',          minutes: 56, credits: 0.67, variable: false },
+    { id: 'recall_hive', code: 'RCHV-THR / RCHV-TRV', name: 'Recall Hive – Thermostat / TRV',        minutes: 56, credits: 0.67, variable: false },
+    { id: 'inshv_min',   code: 'INSHV-MIN',         name: 'Install Hive Mini (sold via Services)',   minutes: 90, credits: 1.08, variable: false },
+    { id: 'inshv_thr',   code: 'INSHV-THR',         name: 'Install Hive Thermostat (sold via Services)', minutes: 90, credits: 1.08, variable: false },
+    { id: 'inshv_trv',   code: 'INSHV-TRV',         name: 'Install Hive TRVs (sold via Services)',   minutes: 1, credits: 0.01, variable: true, variableType: 'minutes', variablePrompt: 'Chargeable minutes' }
   ],
   sales: [
+    // ── Quotes / HIM / in-day actions (verified from sheet) ──
+    { id: 'standalone_quote', code: 'GQ-INS',  name: 'Provide Quote – Gas (standalone)',       minutes: 31, credits: 0.37, variable: false },
+    { id: 'him_upgrade',      code: 'HIM',     name: 'HIM Upgrade (enter quoted minutes)',     minutes: 1,  credits: 0.01, variable: true, variableType: 'minutes', variablePrompt: 'Minutes quoted in Quote Tool' },
+    { id: 'add_inhibitor',    code: 'ODC-SYS', name: 'Add Inhibitor (in-day action)',          minutes: 20, credits: 0.24, variable: false },
+    { id: 'cod_gas',          code: 'IA-COD',  name: 'COD / CO Detector (in-day action)',      minutes: 5,  credits: 0.06, variable: false },
+    // ── SGO / sale credits — CARRY rows 43–47, preserved pending verification ──
     { id: 'hi_lead',          name: 'HI Lead (Boiler Lead)',        minutes: 58,  credits: 0.69, variable: false },
     { id: 'inhibitor',        name: 'Inhibitor (Fit + SGO)',         minutes: 51,  credits: 0.61, variable: false },
     { id: 'hive_sale_sgo',    name: 'Hive Sale (SGO Credit)',        minutes: 69,  credits: 0.82, variable: false },
