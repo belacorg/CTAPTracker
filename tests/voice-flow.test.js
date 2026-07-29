@@ -12,10 +12,10 @@ const openTyped = (h, text) => {
 };
 
 describe('Log Job is the landing page', () => {
-  it('opens on Log Job with the job grid ready', () => {
+  it('opens on Log Job with the whole catalogue ready to tap', () => {
     const h = bootApp();
     expect(h.$('.bottom-nav button.active').textContent.trim()).toBe('Log Job');
-    expect(h.$$('.job-grid .job-btn').length).toBeGreaterThan(10);
+    expect(h.$$('.lj-row').length).toBeGreaterThan(40);   // all four categories, one list
   });
 
   it('puts Log Job first and Dashboard second', () => {
@@ -41,6 +41,117 @@ describe('Log Job is the landing page', () => {
     const h = bootApp();
     h.window.__ctapSetOffline(true);
     expect(h.$('.bottom-nav button.active').textContent.trim()).toBe('Dashboard');
+  });
+});
+
+describe('Log Job — voice-first layout (ADR-0008)', () => {
+  it('leads with the voice action', () => {
+    const h = bootApp();
+    const voice = h.$('.lj-voice');
+    expect(voice).toBeTruthy();
+    expect(voice.id).toBe('voice-btn');
+    // Voice sits above the catalogue, not below it.
+    expect(voice.compareDocumentPosition(h.$('.lj-row')) & 4).toBeTruthy();
+  });
+
+  it('has no job-type tab bar', () => {
+    const h = bootApp();
+    expect(h.$('.tab-bar')).toBeNull();
+    expect(h.$('[data-jobtab]')).toBeNull();
+  });
+
+  it('groups the catalogue under section headers instead', () => {
+    const h = bootApp();
+    expect(h.$$('.lj-sec-sticky').map(e => e.textContent)).toEqual(['Gas', 'Hive', 'SGO', 'Absence']);
+  });
+
+  it('shows no job codes on the rows', () => {
+    const h = bootApp();
+    const text = h.$$('.lj-row').map(r => r.textContent).join(' ');
+    expect(text).not.toContain('GS-CHB');
+    expect(text).not.toContain('GR-');
+    expect(text).not.toContain('HVI-');
+  });
+
+  it('keeps the subtitle, since short names alone are ambiguous', () => {
+    const h = bootApp();
+    // These two are both "Gas Service" and must stay tellable apart.
+    const rows = h.$$('.lj-row').map(r => r.textContent.replace(/\s+/g, ' ').trim());
+    expect(rows.some(t => t.includes('Gas Service') && t.includes('CHB, CIR, WH, SWH'))).toBe(true);
+    expect(rows.some(t => t.includes('Gas Service') && t.includes('Gas Fire'))).toBe(true);
+  });
+
+  it('gives every row a distinct label', () => {
+    const h = bootApp();
+    const labels = h.$$('.lj-row').map(r => r.querySelector('.lj-row-main').textContent.replace(/\s+/g, ' ').trim());
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it('keeps the day stepper compact and defaulted to today', () => {
+    const h = bootApp();
+    expect(h.$('.lj-day-label').textContent.trim()).toBe('Today');
+    expect(h.$('#log-next-day').disabled).toBe(true);      // can't log forward
+    expect(h.$('.day-picker')).toBeNull();                 // old full-width picker gone
+  });
+
+  it('collapses search to an icon until asked for', () => {
+    const h = bootApp();
+    expect(h.$('#job-search')).toBeNull();
+    h.click('#log-search-open');
+    expect(h.$('#job-search')).toBeTruthy();
+    expect(h.$('.lj-voice')).toBeNull();                   // search takes over
+    h.click('#search-close');
+    expect(h.$('#job-search')).toBeNull();
+    expect(h.$('.lj-voice')).toBeTruthy();
+  });
+
+  it('still finds a job by its code even though codes are hidden', () => {
+    const h = bootApp();
+    h.click('#log-search-open');
+    h.setValue('#job-search', 'GS-FRE', 'input');
+    const rows = h.$$('.lj-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].textContent).toContain('Gas Fire');
+  });
+
+  it('finds a job by its subtitle too', () => {
+    const h = bootApp();
+    h.click('#log-search-open');
+    h.setValue('#job-search', 'cooker', 'input');
+    expect(h.$$('.lj-row').length).toBeGreaterThan(0);
+  });
+
+  it('logs a job from a row tap', () => {
+    const h = bootApp();
+    const row = h.$$('.lj-row').find(r => r.dataset.jobId === 'gas_repair');
+    h.click(row);
+    const today = h.window.getTodayKey();
+    const week = h.state().weeks[h.window.getWeekKey(new Date(today + 'T00:00:00'))];
+    expect(week.days[today].filter(e => e.id === 'gas_repair')).toHaveLength(1);
+  });
+
+  it('surfaces recents on the next visit to the tab', () => {
+    // Logging deliberately does not re-render while you're on the Log tab —
+    // a re-render would throw you back to the top of the list mid-tap.
+    const h = bootApp();
+    h.click(h.$$('.lj-row').find(r => r.dataset.jobId === 'gas_repair'));
+    expect(h.$$('.lj-chip')).toHaveLength(0);
+
+    const nav = (t) => h.click(h.$$('.bottom-nav button').find(b => b.dataset.tab === t));
+    nav('dashboard'); nav('log');
+    expect(h.$$('.lj-chip').length).toBeGreaterThan(0);
+    expect(h.$('.lj-chip').dataset.jobId).toBe('gas_repair');
+  });
+});
+
+describe('Dashboard is unchanged', () => {
+  it('still renders the existing dashboard, not a prototype variant', () => {
+    const h = bootApp();
+    h.click(h.$$('.bottom-nav button').find(b => b.dataset.tab === 'dashboard'));
+    expect(h.$('#app').innerHTML).not.toContain('Render Error');
+    expect(h.$('.pda-hero')).toBeNull();
+    expect(h.$('.pdb-card')).toBeNull();
+    expect(h.$('.pdc-today')).toBeNull();
   });
 });
 

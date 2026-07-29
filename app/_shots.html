@@ -1,94 +1,29 @@
 <!DOCTYPE html>
-<!-- TEMPORARY screenshot harness for the prototype. Delete with prototype-variants.js. -->
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>CTAP prototype shots</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <div id="app"></div>
-  <script>
-    // Seed a realistic week so the variants aren't judged on an empty state.
-    (function () {
-      function iso(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
-      function weekKeyOf(date) {
-        var d = new Date(date); d.setHours(0, 0, 0, 0);
-        var day = d.getDay(); var monday = new Date(d);
-        monday.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
-        return iso(monday);
-      }
-      var today = new Date();
-      var wk = weekKeyOf(today);
-      var mon = new Date(wk + 'T00:00:00');
-      function dayOf(i) { var d = new Date(mon); d.setDate(mon.getDate() + i); return iso(d); }
-      function job(id, name, mins) { return { id: id, name: name, creditMins: mins, variableInput: null, ts: Date.now() }; }
-
-      var days = {};
-      days[dayOf(0)] = [
-        job('asv_chb_cir_wh_swh', 'Gas Service (CHB, CIR, WH, SWH)', 40),
-        job('asv_chb_cir_wh_swh', 'Gas Service (CHB, CIR, WH, SWH)', 40),
-        job('gas_repair', 'Gas Repair (any appliance)', 56),
-        job('gas_repair', 'Gas Repair (any appliance)', 56),
-        job('hi_lead', 'HI Lead (Boiler Lead)', 58)
-      ];
-      days[dayOf(1)] = [
-        job('gas_repair', 'Gas Repair (any appliance)', 56),
-        job('gas_repair', 'Gas Repair (any appliance)', 56),
-        job('gas_repair', 'Gas Repair (any appliance)', 56),
-        job('asv_fre', 'Gas Service (Gas Fire)', 47)
-      ];
-      days[dayOf(2)] = [
-        job('asv_chb_cir_wh_swh', 'Gas Service (CHB, CIR, WH, SWH)', 40),
-        job('fv_chb', 'First Visit (CHB)', 48),
-        job('gas_repair', 'Gas Repair (any appliance)', 56),
-        job('inhibitor', 'Inhibitor (Fit + SGO)', 51)
-      ];
-      var todayKey = iso(today);
-      if (!days[todayKey]) days[todayKey] = [];
-      days[todayKey] = days[todayKey].concat([
-        job('gas_repair', 'Gas Repair (any appliance)', 56),
-        job('asv_chb_cir_wh_swh', 'Gas Service (CHB, CIR, WH, SWH)', 40),
-        job('ib_ff', 'First Fix (CHB, Back Boiler)', 56)
-      ]);
-
-      var weeks = {};
-      weeks[wk] = {
-        deductionMins: 30,
-        deductionLog: [{ name: 'Non-Productive Time', mins: 30, date: dayOf(1) }],
-        shifts: {}, mentorDays: {}, excludeFromCtap: false, notes: '',
-        days: days
-      };
-      // A couple of completed weeks so the balance isn't zero.
-      for (var back = 1; back <= 3; back++) {
-        var prev = new Date(mon); prev.setDate(mon.getDate() - 7 * back);
-        var pk = iso(prev);
-        var pdays = {};
-        for (var i = 0; i < 5; i++) {
-          var d2 = new Date(prev); d2.setDate(prev.getDate() + i);
-          pdays[iso(d2)] = [
-            job('gas_repair', 'Gas Repair (any appliance)', 56),
-            job('gas_repair', 'Gas Repair (any appliance)', 56),
-            job('asv_chb_cir_wh_swh', 'Gas Service (CHB, CIR, WH, SWH)', 40),
-            job('asv_chb_cir_wh_swh', 'Gas Service (CHB, CIR, WH, SWH)', 40),
-            job('fv_chb', 'First Visit (CHB)', 48)
-          ];
-        }
-        weeks[pk] = { deductionMins: 0, deductionLog: [], shifts: {}, mentorDays: {}, excludeFromCtap: false, notes: '', days: pdays };
-      }
-
-      localStorage.setItem('jct_state', JSON.stringify({
-        baseHours: 40, weeklyTargetPct: 0.8, startingBalance: 6.4, weeks: weeks
-      }));
-      localStorage.setItem('jcpd_theme', 'dark');
-    })();
-  </script>
-  <script src="data.cjs"></script>
-  <script src="app.js"></script>
-  <script src="prototype-variants.js"></script>
-</body>
-</html>
+<!--
+  Screenshot harness — not part of the build (vite only processes index.html),
+  not deployed. Loads the app with seeded sample data and no Supabase, so
+  design work can be rendered headlessly at phone size.
+  Run: python3 -m http.server 4499 --directory app  →  /_shots.html
+-->
+<html lang="en"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>shots</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css"></head>
+<body><div id="app"></div>
+<script>
+(function(){function iso(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function wkOf(date){var d=new Date(date);d.setHours(0,0,0,0);var day=d.getDay();var m=new Date(d);m.setDate(d.getDate()-(day===0?6:day-1));return iso(m);}
+var today=new Date(),wk=wkOf(today),mon=new Date(wk+'T00:00:00');
+function dayOf(i){var d=new Date(mon);d.setDate(mon.getDate()+i);return iso(d);}
+function job(id,name,mins){return {id:id,name:name,creditMins:mins,variableInput:null,ts:Date.now()};}
+var days={};
+days[dayOf(0)]=[job('asv_chb_cir_wh_swh','Gas Service',40),job('gas_repair','Gas Repair',56),job('hi_lead','HI Lead',58)];
+days[dayOf(1)]=[job('gas_repair','Gas Repair',56),job('asv_fre','Gas Service (Gas Fire)',47)];
+var tk=iso(today);
+days[tk]=(days[tk]||[]).concat([job('gas_repair','Gas Repair',56),job('asv_chb_cir_wh_swh','Gas Service',40),job('fv_chb','First Visit',48)]);
+var weeks={};weeks[wk]={deductionMins:30,deductionLog:[],shifts:{},mentorDays:{},excludeFromCtap:false,notes:'',days:days};
+localStorage.setItem('jct_state',JSON.stringify({baseHours:40,weeklyTargetPct:0.8,startingBalance:6.4,weeks:weeks}));
+localStorage.setItem('jcpd_theme','dark');})();
+</script>
+<script src="data.cjs"></script><script src="app.js"></script></body></html>

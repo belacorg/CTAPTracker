@@ -4,7 +4,6 @@ let currentWeekKey = getWeekKey(new Date());
 let activeTab = 'log';       // log | dashboard | schedule | history | settings
                              // Log is the landing tab: most sessions are an
                              // engineer logging a job, not reading the numbers.
-let activeJobTab = 'core';   // core | hive | sales
 let pendingJob = null;
 let lastGreeting = '';
 let weekSummaryKey = null;
@@ -16,6 +15,7 @@ let activeDayKey = null;
 let dayEditMode = false;
 let activeLogDay = getTodayKey();
 let jobSearch = '';
+let logSearchOpen = false;
 let ctapProjectedMode = false;
 let expandedZeroWeek = null;
 let weekendExpanded = false;
@@ -98,15 +98,35 @@ const JOB_META = {
   npt_quick:         { short: 'Non-Productive',      sub: 'Variable · minutes' },
 };
 
-function buildJobTileHTML(j) {
+// A job as a list row. The code (GS-CHB) is deliberately absent — it was the
+// noise; the subtitle is the disambiguator, since short names alone give five
+// identical "Gas Service" rows. See ADR-0008.
+function jobDisplay(j) {
   const meta = JOB_META[j.id] || {};
-  const shortName = meta.short || j.name;
-  const sub = meta.sub || '';
-  const creditsDisplay = j.variable ? 'Variable'
-    : j.isMentorFull ? 'Full day'
-    : j.isMentorPartial ? '−20% target'
-    : `+${(j.minutes / 60).toFixed(2)}h`;
-  return `<button class="job-btn${j.variable ? ' variable' : ''}" data-job-id="${j.id}"><div class="jb-title"><span class="jb-name">${shortName}</span>${j.code ? `<span class="jb-code-inline"> (${j.code})</span>` : ''}</div>${sub ? `<span class="jb-sub">${sub}</span>` : ''}<span class="jb-spacer"></span><span class="jb-credits">${creditsDisplay}</span></button>`;
+  return {
+    name: meta.short || j.name,
+    sub: meta.sub || '',
+    credits: j.variable ? 'Variable'
+      : j.isMentorFull ? 'Full day'
+      : j.isMentorPartial ? '−20% target'
+      : `+${(j.minutes / 60).toFixed(2)}h`
+  };
+}
+
+function buildJobRowHTML(j) {
+  const d = jobDisplay(j);
+  return `<button class="lj-row${j.variable ? ' variable' : ''}" data-job-id="${j.id}">
+    <span class="lj-row-main"><span class="lj-row-name">${d.name}</span>${d.sub ? `<span class="lj-row-sub">${d.sub}</span>` : ''}</span>
+    <span class="lj-row-credit">${d.credits}</span>
+  </button>`;
+}
+
+function buildJobChipHTML(j) {
+  const d = jobDisplay(j);
+  return `<button class="lj-chip${j.variable ? ' variable' : ''}" data-job-id="${j.id}">
+    <span class="lj-chip-name">${d.name}</span>${d.sub ? `<span class="lj-chip-sub">${d.sub}</span>` : ''}
+    <span class="lj-chip-credit">${d.credits}</span>
+  </button>`;
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
@@ -194,7 +214,6 @@ function buildApp() {
     ${buildWeekSummarySheet()}
     ${buildCashOutSheet()}
     ${buildVoiceSheet()}
-    ${(window.__protoVariant && window.__protoVariant() && window.__protoSwitcher) ? window.__protoSwitcher(window.__protoVariant()) : ''}
     <div class="toast" id="toast"></div>
   `;
 }
@@ -230,10 +249,6 @@ function buildTopBar() {
 }
 
 function buildMain() {
-  // PROTOTYPE hook — ?variant=A|B|C swaps the rendering of these two tabs only.
-  var _pv = window.__protoVariant && window.__protoVariant();
-  if (_pv && activeTab === 'log' && window.__protoLog) return window.__protoLog(_pv);
-  if (_pv && activeTab === 'dashboard' && window.__protoDash) return window.__protoDash(_pv);
   switch (activeTab) {
     case 'dashboard': return buildDashboard();
     case 'log':       return buildLogJobs();
@@ -737,108 +752,95 @@ function buildDayBlock(dayKey, jobs, isToday, week) {
 
 // ── Log Jobs ───────────────────────────────────────────────────────────────
 function buildLogJobs() {
-  const jobs = JOB_TYPES[activeJobTab];
   const todayKey = getTodayKey();
   const isLoggingToday = activeLogDay === todayKey;
-
-  // Day picker
   const logDayDate = new Date(activeLogDay + 'T00:00:00');
   const logDayLabel = isLoggingToday
-    ? 'Today · ' + logDayDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
-    : logDayDate.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
+    ? 'Today'
+    : logDayDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+
   const _logWeekKeys = Object.keys(state.weeks || {}).sort();
   const minLogDate = _logWeekKeys.length > 0
     ? new Date(_logWeekKeys[0] + 'T00:00:00')
     : (() => { const d = new Date(); d.setFullYear(d.getFullYear() - 1); return d; })();
   const atMin = activeLogDay <= localDateStr(minLogDate);
-  const dayPickerHTML = `
-    <div class="day-picker">
-      <button id="log-prev-day" class="day-picker-btn" ${atMin ? 'disabled' : ''}>&#8249;</button>
-      <span class="day-picker-label${isLoggingToday ? ' today' : ''}">${logDayLabel}</span>
-      <button id="log-next-day" class="day-picker-btn" ${isLoggingToday ? 'disabled' : ''}>&#8250;</button>
-    </div>`;
 
-  // Session stats for the selected day
+  // Session summary for the selected day
   const wkKey = getWeekKey(new Date(activeLogDay + 'T00:00:00'));
   const wk = state.weeks[wkKey] || { days: {} };
   const dayJobs = (wk.days || {})[activeLogDay] || [];
   const sessionHours = dayJobs.reduce((s, j) => s + j.creditMins, 0) / 60;
-  const firstTs = dayJobs.length > 0 ? Math.min(...dayJobs.map(j => j.ts || Date.now())) : null;
-  const sinceStr = isLoggingToday && firstTs
-    ? new Date(firstTs).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-    : null;
-
   const sessionBarHTML = dayJobs.length > 0 ? `
-    <div class="session-bar">
-      <span>${dayJobs.length} job${dayJobs.length === 1 ? '' : 's'}</span>
-      ${sinceStr ? `<span>· since ${sinceStr}</span>` : ''}
-      <span class="session-val">· +${sessionHours.toFixed(2)}h</span>
+    <div class="lj-session">
+      <span>${dayJobs.length} logged ${isLoggingToday ? 'today' : 'that day'}</span>
+      <span class="lj-session-val">+${sessionHours.toFixed(2)}h</span>
     </div>` : '';
 
-  // Recently used jobs
-  const recentJobs = getRecentJobs(state, 4);
-  const recentBarHTML = recentJobs.length > 0 ? `
-    <div class="recent-bar">
-      <span class="recent-label">Recent</span>
-      <div class="recent-jobs">
-        ${recentJobs.map(j => `
-          <button class="recent-job-btn${j.variable ? ' variable' : ''}" data-job-id="${j.id}">
-            <span class="rj-name">${j.name.replace(/\s*[\(\–\-].*$/, '').trim()}</span>
-            <span class="rj-credits">${j.variable ? 'Variable' : `+${(j.minutes / 60).toFixed(2)}h`}</span>
-          </button>`).join('')}
+  // Search takes over the header when open; the day stepper is compact and
+  // stays out of the way, since it reads "Today" almost every time.
+  const searching = logSearchOpen || !!jobSearch.trim();
+  const headerHTML = searching ? `
+    <div class="lj-searchbar">
+      <span class="lj-search-icon">${iconSearch()}</span>
+      <input type="search" id="job-search" class="lj-search-input"
+        placeholder="Search jobs…" value="${jobSearch}"
+        autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+      ${jobSearch ? `<button id="search-clear" class="lj-search-clear">&#10005;</button>` : ''}
+      <button id="search-close" class="lj-search-cancel">Cancel</button>
+    </div>` : `
+    <div class="lj-head">
+      <div class="lj-day">
+        <button id="log-prev-day" class="lj-day-btn" ${atMin ? 'disabled' : ''} aria-label="Previous day">&#8249;</button>
+        <span class="lj-day-label${isLoggingToday ? ' today' : ''}">${logDayLabel}</span>
+        <button id="log-next-day" class="lj-day-btn" ${isLoggingToday ? 'disabled' : ''} aria-label="Next day">&#8250;</button>
       </div>
-    </div>` : '';
-
-  const searchHTML = `
-    <div class="log-input-row">
-      <div class="search-wrap">
-        <span class="search-icon">&#9906;</span>
-        <input type="search" id="job-search" class="job-search-input"
-          placeholder="Search jobs…" value="${jobSearch}"
-          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-        ${jobSearch ? `<button id="search-clear" class="search-clear-btn">&#10005;</button>` : ''}
-      </div>
-      <button class="voice-btn" id="voice-btn" aria-label="Log jobs by voice" title="Log jobs by voice">${iconMic()}</button>
+      <button id="log-search-open" class="lj-icon-btn" aria-label="Search jobs">${iconSearch()}</button>
     </div>`;
 
-  // Search active — filter across all categories, hide tabs and recent bar
+  // Filtered results replace everything below the search bar.
   if (jobSearch.trim()) {
     const q = jobSearch.trim().toLowerCase();
-    const allJobs = [
-      ...JOB_TYPES.core,
-      ...JOB_TYPES.hive,
-      ...JOB_TYPES.sales,
-      ...JOB_TYPES.absent
-    ];
-    const filtered = allJobs.filter(j =>
+    const all = [...JOB_TYPES.core, ...JOB_TYPES.hive, ...JOB_TYPES.sales, ...JOB_TYPES.absent];
+    const hits = all.filter(j =>
       j.name.toLowerCase().includes(q) ||
+      (JOB_META[j.id] && (JOB_META[j.id].short || '').toLowerCase().includes(q)) ||
+      (JOB_META[j.id] && (JOB_META[j.id].sub || '').toLowerCase().includes(q)) ||
       (j.code && j.code.toLowerCase().includes(q))
     );
-    const gridHTML = filtered.length > 0
-      ? filtered.map(j => buildJobTileHTML(j)).join('')
-      : `<div style="grid-column:1/-1;text-align:center;padding:24px 0;font-size:0.82rem;color:var(--muted)">No jobs match "${jobSearch}"</div>`;
     return `
-      ${dayPickerHTML}
-      ${searchHTML}
-      <div class="job-grid">${gridHTML}</div>
+      ${headerHTML}
+      ${hits.length > 0
+        ? `<div class="lj-list">${hits.map(buildJobRowHTML).join('')}</div>`
+        : `<div class="lj-empty">No jobs match “${jobSearch}”</div>`}
       ${sessionBarHTML}
     `;
   }
 
+  const voiceHTML = `
+    <button class="lj-voice" id="voice-btn">
+      <span class="lj-voice-ico">${iconMic()}</span>
+      <span class="lj-voice-txt">
+        <strong>Say what you’ve done</strong>
+        <small>“six breakdowns, two boiler leads”</small>
+      </span>
+    </button>`;
+
+  const recentJobs = getRecentJobs(state, 5);
+  const recentHTML = recentJobs.length > 0 ? `
+    <div class="lj-sec">Recent</div>
+    <div class="lj-chips">${recentJobs.map(buildJobChipHTML).join('')}</div>` : '';
+
+  const SECTIONS = [['core', 'Gas'], ['hive', 'Hive'], ['sales', 'SGO'], ['absent', 'Absence']];
+  const sectionsHTML = SECTIONS.map(([key, label]) => `
+    <div class="lj-sec lj-sec-sticky">${label}</div>
+    <div class="lj-list">${(JOB_TYPES[key] || []).map(buildJobRowHTML).join('')}</div>`).join('');
+
   return `
-    ${dayPickerHTML}
-    ${searchHTML}
-    ${recentBarHTML}
-    <div class="tab-bar">
-      <button class="${activeJobTab === 'core' ? 'active' : ''}" data-jobtab="core">Gas</button>
-      <button class="${activeJobTab === 'hive' ? 'active' : ''}" data-jobtab="hive">Hive</button>
-      <button class="${activeJobTab === 'sales' ? 'active' : ''}" data-jobtab="sales">SGO</button>
-      <button class="${activeJobTab === 'absent' ? 'active' : ''}" data-jobtab="absent">Absence</button>
-    </div>
-    ${activeJobTab === 'core' ? buildCoachLogBanner() : ''}
-    <div class="job-grid">
-      ${jobs.map(j => buildJobTileHTML(j)).join('')}
-    </div>
+    ${headerHTML}
+    ${searching ? '' : voiceHTML}
+    ${searching ? '' : recentHTML}
+    ${searching ? '' : buildCoachLogBanner()}
+    ${sectionsHTML}
     ${sessionBarHTML}
   `;
 }
@@ -1760,7 +1762,6 @@ function refreshVoiceSheet() {
   if (!body) { render(); return; }
   body.innerHTML = buildVoiceBody();
   attachVoiceSheetListeners();
-  if (window.__protoAttach) window.__protoAttach();
 }
 
 function openVoiceSheet() {
@@ -2308,7 +2309,7 @@ function attachListeners() {
       weekSummaryKey = null;
       activeTab = tab;
       if (activeTab === 'dashboard') { currentWeekKey = getWeekKey(new Date()); ctapProjectedMode = false; }
-      if (activeTab === 'log') { activeLogDay = getTodayKey(); jobSearch = ''; }
+      if (activeTab === 'log') { activeLogDay = getTodayKey(); jobSearch = ''; logSearchOpen = false; }
       render();
     });
   });
@@ -2412,12 +2413,22 @@ function attachListeners() {
     searchClear.addEventListener('click', () => {
       jobSearch = '';
       render();
+      const fresh = document.getElementById('job-search');
+      if (fresh) fresh.focus();
     });
   }
-
-  // Job category tabs
-  document.querySelectorAll('[data-jobtab]').forEach(btn => {
-    btn.addEventListener('click', () => { activeJobTab = btn.dataset.jobtab; render(); });
+  const searchOpen = document.getElementById('log-search-open');
+  if (searchOpen) searchOpen.addEventListener('click', () => {
+    logSearchOpen = true;
+    render();
+    const fresh = document.getElementById('job-search');
+    if (fresh) fresh.focus();
+  });
+  const searchClose = document.getElementById('search-close');
+  if (searchClose) searchClose.addEventListener('click', () => {
+    logSearchOpen = false;
+    jobSearch = '';
+    render();
   });
 
   // Job buttons
@@ -3345,6 +3356,7 @@ function showToast(msg) {
 // ── SVG Icons ──────────────────────────────────────────────────────────────
 function iconChart()    { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="13" width="4" height="8"/><rect x="10" y="9" width="4" height="12"/><rect x="17" y="5" width="4" height="16"/></svg>`; }
 function iconPlus()     { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`; }
+function iconSearch()   { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>`; }
 function iconMic()      { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="22"/></svg>`; }
 function iconCalendar() { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`; }
 function iconClock()    { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>`; }
