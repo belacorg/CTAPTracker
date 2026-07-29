@@ -3574,7 +3574,7 @@ body.light .lj-sec-sticky { background: var(--bg); }
      lets a sub-pixel rounding error eat the top of his cap or the spanner —
      the spare few px absorb it. */
   height: 58px;
-  margin: 2px 0 -2px;
+  margin: 0 0 -8px;
   pointer-events: none;
   overflow: hidden;
 }
@@ -3587,4 +3587,43 @@ body.light .lj-sec-sticky { background: var(--bg); }
   /* No transition: he steps in whole pixels, frame by frame. Easing it would
      glide the sprite between poses and lose the snap. */
   image-rendering: pixelated;
+}
+
+/* ── Voice: cheat sheet + guessed rows ── */
+.voice-live-transcript.empty { color: var(--muted2); }
+.voice-tips {
+  margin-top: 18px;
+  background: var(--surface2);
+  border-radius: 12px;
+  text-align: left;
+  overflow: hidden;
+}
+.voice-tips summary {
+  padding: 12px 14px;
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  list-style: none;
+}
+.voice-tips summary::-webkit-details-marker { display: none; }
+.voice-tips summary::after { content: ' ⌄'; color: var(--muted); }
+.voice-tips[open] summary::after { content: ' ⌃'; }
+.voice-tips-body { padding: 0 14px 12px; }
+.voice-tip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+  border-top: 0.5px solid var(--sep);
+}
+.voice-tip-say { font-size: 0.85rem; color: var(--fg); }
+.voice-tip-why { font-size: 0.74rem; color: var(--muted); line-height: 1.35; }
+
+.voice-item.assumed { border-color: var(--jcpd-hair-2); }
+.voice-item-assumed {
+  font-size: 0.72rem;
+  color: var(--amber);
+  margin-top: 7px;
+  line-height: 1.35;
 }

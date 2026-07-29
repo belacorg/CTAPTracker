@@ -134,7 +134,9 @@
   }
 
   var FRAMES = {
-    walk: [compile(stride(0)), compile(stand(0)), compile(stride(1)), compile(stand(0))],
+    // No vertical bob: combined with the horizontal step it read as hopping
+    // rather than walking. Legs alternate, height stays put.
+    walk: [compile(stride(0)), compile(stand(0))],
     greet: [
       compile(stand(0)), compile(tipCap(2)), compile(tipCap(2)),
       compile(tipCap(1)), compile(stand(0)), compile(stand(1))
@@ -178,16 +180,21 @@
       return;
     }
 
-    // Distance to cross, stepped in whole pixels per frame so the movement
-    // snaps like the sprite does rather than gliding underneath it.
-    var travel = Math.max(0, lane.clientWidth - svg.getBoundingClientRect().width);
-    var walkFrames = 16;
-    var step = travel / walkFrames;
+    // Step size is set in sprite pixels, not by dividing the distance up — the
+    // latter gave ~20px lurches that read as hopping. Three sprite pixels a
+    // frame is the usual pixel-art walk, and the legs swap every other frame so
+    // a stride covers six rather than flickering.
+    var spriteW = svg.getBoundingClientRect().width || 44;
+    var scale = spriteW / W;
+    var step = 3 * scale;
+    var RUN_IN = 120;   // he strolls in from nearby; crossing the full width was a route march
+    var travel = Math.min(RUN_IN, Math.max(0, lane.clientWidth - spriteW));
+    var walkFrames = Math.max(1, Math.round(travel / step));
     var i = 0;
 
     (function walkTick() {
       svg.style.transform = 'translateX(' + Math.round(travel - step * i) + 'px)';
-      draw(svg, FRAMES.walk[i % FRAMES.walk.length]);
+      draw(svg, FRAMES.walk[Math.floor(i / 2) % FRAMES.walk.length]);
       i++;
       if (i <= walkFrames) {
         _timer = setTimeout(walkTick, 1000 / FPS.walk);

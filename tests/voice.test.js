@@ -231,6 +231,40 @@ describe('parseVoiceLog — run-on dictation', () => {
   });
 });
 
+describe('parseVoiceLog — broad wording is accepted but flagged', () => {
+  // "Four repairs" is a real sentence. Refusing it would be worse than taking
+  // it, but a repair could be a boiler, a cooker or a fire at different credit.
+  it('flags a catch-all match as assumed', () => {
+    const r = parseVoiceLog('four repairs', REF);
+    expect(r.items[0].jobId).toBe('gas_repair');
+    expect(r.items[0].assumed).toBe(true);
+  });
+
+  it('does not flag wording that named the appliance', () => {
+    expect(parseVoiceLog('three cooker services', REF).items[0].assumed).toBe(false);
+    expect(parseVoiceLog('two back boiler services', REF).items[0].assumed).toBe(false);
+    expect(parseVoiceLog('two boiler leads', REF).items[0].assumed).toBe(false);
+  });
+
+  it('keeps the count when an appliance word sits between number and job', () => {
+    // The number no longer has to butt up against the job name.
+    expect(qtyOf(parseVoiceLog('four boiler repairs', REF), 'gas_repair')).toBe(4);
+    expect(qtyOf(parseVoiceLog('five gas breakdowns', REF), 'gas_repair')).toBe(5);
+    expect(qtyOf(parseVoiceLog('three gas services', REF), 'asv_chb_cir_wh_swh')).toBe(3);
+  });
+
+  it('keeps the flag when two broad phrases merge', () => {
+    const r = parseVoiceLog('two repairs and then three breakdowns', REF);
+    expect(r.items).toHaveLength(1);
+    expect(qtyOf(r, 'gas_repair')).toBe(5);
+    expect(r.items[0].assumed).toBe(true);
+  });
+
+  it('carries the phrase through so the sheet can quote it back', () => {
+    expect(parseVoiceLog('four repairs', REF).items[0].phrase).toBe('repairs');
+  });
+});
+
 describe('extractVoiceDay', () => {
   it('reports no phrase when nothing is spoken', () => {
     expect(extractVoiceDay('three breakdowns', REF)).toEqual({ dayKey: REF, phrase: null });

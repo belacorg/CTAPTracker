@@ -64,7 +64,9 @@ function makeRecognitionClass(log) {
     // ── helpers the tests drive ──
     say(text, isFinal) {
       if (!this.onresult) return;
-      this.onresult({ results: [Object.assign([{ transcript: text }], { isFinal: !!isFinal })] });
+      const result = [{ transcript: text }];
+      result.isFinal = !!isFinal;
+      this.onresult({ resultIndex: 0, results: [result] });
     }
     fail(error) { if (this.onerror) this.onerror({ error }); }
     end() { if (this.onend) this.onend(); }
@@ -128,7 +130,7 @@ describe('voice capture — always escapable', () => {
     const h = boot();
     h.openMic();
     expect(h.$('.voice-listening')).toBeTruthy();
-    h.advance(8000);
+    h.advance(7000);
     expect(h.$('.voice-listening')).toBeNull();
     expect(h.$('#voice-text')).toBeTruthy();       // dropped to the typed fallback
   });
@@ -148,7 +150,7 @@ describe('voice capture — always escapable', () => {
     h.openMic();
     h.rec().say('six breakdowns', false);
     expect(h.$('.voice-listening')).toBeTruthy();   // still listening, correctly
-    h.advance(8000);                                 // ...until our own timer fires
+    h.advance(7000);                                 // ...until our own timer fires
     expect(h.$('.voice-listening')).toBeNull();
     expect(h.$('.voice-review')).toBeTruthy();       // and what it heard is preserved
     expect(h.$('.voice-heard').textContent).toContain('six breakdowns');
@@ -158,7 +160,7 @@ describe('voice capture — always escapable', () => {
     // stop() waits for a final result and can hang on iOS; abort() drops it.
     const h = boot();
     h.openMic();
-    h.advance(8000);
+    h.advance(7000);
     expect(h.log.aborted).toBeGreaterThan(0);
     expect(h.log.stopped).toBe(0);
   });
@@ -170,18 +172,86 @@ describe('voice capture — always escapable', () => {
     h.rec().say('six breakdowns', false);      // speech resets the silence guard
     h.advance(6000);
     expect(h.$('.voice-listening')).toBeTruthy();
-    h.advance(3000);
+    h.advance(2000);
     expect(h.$('.voice-listening')).toBeNull();
   });
 });
 
-describe('voice capture — reaching the review', () => {
-  it('advances on a final result without needing a tap', () => {
+describe('voice capture — listening through pauses', () => {
+  // Engineers pause constantly: reading the next job off a phone, thinking.
+  // The recogniser ends itself on every one of those pauses, so a burst ending
+  // must not be treated as the engineer having finished.
+  it('keeps listening after the engine commits a phrase', () => {
     const h = boot();
     h.openMic();
-    h.rec().say('six breakdowns and two boiler leads', true);
+    h.rec().say('six breakdowns', true);
+    expect(h.$('.voice-listening')).toBeTruthy();
+    expect(h.$('.voice-review')).toBeNull();
+  });
+
+  it('restarts the engine when a burst ends mid-thought', () => {
+    const h = boot();
+    h.openMic();
+    h.rec().say('six breakdowns', true);
+    h.rec().end();
+    h.advance(200);                       // restart is deferred slightly
+    expect(h.log.started).toBe(2);
+    expect(h.$('.voice-listening')).toBeTruthy();
+  });
+
+  it('accumulates what was said across several bursts', () => {
+    const h = boot();
+    h.openMic();
+    h.rec().say('six breakdowns', true);
+    h.rec().end(); h.advance(200);
+    h.rec().say('and two boiler leads', true);
+    h.rec().end(); h.advance(200);
+    h.rec().say('and three fires', true);
+    h.click('#voice-stop');
+
+    expect(h.$('.voice-heard').textContent).toContain('six breakdowns');
+    expect(h.$('.voice-heard').textContent).toContain('two boiler leads');
+    expect(h.$('#voice-commit').textContent.trim()).toBe('Log 11');
+  });
+
+  it('shows the running transcript while still listening', () => {
+    const h = boot();
+    h.openMic();
+    h.rec().say('four services', true);
+    h.rec().end(); h.advance(200);
+    h.rec().say('and a quote', false);
+    expect(h.$('#voice-live').textContent).toContain('four services');
+    expect(h.$('#voice-live').textContent).toContain('quote');
+  });
+
+  it('rides out a long pause without losing the thread', () => {
+    const h = boot();
+    h.openMic();
+    h.rec().say('two services', true);
+    h.rec().end();
+    h.advance(5000);                      // a good think, under the guard
+    expect(h.$('.voice-listening')).toBeTruthy();
+    h.rec().say('and one fire', true);
+    h.click('#voice-stop');
+    expect(h.$('.voice-heard').textContent).toContain('two services');
+    expect(h.$('.voice-heard').textContent).toContain('one fire');
+  });
+
+  it('wraps up once the pause runs long', () => {
+    const h = boot();
+    h.openMic();
+    h.rec().say('two services', true);
+    h.advance(7000);
+    expect(h.$('.voice-listening')).toBeNull();
     expect(h.$('.voice-review')).toBeTruthy();
-    expect(h.$('#voice-commit').textContent.trim()).toBe('Log 8');
+  });
+
+  it('stops restarting eventually rather than looping forever', () => {
+    const h = boot();
+    h.openMic();
+    for (let i = 0; i < 60; i++) { if (h.rec()) { h.rec().end(); h.advance(200); } }
+    expect(h.log.started).toBeLessThanOrEqual(41);
+    expect(h.$('.voice-listening')).toBeNull();
   });
 
   it('still honours the Done button', () => {
@@ -197,14 +267,6 @@ describe('voice capture — reaching the review', () => {
     h.openMic();
     h.rec().say('three fires', false);
     h.click('#voice-stop-mic');
-    expect(h.$('.voice-review')).toBeTruthy();
-  });
-
-  it('honours the engine ending naturally', () => {
-    const h = boot();
-    h.openMic();
-    h.rec().say('four services', false);
-    h.rec().end();
     expect(h.$('.voice-review')).toBeTruthy();
   });
 });
@@ -250,12 +312,14 @@ describe('voice capture — engine errors', () => {
     expect(h.$('.voice-message').textContent).toMatch(/microphone access/i);
   });
 
-  it('keeps what it heard when the engine reports no-speech late', () => {
+  it('treats no-speech as a pause and keeps listening', () => {
     const h = boot();
     h.openMic();
-    h.rec().say('two services', false);
+    h.rec().say('two services', true);
     h.rec().fail('no-speech');
-    expect(h.$('.voice-review')).toBeTruthy();
+    expect(h.$('.voice-listening')).toBeTruthy();
+    h.click('#voice-stop');
+    expect(h.$('.voice-heard').textContent).toContain('two services');
   });
 
   it('offers the typed fallback on an unknown failure', () => {

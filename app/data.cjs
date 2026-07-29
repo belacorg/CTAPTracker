@@ -854,6 +854,17 @@ const VOICE_ALIASES = {
   npt_quick: ['non productive time', 'non productive', 'npt']
 };
 
+// Phrases that match, but only to a catch-all. "Four repairs" is a real
+// sentence an engineer says, and refusing it would be worse than accepting it —
+// but a repair could be a boiler, a cooker or a fire, at different credit. So
+// these resolve to the most common job and the item is flagged `assumed`, which
+// the confirm sheet surfaces. Teaches the specific wording without blocking.
+const VOICE_BROAD = [
+  'repair', 'repairs', 'breakdown', 'breakdowns', 'call out', 'callout', 'call outs', 'callouts',
+  'service', 'services', 'serviced', 'fire', 'fires', 'gas fire', 'gas fires',
+  'quote', 'quotes', 'quoted', 'lead', 'leads', 'job', 'jobs'
+];
+
 // Flattened and sorted once: longest spoken phrase wins.
 const VOICE_ALIAS_INDEX = Object.keys(VOICE_ALIASES)
   .reduce(function(acc, jobId) {
@@ -1008,9 +1019,16 @@ function readQuantity(tokens, i) {
 function readLeadingQty(text) {
   let tokens = String(text || '').trim().split(/\s+/).filter(Boolean);
   while (tokens.length > 0 && VOICE_TRAILING_FILLER.has(tokens[tokens.length - 1])) tokens.pop();
+  // Preferred: the number runs right up to the job name ("six breakdowns").
   for (let i = 0; i < tokens.length; i++) {
     const q = readQuantity(tokens, i);
     if (q && i + q.used === tokens.length) return Math.max(1, Math.round(q.value));
+  }
+  // Otherwise take the first number in the run-up, so an appliance word between
+  // the count and the job doesn't swallow it — "four boiler repairs" is four.
+  for (let i = 0; i < tokens.length; i++) {
+    const q = readQuantity(tokens, i);
+    if (q) return Math.max(1, Math.round(q.value));
   }
   return 1;
 }
@@ -1129,6 +1147,7 @@ function parseVoiceLog(transcript, refDateStr) {
       qty: (job.isMentorFull || job.isMentorPartial) ? 1 : qty,
       value: value,
       needsValue: !!job.variable && value === null,
+      assumed: VOICE_BROAD.indexOf(m.say) !== -1,
       phrase: m.say
     });
   });
@@ -1143,7 +1162,7 @@ function parseVoiceLog(transcript, refDateStr) {
     const prior = it.job.variable
       ? null
       : merged.find(function(m) { return m.jobId === it.jobId && !m.job.variable; });
-    if (prior) prior.qty += it.qty;
+    if (prior) { prior.qty += it.qty; prior.assumed = prior.assumed || it.assumed; }
     else merged.push(it);
   });
 
@@ -1214,6 +1233,7 @@ if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     getCoachInsights: getCoachInsights,
     weekSummary: weekSummary,
     VOICE_ALIASES: VOICE_ALIASES,
+    VOICE_BROAD: VOICE_BROAD,
     normaliseVoiceText: normaliseVoiceText,
     extractDurationMins: extractDurationMins,
     extractVoiceDay: extractVoiceDay,

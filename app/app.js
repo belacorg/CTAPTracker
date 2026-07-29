@@ -35,6 +35,11 @@ let voiceMessage = '';
 let _recognition = null;
 let _voiceStartGuard = null;
 let _voiceSilenceGuard = null;
+let _voiceRestartTimer = null;
+let _voiceMaxTimer = null;
+let _voiceCommitted = '';   // finalised phrases across bursts
+let _voiceInterim = '';     // the phrase currently being spoken
+let _voiceRestarts = 0;
 let _ctapUser = null;          // populated by __ctapInit
 let _ctapDisplayName = '';     // populated by __ctapInit
 let _isOffline = false;
@@ -1587,6 +1592,31 @@ function refreshSheetInPlace(sheetId) {
 
 const VOICE_CATEGORY_LABELS = { core: 'Gas', hive: 'Hive', sales: 'SGO', absent: 'Absence' };
 
+// How to talk to it. "Four repairs" works, but a repair could be a boiler, a
+// cooker or a fire at different credit — so the sheet leads with naming the
+// appliance, which is the one habit that removes most of the corrections.
+const VOICE_TIPS = [
+  { say: 'four boiler repairs', why: 'Name the appliance — “four repairs” is guessed' },
+  { say: 'six breakdowns, two boiler leads', why: 'String jobs together, count first' },
+  { say: 'a cooker service and two fires', why: '“a” counts as one' },
+  { say: 'trace and repair forty five minutes', why: 'Give a time for min-for-min jobs' },
+  { say: 'two hours wait work', why: 'Wait work and NPT take a time too' },
+  { say: 'yesterday I did four services', why: 'Backdate by saying the day' }
+];
+
+function buildVoiceTipsHTML(open) {
+  const rows = VOICE_TIPS.map(t => `
+    <div class="voice-tip">
+      <span class="voice-tip-say">“${t.say}”</span>
+      <span class="voice-tip-why">${t.why}</span>
+    </div>`).join('');
+  return `
+    <details class="voice-tips"${open ? ' open' : ''}>
+      <summary>How to say it</summary>
+      <div class="voice-tips-body">${rows}</div>
+    </details>`;
+}
+
 function voiceJobOptions(selectedId) {
   return Object.keys(JOB_TYPES).map(function(cat) {
     const opts = JOB_TYPES[cat].map(function(j) {
@@ -1638,11 +1668,12 @@ function buildVoiceItemRow(item, idx) {
     </div>`;
 
   return `
-    <div class="voice-item${item.needsValue ? ' needs-value' : ''}">
+    <div class="voice-item${item.needsValue ? ' needs-value' : ''}${item.assumed ? ' assumed' : ''}">
       <div class="voice-item-main">
         <select class="voice-job-select" data-idx="${idx}" aria-label="Job type">${voiceJobOptions(item.jobId)}</select>
         <button class="voice-item-remove" data-voice-remove="${idx}" aria-label="Remove">✕</button>
       </div>
+      ${item.assumed ? `<div class="voice-item-assumed">Guessed from “${item.phrase}” — check the appliance</div>` : ''}
       <div class="voice-item-foot">
         ${qtyStepper}
         ${valueField}
@@ -1653,14 +1684,16 @@ function buildVoiceItemRow(item, idx) {
 
 function buildVoiceBody() {
   if (voiceStatus === 'listening') {
+    const heard = voiceHeard();
     return `
       <div class="voice-listening">
         <button class="voice-mic-pulse" id="voice-stop-mic" aria-label="Stop listening">${iconMic()}</button>
         <div class="voice-listening-label">Listening…</div>
-        <div class="voice-live-transcript" id="voice-live">${voiceTranscript || 'Say what you’ve done today'}</div>
-        <div class="voice-listening-hint">Stops on its own when you pause.</div>
+        <div class="voice-live-transcript${heard ? '' : ' empty'}" id="voice-live">${heard || 'Say what you’ve done today'}</div>
+        <div class="voice-listening-hint">Take your time — it waits while you think. Tap Done when you’ve finished.</div>
         <button class="voice-primary-btn" id="voice-stop">Done</button>
         <button class="voice-link-btn" id="voice-type-instead">Type it instead</button>
+        ${buildVoiceTipsHTML(false)}
       </div>`;
   }
 
@@ -1673,6 +1706,7 @@ function buildVoiceBody() {
           placeholder="e.g. six breakdowns, two boiler leads and three fires">${voiceTranscript}</textarea>
         <div class="voice-type-hint">Tip: your keyboard’s microphone key works here too.</div>
         <button class="voice-primary-btn" id="voice-parse-text">Read that back</button>
+        ${buildVoiceTipsHTML(true)}
       </div>`;
   }
 
@@ -1735,6 +1769,7 @@ function buildVoiceBody() {
           <button class="voice-primary-btn" id="voice-commit" ${blocked ? 'disabled' : ''}>Log ${totalCount}</button>
         </div>
         <button class="voice-link-btn" id="voice-retry">Start over</button>
+        ${buildVoiceTipsHTML(false)}
       </div>`;
   }
 
@@ -1801,12 +1836,29 @@ function speechRecognitionCtor() {
 //      largely ignores continuous = true and then never fires onend at all.)
 //   2. Timers we own, not the engine's, are the real backstop — if the engine
 //      never starts, never speaks, or never ends, we abort it ourselves.
-const VOICE_START_TIMEOUT = 4000;   // engine never got going
-const VOICE_SILENCE_TIMEOUT = 8000; // no speech for this long → wrap up
+const VOICE_START_TIMEOUT = 4000;    // engine never got going
+const VOICE_SILENCE_TIMEOUT = 7000;  // no NEW speech for this long → wrap up
+const VOICE_MAX_SESSION = 120000;    // hard cap on one dictation
+const VOICE_MAX_RESTARTS = 40;       // backstop against a restart loop
 
 function clearVoiceTimers() {
   if (_voiceStartGuard) { clearTimeout(_voiceStartGuard); _voiceStartGuard = null; }
   if (_voiceSilenceGuard) { clearTimeout(_voiceSilenceGuard); _voiceSilenceGuard = null; }
+  if (_voiceRestartTimer) { clearTimeout(_voiceRestartTimer); _voiceRestartTimer = null; }
+  if (_voiceMaxTimer) { clearTimeout(_voiceMaxTimer); _voiceMaxTimer = null; }
+}
+
+// Everything heard so far, including the phrase in progress.
+function voiceHeard() {
+  return (_voiceCommitted + ' ' + _voiceInterim).replace(/\s+/g, ' ').trim();
+}
+
+function paintVoiceTranscript() {
+  const live = document.getElementById('voice-live');
+  if (!live) return;
+  const heard = voiceHeard();
+  live.textContent = heard || 'Say what you’ve done today';
+  live.classList.toggle('empty', !heard);
 }
 
 function armVoiceSilenceGuard() {
@@ -1817,11 +1869,33 @@ function armVoiceSilenceGuard() {
   }, VOICE_SILENCE_TIMEOUT);
 }
 
+// The recogniser is run in short, self-terminating bursts (continuous = true
+// is what locked iOS up), and it ends itself on any natural pause. Engineers
+// pause constantly — reading the next job off a phone, thinking. So a burst
+// ending is not the engineer finishing: restart and keep accumulating, and let
+// our own silence guard decide when they're actually done.
+function restartVoiceBurst() {
+  if (voiceStatus !== 'listening') return;
+  if (_voiceRestarts >= VOICE_MAX_RESTARTS) { finishVoiceCapture(); return; }
+  _voiceRestarts++;
+  _voiceRestartTimer = setTimeout(function() {
+    _voiceRestartTimer = null;
+    if (voiceStatus !== 'listening') return;
+    try {
+      _recognition = buildRecognition();
+      _recognition.start();
+    } catch (e) {
+      finishVoiceCapture();
+    }
+  }, 180);
+}
+
 // Single exit from listening, whether the engine ended it, a timer did, or the
 // engineer tapped Done.
 function finishVoiceCapture() {
   clearVoiceTimers();
-  const heard = voiceTranscript;
+  const heard = voiceHeard();
+  voiceTranscript = heard;
   stopVoiceCapture();
   if (heard.trim()) {
     parseVoiceInput(heard);
@@ -1832,13 +1906,68 @@ function finishVoiceCapture() {
   }
 }
 
+function buildRecognition() {
+  const SR = speechRecognitionCtor();
+  const rec = new SR();
+  rec.lang = 'en-GB';
+  rec.interimResults = true;
+  rec.continuous = false;
+  rec.maxAlternatives = 1;
+
+  rec.onstart = function() {
+    if (_voiceStartGuard) { clearTimeout(_voiceStartGuard); _voiceStartGuard = null; }
+    armVoiceSilenceGuard();
+  };
+  rec.onspeechstart = armVoiceSilenceGuard;
+  rec.onaudiostart = armVoiceSilenceGuard;
+
+  rec.onresult = function(e) {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const text = e.results[i][0].transcript;
+      if (e.results[i].isFinal) _voiceCommitted = (_voiceCommitted + ' ' + text).replace(/\s+/g, ' ').trim();
+      else interim += text + ' ';
+    }
+    _voiceInterim = interim.trim();
+    paintVoiceTranscript();
+    // Still talking — push the silence guard back out.
+    armVoiceSilenceGuard();
+  };
+
+  rec.onerror = function(e) {
+    if (e.error === 'aborted') return;              // we stopped it deliberately
+    // A burst that heard nothing is just a long pause; keep waiting.
+    if (e.error === 'no-speech') return;
+    clearVoiceTimers();
+    _recognition = null;
+    const blocked = e.error === 'not-allowed' || e.error === 'service-not-allowed';
+    if (!blocked && voiceHeard()) { finishVoiceCapture(); return; }
+    voiceStatus = blocked ? 'error' : 'typing';
+    voiceMessage = blocked
+      ? 'Microphone access was blocked. Allow it in Settings, or type it below.'
+      : 'Voice capture failed. You can type it instead.';
+    refreshVoiceSheet();
+  };
+
+  // A burst ending is a pause, not the end of the sentence.
+  rec.onend = function() {
+    _recognition = null;
+    _voiceCommitted = (_voiceCommitted + ' ' + _voiceInterim).replace(/\s+/g, ' ').trim();
+    _voiceInterim = '';
+    if (voiceStatus !== 'listening') return;        // already moved on
+    restartVoiceBurst();
+  };
+
+  return rec;
+}
+
 function startVoiceCapture() {
   const SR = speechRecognitionCtor();
   if (!SR) {
     // Safari in standalone PWA mode is the common case here — the keyboard's
     // own dictation key still works in the textarea fallback.
     voiceStatus = 'typing';
-    voiceMessage = 'Voice capture isn’t available on this device.';
+    voiceMessage = 'Voice capture isn\u2019t available on this device.';
     refreshVoiceSheet();
     return;
   }
@@ -1846,74 +1975,33 @@ function startVoiceCapture() {
   try {
     stopVoiceCapture();
     voiceTranscript = '';
-    const rec = new SR();
-    _recognition = rec;
-    rec.lang = 'en-GB';
-    rec.interimResults = true;
-    rec.continuous = false;
-    rec.maxAlternatives = 1;
-
-    rec.onstart = function() {
-      if (_voiceStartGuard) { clearTimeout(_voiceStartGuard); _voiceStartGuard = null; }
-      armVoiceSilenceGuard();
-    };
-
-    rec.onspeechstart = armVoiceSilenceGuard;
-    rec.onaudiostart = armVoiceSilenceGuard;
-
-    rec.onresult = function(e) {
-      let text = '';
-      let isFinal = false;
-      for (let i = 0; i < e.results.length; i++) {
-        text += e.results[i][0].transcript + ' ';
-        if (e.results[i].isFinal) isFinal = true;
-      }
-      voiceTranscript = text.replace(/\s+/g, ' ').trim();
-      const live = document.getElementById('voice-live');
-      if (live) live.textContent = voiceTranscript;
-      // Still talking — give them longer.
-      armVoiceSilenceGuard();
-      // Engine has committed to a transcript: go straight to review rather
-      // than waiting for a Done tap the platform may never let through.
-      if (isFinal) finishVoiceCapture();
-    };
-
-    rec.onerror = function(e) {
-      if (e.error === 'aborted') return;         // we stopped it deliberately
-      clearVoiceTimers();
-      _recognition = null;
-      if (e.error === 'no-speech' && voiceTranscript.trim()) { finishVoiceCapture(); return; }
-      voiceStatus = e.error === 'not-allowed' || e.error === 'service-not-allowed' ? 'error' : 'typing';
-      voiceMessage = e.error === 'not-allowed' || e.error === 'service-not-allowed'
-        ? 'Microphone access was blocked. Allow it in Settings, or type it below.'
-        : e.error === 'no-speech'
-          ? 'Didn’t catch anything — try again, or type it below.'
-          : 'Voice capture failed. You can type it instead.';
-      refreshVoiceSheet();
-    };
-
-    rec.onend = function() {
-      _recognition = null;
-      if (voiceStatus !== 'listening') return;   // already moved on
-      finishVoiceCapture();
-    };
+    _voiceCommitted = '';
+    _voiceInterim = '';
+    _voiceRestarts = 0;
 
     voiceStatus = 'listening';
     refreshVoiceSheet();
 
-    // Armed before start() — onstart can fire synchronously, and it clears
-    // this guard, so arming afterwards would leave a live timer that kills a
-    // perfectly healthy session a few seconds later.
+    // Armed before start() — onstart can fire synchronously and clears this,
+    // so arming afterwards would leave a live timer that kills a healthy
+    // session a few seconds in.
     _voiceStartGuard = setTimeout(function() {
       _voiceStartGuard = null;
       if (voiceStatus !== 'listening') return;
       stopVoiceCapture();
       voiceStatus = 'typing';
-      voiceMessage = 'Voice capture didn’t start on this device — type it below instead.';
+      voiceMessage = 'Voice capture didn\u2019t start on this device \u2014 type it below instead.';
       refreshVoiceSheet();
     }, VOICE_START_TIMEOUT);
 
-    rec.start();
+    // However long the pauses, one dictation can't run forever.
+    _voiceMaxTimer = setTimeout(function() {
+      _voiceMaxTimer = null;
+      if (voiceStatus === 'listening') finishVoiceCapture();
+    }, VOICE_MAX_SESSION);
+
+    _recognition = buildRecognition();
+    _recognition.start();
   } catch (err) {
     clearVoiceTimers();
     _recognition = null;
@@ -2093,6 +2181,7 @@ function attachVoiceSheetListeners() {
       item.job = job;
       if (!job.variable) { item.value = null; item.needsValue = false; }
       else item.needsValue = item.value === null;
+      item.assumed = false;
       refreshVoiceSheet();
     });
   });
