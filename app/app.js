@@ -1,7 +1,9 @@
 // ── State ──────────────────────────────────────────────────────────────────
 let state = loadState();
 let currentWeekKey = getWeekKey(new Date());
-let activeTab = 'dashboard'; // dashboard | log | schedule | history | settings
+let activeTab = 'log';       // log | dashboard | schedule | history | settings
+                             // Log is the landing tab: most sessions are an
+                             // engineer logging a job, not reading the numbers.
 let activeJobTab = 'core';   // core | hive | sales
 let pendingJob = null;
 let lastGreeting = '';
@@ -24,6 +26,13 @@ let deleteAccountStep = 'idle';
 let howToExpanded = false;
 let graphWeekKey = getWeekKey(new Date());
 let graphSelectedDay = null;
+// ── Voice logging ──
+let voiceSheetOpen = false;
+let voiceStatus = 'idle';      // idle | listening | parsed | typing | error
+let voiceTranscript = '';
+let voiceDraft = null;         // { dayKey, dayPhrase, items, unmatched }
+let voiceMessage = '';
+let _recognition = null;
 let _ctapUser = null;          // populated by __ctapInit
 let _ctapDisplayName = '';     // populated by __ctapInit
 let _isOffline = false;
@@ -121,6 +130,10 @@ window.__ctapInit = function(loadedState, profile, user) {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(function() {});
   }
+  // Log is the landing tab, but logging is unavailable offline (writes would
+  // sit in localStorage and be overwritten by the next successful load).
+  // Start on the dashboard instead of on a dead tab.
+  if (activeTab === 'log' && !navigator.onLine) activeTab = 'dashboard';
   render();
 };
 
@@ -136,7 +149,16 @@ window.__ctapGetState = function() { return state; };
 
 // Called by src/main.js when online/offline status changes
 window.__ctapSetOffline = function(offline) {
+  const wasOffline = _isOffline;
   _isOffline = offline;
+  // Signal can drop while the engineer is sat on the Log tab — now the default
+  // landing tab, so this is common. Move them off it rather than let them log
+  // entries that the next successful load would discard.
+  if (offline && !wasOffline && activeTab === 'log') {
+    if (voiceSheetOpen) closeVoiceSheet();
+    activeTab = 'dashboard';
+    showToast("You're offline — logging paused");
+  }
   render();
 };
 
@@ -169,6 +191,7 @@ function buildApp() {
     ${buildWeekForecastSheet()}
     ${buildWeekSummarySheet()}
     ${buildCashOutSheet()}
+    ${buildVoiceSheet()}
     <div class="toast" id="toast"></div>
   `;
 }
@@ -215,8 +238,8 @@ function buildMain() {
 
 function buildBottomNav() {
   const tabs = [
-    { id: 'dashboard', label: 'Dashboard', icon: iconChart() },
     { id: 'log',       label: 'Log Job',   icon: iconPlus(), disabled: _isOffline },
+    { id: 'dashboard', label: 'Dashboard', icon: iconChart() },
     { id: 'schedule',  label: 'Schedule',  icon: iconCalendar() },
     { id: 'history',   label: 'History',   icon: iconClock() },
     { id: 'settings',  label: 'Settings',  icon: iconGear() },
@@ -760,12 +783,15 @@ function buildLogJobs() {
     </div>` : '';
 
   const searchHTML = `
-    <div class="search-wrap">
-      <span class="search-icon">&#9906;</span>
-      <input type="search" id="job-search" class="job-search-input"
-        placeholder="Search jobs…" value="${jobSearch}"
-        autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-      ${jobSearch ? `<button id="search-clear" class="search-clear-btn">&#10005;</button>` : ''}
+    <div class="log-input-row">
+      <div class="search-wrap">
+        <span class="search-icon">&#9906;</span>
+        <input type="search" id="job-search" class="job-search-input"
+          placeholder="Search jobs…" value="${jobSearch}"
+          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        ${jobSearch ? `<button id="search-clear" class="search-clear-btn">&#10005;</button>` : ''}
+      </div>
+      <button class="voice-btn" id="voice-btn" aria-label="Log jobs by voice" title="Log jobs by voice">${iconMic()}</button>
     </div>`;
 
   // Search active — filter across all categories, hide tabs and recent bar
@@ -1542,6 +1568,462 @@ function refreshSheetInPlace(sheetId) {
   const scrollTop = panel.scrollTop;
   panel.innerHTML = newPanel.innerHTML;
   panel.scrollTop = scrollTop;
+}
+
+// ── Voice logging ──────────────────────────────────────────────────────────
+// Speak a day's work, confirm what was heard, log it in one go. Parsing lives
+// in data.cjs (parseVoiceLog); everything here is capture and confirmation.
+// Nothing reaches state until the engineer taps "Log all" — see ADR-0007.
+
+const VOICE_CATEGORY_LABELS = { core: 'Gas', hive: 'Hive', sales: 'SGO', absent: 'Absence' };
+
+function voiceJobOptions(selectedId) {
+  return Object.keys(JOB_TYPES).map(function(cat) {
+    const opts = JOB_TYPES[cat].map(function(j) {
+      const meta = JOB_META[j.id] || {};
+      const label = meta.short ? meta.short + (meta.sub ? ' · ' + meta.sub : '') : j.name;
+      return `<option value="${j.id}"${j.id === selectedId ? ' selected' : ''}>${label}</option>`;
+    }).join('');
+    return `<optgroup label="${VOICE_CATEGORY_LABELS[cat] || cat}">${opts}</optgroup>`;
+  }).join('');
+}
+
+function voiceDayBounds() {
+  const weekKeys = Object.keys(state.weeks || {}).sort();
+  const min = weekKeys.length > 0
+    ? weekKeys[0]
+    : (function() { const d = new Date(); d.setFullYear(d.getFullYear() - 1); return localDateStr(d); })();
+  return { min: min, max: getTodayKey() };
+}
+
+function buildVoiceItemRow(item, idx) {
+  const job = item.job || findJob(item.jobId);
+  if (!job) return '';
+  const isDayFlag = job.isMentorFull || job.isMentorPartial;
+  const creditMins = voiceEntryCreditMins(job, item.value) * item.qty;
+
+  const creditText = job.isNpt
+    ? (item.value ? `−${item.value} min` : 'needs time')
+    : isDayFlag
+      ? (job.isMentorFull ? 'Full day' : '−20% target')
+      : item.needsValue
+        ? 'needs time'
+        : `+${(creditMins / 60).toFixed(2)}h`;
+
+  const valueUnit = job.variableType === 'hours' ? 'hrs' : 'mins';
+  const valueField = job.variable ? `
+    <div class="voice-item-value">
+      <input type="number" inputmode="decimal" step="any" min="0"
+        class="voice-value-input${item.needsValue ? ' needs' : ''}"
+        data-idx="${idx}" value="${item.value === null ? '' : item.value}"
+        placeholder="—" aria-label="${job.variablePrompt || 'Value'}">
+      <span class="voice-value-unit">${valueUnit}</span>
+    </div>` : '';
+
+  const qtyStepper = isDayFlag ? '' : `
+    <div class="voice-qty">
+      <button class="voice-qty-btn" data-voice-qty="-1" data-idx="${idx}" aria-label="One fewer">−</button>
+      <span class="voice-qty-val">${item.qty}</span>
+      <button class="voice-qty-btn" data-voice-qty="1" data-idx="${idx}" aria-label="One more">+</button>
+    </div>`;
+
+  return `
+    <div class="voice-item${item.needsValue ? ' needs-value' : ''}">
+      <div class="voice-item-main">
+        <select class="voice-job-select" data-idx="${idx}" aria-label="Job type">${voiceJobOptions(item.jobId)}</select>
+        <button class="voice-item-remove" data-voice-remove="${idx}" aria-label="Remove">✕</button>
+      </div>
+      <div class="voice-item-foot">
+        ${qtyStepper}
+        ${valueField}
+        <span class="voice-item-credit${item.needsValue ? ' needs' : ''}">${creditText}</span>
+      </div>
+    </div>`;
+}
+
+function buildVoiceBody() {
+  if (voiceStatus === 'listening') {
+    return `
+      <div class="voice-listening">
+        <div class="voice-mic-pulse">${iconMic()}</div>
+        <div class="voice-listening-label">Listening…</div>
+        <div class="voice-live-transcript" id="voice-live">${voiceTranscript || 'Say what you’ve done today'}</div>
+        <button class="voice-primary-btn" id="voice-stop">Done</button>
+        <button class="voice-link-btn" id="voice-type-instead">Type it instead</button>
+      </div>`;
+  }
+
+  if (voiceStatus === 'typing' || voiceStatus === 'error') {
+    return `
+      <div class="voice-typing">
+        ${voiceMessage ? `<div class="voice-message">${voiceMessage}</div>` : ''}
+        <label class="voice-type-label" for="voice-text">What did you do?</label>
+        <textarea id="voice-text" class="voice-textarea" rows="3"
+          placeholder="e.g. six breakdowns, two boiler leads and three fires">${voiceTranscript}</textarea>
+        <div class="voice-type-hint">Tip: your keyboard’s microphone key works here too.</div>
+        <button class="voice-primary-btn" id="voice-parse-text">Read that back</button>
+      </div>`;
+  }
+
+  if (voiceStatus === 'parsed' && voiceDraft) {
+    const items = voiceDraft.items;
+    const bounds = voiceDayBounds();
+    const dayDate = new Date(voiceDraft.dayKey + 'T00:00:00');
+    const isToday = voiceDraft.dayKey === getTodayKey();
+    const dayLabelText = isToday
+      ? 'Today · ' + dayDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+      : dayDate.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
+
+    if (items.length === 0) {
+      return `
+        <div class="voice-empty">
+          ${voiceTranscript ? `<div class="voice-heard">“${voiceTranscript}”</div>` : ''}
+          <div class="voice-empty-msg">Couldn’t pick out any jobs from that.</div>
+          ${voiceDraft.unmatched.length > 0
+            ? `<div class="voice-unmatched-list">${voiceDraft.unmatched.map(u => `<span class="voice-unmatched-chip">${u}</span>`).join('')}</div>`
+            : ''}
+          <button class="voice-primary-btn" id="voice-retry">Try again</button>
+          <button class="voice-link-btn" id="voice-type-instead">Type it instead</button>
+        </div>`;
+    }
+
+    const totalHours = voiceBatchCreditHours(items);
+    const totalCount = items.reduce(function(s, it) {
+      const job = it.job || findJob(it.jobId);
+      return s + ((job && (job.isMentorFull || job.isMentorPartial)) ? 0 : it.qty);
+    }, 0);
+    const blocked = items.some(function(it) { return it.needsValue; });
+
+    return `
+      <div class="voice-review">
+        ${voiceTranscript ? `<div class="voice-heard">“${voiceTranscript}”</div>` : ''}
+
+        <div class="voice-day-row">
+          <button class="voice-day-btn" id="voice-day-prev" ${voiceDraft.dayKey <= bounds.min ? 'disabled' : ''} aria-label="Previous day">&#8249;</button>
+          <span class="voice-day-label${isToday ? ' today' : ''}">${dayLabelText}</span>
+          <button class="voice-day-btn" id="voice-day-next" ${voiceDraft.dayKey >= bounds.max ? 'disabled' : ''} aria-label="Next day">&#8250;</button>
+        </div>
+
+        <div class="voice-items">${items.map(buildVoiceItemRow).join('')}</div>
+
+        ${voiceDraft.unmatched.length > 0 ? `
+          <div class="voice-unmatched">
+            <span class="voice-unmatched-label">Not recognised</span>
+            <div class="voice-unmatched-list">${voiceDraft.unmatched.map(u => `<span class="voice-unmatched-chip">${u}</span>`).join('')}</div>
+          </div>` : ''}
+
+        <div class="voice-total-row">
+          <span class="voice-total-label">${totalCount} entr${totalCount === 1 ? 'y' : 'ies'}</span>
+          <span class="voice-total-val">+${totalHours.toFixed(2)}h</span>
+        </div>
+
+        ${blocked ? `<div class="voice-blocked-note">Add a time to the highlighted rows before logging.</div>` : ''}
+
+        <div class="voice-actions">
+          <button class="voice-secondary-btn" id="voice-discard">Discard</button>
+          <button class="voice-primary-btn" id="voice-commit" ${blocked ? 'disabled' : ''}>Log ${totalCount}</button>
+        </div>
+        <button class="voice-link-btn" id="voice-retry">Start over</button>
+      </div>`;
+  }
+
+  return '';
+}
+
+function buildVoiceSheet() {
+  return `
+    <div class="forecast-sheet voice-sheet${voiceSheetOpen ? '' : ' hidden'}" id="voice-sheet">
+      <div class="forecast-backdrop" id="voice-backdrop"></div>
+      <div class="forecast-panel">
+        <div class="forecast-handle"></div>
+        <div class="forecast-header">
+          <span class="forecast-title">Voice log</span>
+          <button class="forecast-close" id="voice-close">✕</button>
+        </div>
+        <div class="forecast-body">${buildVoiceBody()}</div>
+      </div>
+    </div>`;
+}
+
+// Swap only the sheet body, so the panel doesn't re-animate and any open
+// keyboard stays put while the engineer edits rows.
+function refreshVoiceSheet() {
+  const body = document.querySelector('#voice-sheet .forecast-body');
+  if (!body) { render(); return; }
+  body.innerHTML = buildVoiceBody();
+  attachVoiceSheetListeners();
+}
+
+function openVoiceSheet() {
+  if (_isOffline) { showToast("You're offline — logging unavailable"); return; }
+  voiceSheetOpen = true;
+  voiceTranscript = '';
+  voiceDraft = null;
+  voiceMessage = '';
+  const sheet = document.getElementById('voice-sheet');
+  if (sheet) sheet.classList.remove('hidden');
+  startVoiceCapture();
+}
+
+function closeVoiceSheet() {
+  stopVoiceCapture();
+  voiceSheetOpen = false;
+  voiceStatus = 'idle';
+  voiceTranscript = '';
+  voiceDraft = null;
+  voiceMessage = '';
+  const sheet = document.getElementById('voice-sheet');
+  if (sheet) sheet.classList.add('hidden');
+  render();
+}
+
+function speechRecognitionCtor() {
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
+function startVoiceCapture() {
+  const SR = speechRecognitionCtor();
+  if (!SR) {
+    // Safari in standalone PWA mode is the common case here — the keyboard's
+    // own dictation key still works in the textarea fallback.
+    voiceStatus = 'typing';
+    voiceMessage = 'Voice capture isn’t available on this device.';
+    refreshVoiceSheet();
+    return;
+  }
+
+  try {
+    stopVoiceCapture();
+    const rec = new SR();
+    _recognition = rec;
+    rec.lang = 'en-GB';
+    rec.interimResults = true;
+    rec.continuous = true;
+    rec.maxAlternatives = 1;
+
+    rec.onresult = function(e) {
+      let text = '';
+      for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript + ' ';
+      voiceTranscript = text.replace(/\s+/g, ' ').trim();
+      const live = document.getElementById('voice-live');
+      if (live) live.textContent = voiceTranscript;
+    };
+
+    rec.onerror = function(e) {
+      if (e.error === 'aborted') return;         // we stopped it deliberately
+      _recognition = null;
+      voiceStatus = e.error === 'no-speech' ? 'typing' : 'error';
+      voiceMessage = e.error === 'not-allowed'
+        ? 'Microphone access was blocked. Allow it in your browser settings, or type it below.'
+        : e.error === 'no-speech'
+          ? 'Didn’t catch anything — try again or type it below.'
+          : 'Voice capture failed. You can type it instead.';
+      refreshVoiceSheet();
+    };
+
+    rec.onend = function() {
+      _recognition = null;
+      if (voiceStatus !== 'listening') return;   // already moved on
+      if (voiceTranscript.trim()) parseVoiceInput(voiceTranscript);
+      else { voiceStatus = 'typing'; voiceMessage = 'Didn’t catch anything — try again or type it below.'; refreshVoiceSheet(); }
+    };
+
+    voiceStatus = 'listening';
+    refreshVoiceSheet();
+    rec.start();
+  } catch (err) {
+    _recognition = null;
+    voiceStatus = 'error';
+    voiceMessage = 'Voice capture failed to start. You can type it instead.';
+    refreshVoiceSheet();
+  }
+}
+
+function stopVoiceCapture() {
+  if (!_recognition) return;
+  const rec = _recognition;
+  _recognition = null;
+  try { rec.onend = null; rec.onresult = null; rec.onerror = null; rec.stop(); } catch (e) {}
+}
+
+function parseVoiceInput(text) {
+  voiceTranscript = String(text || '').trim();
+  voiceDraft = parseVoiceLog(voiceTranscript, getTodayKey());
+  voiceStatus = 'parsed';
+  voiceMessage = '';
+  refreshVoiceSheet();
+}
+
+function shiftVoiceDay(delta) {
+  if (!voiceDraft) return;
+  const bounds = voiceDayBounds();
+  const d = new Date(voiceDraft.dayKey + 'T00:00:00');
+  d.setDate(d.getDate() + delta);
+  const next = localDateStr(d);
+  if (next < bounds.min || next > bounds.max) return;
+  voiceDraft.dayKey = next;
+  refreshVoiceSheet();
+}
+
+// Write a confirmed batch in one go: one saveState and one week sync, rather
+// than one of each per entry as the tile flow does.
+function commitVoiceBatch() {
+  if (!voiceDraft || voiceDraft.items.length === 0) return;
+  if (_isOffline) { showToast("You're offline — logging unavailable"); return; }
+
+  const targetDay = voiceDraft.dayKey;
+  if (targetDay > getTodayKey()) { showToast('Cannot log to a future date'); return; }
+  if (voiceDraft.items.some(function(it) { return it.needsValue; })) {
+    showToast('Add a time to the highlighted rows');
+    return;
+  }
+
+  const targetWeekKey = getWeekKey(new Date(targetDay + 'T00:00:00'));
+  const week = getOrCreateWeek(state, targetWeekKey);
+  let logged = 0;
+  let creditMinsTotal = 0;
+
+  voiceDraft.items.forEach(function(it) {
+    const job = it.job || findJob(it.jobId);
+    if (!job) return;
+
+    if (job.isMentorFull || job.isMentorPartial) {
+      if (!week.mentorDays) week.mentorDays = {};
+      week.mentorDays[targetDay] = job.isMentorFull ? 'full' : 'partial';
+      logged++;
+      return;
+    }
+
+    if (job.isNpt) {
+      const mins = Math.round(it.value || 0);
+      if (mins <= 0) return;
+      if (!week.deductionLog) week.deductionLog = [];
+      for (let n = 0; n < it.qty; n++) {
+        week.deductionLog.push({ name: job.name, mins: mins, date: targetDay });
+        week.deductionMins = (week.deductionMins || 0) + mins;
+        logged++;
+      }
+      return;
+    }
+
+    const creditMins = voiceEntryCreditMins(job, it.value);
+    const variableDisplay = job.variable && it.value !== null
+      ? (job.variableType === 'hours' ? it.value + 'h' : it.value + 'min')
+      : null;
+    const day = getOrCreateDay(week, targetDay);
+    for (let n = 0; n < it.qty; n++) {
+      day.push({
+        id: job.id,
+        name: job.name,
+        creditMins: creditMins,
+        variableInput: variableDisplay,
+        ts: Date.now()
+      });
+      logged++;
+      creditMinsTotal += creditMins;
+    }
+  });
+
+  saveState(state);
+  if (window.__ctapSyncWeek) window.__ctapSyncWeek(targetWeekKey);
+
+  const backfillNote = targetDay !== getTodayKey() ? ' (backdated)' : '';
+  showToast(`${logged} entr${logged === 1 ? 'y' : 'ies'} added · +${(creditMinsTotal / 60).toFixed(2)}h${backfillNote}`);
+
+  // Land the engineer on the day they just logged to.
+  activeLogDay = targetDay;
+  closeVoiceSheet();
+}
+
+// Bound on every sheet-body refresh, so it must be idempotent — the body is
+// replaced wholesale, which discards the previous listeners with it.
+function attachVoiceSheetListeners() {
+  const body = document.querySelector('#voice-sheet .forecast-body');
+  if (!body) return;
+
+  const on = function(id, handler) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('click', handler);
+  };
+
+  on('voice-stop', function() {
+    const heard = voiceTranscript;
+    stopVoiceCapture();
+    if (heard.trim()) parseVoiceInput(heard);
+    else { voiceStatus = 'typing'; voiceMessage = 'Didn’t catch anything — try again or type it below.'; refreshVoiceSheet(); }
+  });
+
+  on('voice-type-instead', function() {
+    stopVoiceCapture();
+    voiceStatus = 'typing';
+    voiceMessage = '';
+    refreshVoiceSheet();
+    const ta = document.getElementById('voice-text');
+    if (ta) ta.focus();
+  });
+
+  on('voice-parse-text', function() {
+    const ta = document.getElementById('voice-text');
+    parseVoiceInput(ta ? ta.value : '');
+  });
+
+  on('voice-retry', function() { startVoiceCapture(); });
+  on('voice-discard', closeVoiceSheet);
+  on('voice-commit', commitVoiceBatch);
+  on('voice-day-prev', function() { shiftVoiceDay(-1); });
+  on('voice-day-next', function() { shiftVoiceDay(1); });
+
+  if (!voiceDraft) return;
+
+  body.querySelectorAll('[data-voice-qty]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const idx = parseInt(btn.dataset.idx, 10);
+      const delta = parseInt(btn.dataset.voiceQty, 10);
+      const item = voiceDraft.items[idx];
+      if (!item) return;
+      item.qty = Math.max(1, item.qty + delta);
+      refreshVoiceSheet();
+    });
+  });
+
+  body.querySelectorAll('[data-voice-remove]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const idx = parseInt(btn.dataset.voiceRemove, 10);
+      voiceDraft.items.splice(idx, 1);
+      refreshVoiceSheet();
+    });
+  });
+
+  // Correcting a mis-heard job: swapping to a variable job needs a value, and
+  // swapping away from one clears the stale figure.
+  body.querySelectorAll('.voice-job-select').forEach(function(sel) {
+    sel.addEventListener('change', function() {
+      const idx = parseInt(sel.dataset.idx, 10);
+      const item = voiceDraft.items[idx];
+      const job = findJob(sel.value);
+      if (!item || !job) return;
+      item.jobId = job.id;
+      item.job = job;
+      if (!job.variable) { item.value = null; item.needsValue = false; }
+      else item.needsValue = item.value === null;
+      refreshVoiceSheet();
+    });
+  });
+
+  body.querySelectorAll('.voice-value-input').forEach(function(input) {
+    const apply = function() {
+      const idx = parseInt(input.dataset.idx, 10);
+      const item = voiceDraft.items[idx];
+      if (!item) return;
+      const raw = parseFloat(input.value);
+      item.value = isNaN(raw) || raw <= 0 ? null : raw;
+      item.needsValue = item.value === null;
+    };
+    // Update the model as they type, but only redraw on commit so the field
+    // keeps focus and the keyboard stays open.
+    input.addEventListener('input', apply);
+    input.addEventListener('change', function() { apply(); refreshVoiceSheet(); });
+  });
 }
 
 // ── Week Summary Sheet ─────────────────────────────────────────────────────
@@ -2375,9 +2857,20 @@ function attachListeners() {
   const forecastPanel = document.querySelector('#forecast-sheet .forecast-panel');
   const summaryPanel  = document.querySelector('#week-summary-sheet .forecast-panel');
   const cashoutPanel  = document.querySelector('#cashout-sheet .forecast-panel');
+  const voicePanel    = document.querySelector('#voice-sheet .forecast-panel');
   addSheetSwipe(forecastPanel, closeForecastSheet);
   addSheetSwipe(summaryPanel,  closeWeekSummary);
   addSheetSwipe(cashoutPanel,  closeCashOutSheet);
+  addSheetSwipe(voicePanel,    closeVoiceSheet);
+
+  // Voice logging
+  const voiceBtn = document.getElementById('voice-btn');
+  if (voiceBtn) voiceBtn.addEventListener('click', openVoiceSheet);
+  const voiceClose = document.getElementById('voice-close');
+  if (voiceClose) voiceClose.addEventListener('click', closeVoiceSheet);
+  const voiceBackdrop = document.getElementById('voice-backdrop');
+  if (voiceBackdrop) voiceBackdrop.addEventListener('click', closeVoiceSheet);
+  attachVoiceSheetListeners();
 
   // CTAP tile → cash-out sheet
   const ctapTile = document.getElementById('ctap-tile');
@@ -2767,6 +3260,7 @@ function showToast(msg) {
 // ── SVG Icons ──────────────────────────────────────────────────────────────
 function iconChart()    { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="13" width="4" height="8"/><rect x="10" y="9" width="4" height="12"/><rect x="17" y="5" width="4" height="16"/></svg>`; }
 function iconPlus()     { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`; }
+function iconMic()      { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="22"/></svg>`; }
 function iconCalendar() { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`; }
 function iconClock()    { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>`; }
 function iconGear()     { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`; }

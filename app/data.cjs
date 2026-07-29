@@ -766,6 +766,409 @@ function weekSummary(state, weekKey) {
   };
 }
 
+// ── Voice log parsing ──────────────────────────────────────────────────────
+// Turns spoken shorthand ("six breakdowns and two boiler leads yesterday")
+// into draft job entries. Pure and deterministic — the caller supplies the
+// reference date, so "yesterday" is testable.
+//
+// Matching is deliberately generous: engineers speak trade shorthand and
+// speech-to-text mangles job codes. Nothing parsed here is ever written
+// straight to state — every result goes through the confirm sheet first, so a
+// wrong guess costs one tap to fix rather than corrupting a week. See ADR-0007.
+
+const VOICE_UNITS = {
+  zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7,
+  eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13,
+  fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18,
+  nineteen: 19
+};
+const VOICE_TENS = {
+  twenty: 20, thirty: 30, forty: 40, fourty: 40, fifty: 50, sixty: 60,
+  seventy: 70, eighty: 80, ninety: 90
+};
+// Spoken quantifiers that stand in for a number.
+const VOICE_QUANTIFIERS = { a: 1, an: 1, couple: 2, pair: 2, few: 3 };
+
+// Spoken phrase → job id. Matched longest-phrase-first, so "install hive trvs"
+// beats "hive trv" and "fire repair" beats "fire". Ambiguous bare words
+// (e.g. "thermostat") are deliberately absent — better to report them as
+// unmatched than to guess wrong.
+const VOICE_ALIASES = {
+  // ── Core: services ──
+  asv_chb_cir_wh_swh: ['gas service', 'boiler service', 'annual service', 'combi service', 'service', 'services', 'serviced'],
+  asv_fre: ['gas fire service', 'fire service', 'gas fire', 'gas fires', 'fire', 'fires'],
+  asv_hob_ckr_ovn: ['cooker service', 'hob service', 'oven service', 'cooker', 'cookers', 'hob', 'hobs', 'oven', 'ovens'],
+  asv_bbf_wau_waw_aga: ['back boiler service', 'warm air service', 'warm air', 'back boiler', 'back boilers', 'aga'],
+  asv_mwh_wal: ['multipoint water heater', 'multipoint', 'water heater', 'water heaters', 'wall heater'],
+  // ── Core: repairs ──
+  gas_repair: ['gas repair', 'gas repairs', 'breakdown', 'breakdowns', 'call out', 'callout', 'call outs', 'callouts', 'repair', 'repairs'],
+  linked_ib: ['linked fire repair', 'fire repair', 'linked repair', 'linked ib'],
+  od_chb: ['on demand repair', 'on demand', 'non contract repair'],
+  oow_chb: ['warranty repair', 'out of warranty', 'warranty'],
+  ods_chb: ['one off service', 'non contract service'],
+  // ── Core: first visit / fix ──
+  fv_chb: ['first visit', 'first visits'],
+  fv_bbf_wau_waw: ['back boiler first visit', 'first visit back boiler'],
+  ib_ff: ['first fix', 'first fixes'],
+  remedial_safety: ['remedial safety works', 'remedial safety', 'remedial', 'remedials'],
+  // ── Core: long duration / other ──
+  ld_completed: ['long duration', 'long durations'],
+  ld_unv: ['long duration unvented', 'unvented cylinder', 'unvented'],
+  oca: ['oca', 'ocas'],
+  free_gas_safety: ['free gas safety check', 'free safety check', 'free gas safety'],
+  as_inst: ['landlords gas inspection', 'landlord inspection', 'landlords inspection', 'landlords', 'landlord', 'lgsc'],
+  trace_repair: ['trace and repair', 'trace repair', 'trace'],
+  // ── Hive ──
+  hvi_hub: ['opentherm upgrade', 'open therm upgrade', 'opentherm', 'open therm', 'hive hub'],
+  hvi_min: ['hive mini install', 'hive mini', 'mini thermostat'],
+  hvi_wls: ['hive wireless thermostat', 'wireless thermostat', 'hive wireless', 'wireless hive'],
+  hvi_wrd: ['hive wired thermostat', 'wired thermostat', 'hive wired', 'wired hive'],
+  hvi_imz: ['additional zone', 'extra zone', 'second zone', 'hive zone'],
+  hvi_trv: ['hive trv', 'hive trvs', 'trv', 'trvs'],
+  hvi_iio: ['faulty controls install', 'in day install', 'inday install', 'faulty controls'],
+  hvu_the: ['uninstall thermostat', 'hive uninstall', 'uninstall hive'],
+  hive_repair: ['hive repair', 'hive breakdown', 'hive fault', 'thermostat repair'],
+  recall_hive: ['recall hive', 'hive recall', 'recall'],
+  inshv_min: ['install hive mini', 'hive mini sold'],
+  inshv_thr: ['install hive thermostat', 'hive thermostat sold'],
+  inshv_trv: ['install hive trvs', 'hive trvs sold'],
+  // ── Sales / SGO ──
+  standalone_quote: ['standalone quote', 'provide quote', 'quote', 'quotes', 'quoted'],
+  him_upgrade: ['him upgrade', 'home improvement upgrade', 'him'],
+  add_inhibitor: ['add inhibitor', 'added inhibitor', 'in day inhibitor'],
+  cod_gas: ['carbon monoxide detector', 'co detector', 'cod'],
+  hi_lead: ['boiler lead', 'boiler leads', 'hi lead', 'hi leads', 'lead', 'leads'],
+  inhibitor: ['inhibitor', 'inhibitors'],
+  hive_sale_sgo: ['hive sale', 'hive sold', 'sold a hive', 'hive sgo'],
+  hive_sale_fit: ['hive fit', 'hive fitting', 'fitted hive'],
+  co_alarm_sgo: ['co alarm sale', 'co alarm sold', 'sold a co alarm', 'co alarm sgo'],
+  co_alarm_fit: ['co alarm fit', 'fitted co alarm', 'co alarm', 'co alarms'],
+  // ── Absence / NPT / operational ──
+  wait_work: ['wait work', 'waiting time', 'wait time', 'waiting', 'stood down'],
+  early_finish: ['early finish', 'finished early', 'finish early', 'early dart'],
+  mentor_full: ['mentoring all day', 'mentoring full day', 'full day mentoring', 'mentor full'],
+  mentor_partial: ['mentor partial', 'partial mentoring', 'shadowing', 'mentoring', 'mentor'],
+  ev_charge: ['ev charging', 'ev charge', 'charging the van', 'charged the van'],
+  buybox_collection: ['bybox collection', 'buybox collection', 'bybox', 'buybox', 'by box'],
+  merchant_parts: ['merchant parts', 'parts collection', 'merchants', 'merchant'],
+  npt_quick: ['non productive time', 'non productive', 'npt']
+};
+
+// Flattened and sorted once: longest spoken phrase wins.
+const VOICE_ALIAS_INDEX = Object.keys(VOICE_ALIASES)
+  .reduce(function(acc, jobId) {
+    VOICE_ALIASES[jobId].forEach(function(say) { acc.push({ say: say, jobId: jobId }); });
+    return acc;
+  }, [])
+  .sort(function(a, b) { return b.say.length - a.say.length; });
+
+const VOICE_WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+// Normalise speech-to-text output: lowercase, strip punctuation, fold the
+// spoken forms that would otherwise break clause splitting or alias matching.
+function normaliseVoiceText(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[.,!?;:]/g, ' ')
+    .replace(/[’']s\b/g, '')
+    .replace(/\bt\s*(?:&|and)\s*r\b/g, 'trace and repair')
+    .replace(/\b(?:c\.?o\.?|carbon monoxide)\s*alarm/g, 'co alarm')
+    .replace(/&/g, ' and ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// "forty five" → 45, "twenty" → 20, "6" → 6. Returns null when `tokens`
+// doesn't start with a number, plus how many tokens were consumed.
+function readNumber(tokens, i) {
+  const t = tokens[i];
+  if (t === undefined) return null;
+  if (/^\d+(?:\.\d+)?$/.test(t)) return { value: parseFloat(t), used: 1 };
+  if (VOICE_TENS[t] !== undefined) {
+    const next = tokens[i + 1];
+    if (next !== undefined && VOICE_UNITS[next] !== undefined && VOICE_UNITS[next] > 0) {
+      return { value: VOICE_TENS[t] + VOICE_UNITS[next], used: 2 };
+    }
+    return { value: VOICE_TENS[t], used: 1 };
+  }
+  if (VOICE_UNITS[t] !== undefined) return { value: VOICE_UNITS[t], used: 1 };
+  return null;
+}
+
+// Pull a spoken duration out of a clause, returning the minutes and the clause
+// with the duration text removed (so it can't be mistaken for a quantity).
+function extractDurationMins(clause) {
+  const patterns = [
+    { re: /\bhalf an hour\b|\bhalf hour\b/, mins: function() { return 30; } },
+    { re: /\ban hour and a half\b/, mins: function() { return 90; } },
+    { re: /\b(.+?)\s+and a half hours?\b/, mins: function(m, toks) { const n = readNumber(toks, 0); return n ? n.value * 60 + 30 : null; } },
+    { re: /\b(.+?)\s+hours?\s+(?:and\s+)?(.+?)\s+(?:minutes?|mins?)\b/, mins: null, dual: true },
+    { re: /\b(.+?)\s+(?:hours?|hrs?)\b/, mins: function(m, toks) { const n = readNumber(toks, 0); return n ? n.value * 60 : null; } },
+    { re: /\ban hour\b/, mins: function() { return 60; } },
+    { re: /\b(.+?)\s+(?:minutes?|mins?)\b/, mins: function(m, toks) { const n = readNumber(toks, 0); return n ? n.value : null; } }
+  ];
+
+  for (let p = 0; p < patterns.length; p++) {
+    const pat = patterns[p];
+    const m = clause.match(pat.re);
+    if (!m) continue;
+
+    let mins = null;
+    if (pat.dual) {
+      const hTok = String(m[1]).split(' ').slice(-2);
+      const mTok = String(m[2]).split(' ').slice(-2);
+      const h = readNumber(hTok, hTok.length - 1) || readNumber(hTok, 0);
+      const mm = readNumber(mTok, mTok.length - 1) || readNumber(mTok, 0);
+      if (h && mm) mins = h.value * 60 + mm.value;
+    } else if (m[1] !== undefined) {
+      // Only the trailing token(s) of the capture are the number — the rest is
+      // job wording ("wait work two hours").
+      const toks = String(m[1]).split(' ');
+      for (let start = Math.max(0, toks.length - 2); start < toks.length; start++) {
+        const n = readNumber(toks, start);
+        if (n && start + n.used === toks.length) {
+          mins = pat.mins(m, toks.slice(start));
+          if (mins !== null) {
+            const kept = toks.slice(0, start).join(' ');
+            return { mins: mins, rest: (kept + ' ' + clause.slice(m.index + m[0].length)).replace(/\s+/g, ' ').trim() };
+          }
+        }
+      }
+      continue;
+    } else {
+      mins = pat.mins(m, []);
+    }
+
+    if (mins === null) continue;
+    return { mins: mins, rest: clause.replace(pat.re, ' ').replace(/\s+/g, ' ').trim() };
+  }
+  return { mins: null, rest: clause };
+}
+
+// Find a spoken day reference and resolve it against `refDateStr`.
+// Returns the matched phrase so the caller can strip it before clause parsing.
+function extractVoiceDay(text, refDateStr) {
+  const ref = new Date(refDateStr + 'T00:00:00');
+
+  if (/\bday before yesterday\b/.test(text)) {
+    const d = new Date(ref); d.setDate(d.getDate() - 2);
+    return { dayKey: localDateStr(d), phrase: 'day before yesterday' };
+  }
+  if (/\byesterday\b/.test(text)) {
+    const d = new Date(ref); d.setDate(d.getDate() - 1);
+    return { dayKey: localDateStr(d), phrase: 'yesterday' };
+  }
+  if (/\btoday\b/.test(text)) return { dayKey: localDateStr(ref), phrase: 'today' };
+
+  for (let i = 0; i < VOICE_WEEKDAYS.length; i++) {
+    const name = VOICE_WEEKDAYS[i];
+    const m = text.match(new RegExp('\\b(?:last\\s+|on\\s+)?' + name + '\\b'));
+    if (!m) continue;
+    // Most recent occurrence of that weekday, on or before the reference date.
+    const back = (ref.getDay() - i + 7) % 7;
+    const d = new Date(ref);
+    d.setDate(d.getDate() - (back === 0 && /\blast\b/.test(m[0]) ? 7 : back));
+    return { dayKey: localDateStr(d), phrase: m[0] };
+  }
+  return { dayKey: localDateStr(ref), phrase: null };
+}
+
+// Words that carry no meaning for matching — used only to decide whether
+// leftover text is worth reporting back as "couldn't match this bit".
+const VOICE_FILLER = new Set([
+  'i', 'we', 'ive', 'weve', 'have', 'has', 'had', 'did', 'done', 'do', 'doing',
+  'got', 'get', 'was', 'were', 'been', 'then', 'also', 'plus', 'and', 'with',
+  'another', 'more', 'some', 'just', 'only', 'about', 'around', 'roughly',
+  'of', 'for', 'by', 'on', 'at', 'in', 'to', 'the', 'my', 'a', 'an', 'x',
+  'today', 'so', 'um', 'uh', 'er', 'ok', 'okay', 'right', 'up', 'out',
+  // Verbs and time-of-day wording engineers wrap around a job name — these
+  // are noise once the job phrase itself has been matched.
+  'install', 'installed', 'fit', 'fitted', 'fitting', 'sold', 'sell', 'selling',
+  'replace', 'replaced', 'change', 'changed', 'carried', 'complete', 'completed',
+  'attend', 'attended', 'booked', 'went', 'nothing', 'this', 'that', 'there',
+  'here', 'it', 'its', 'all', 'day', 'morning', 'afternoon', 'evening'
+]);
+// Trailing words between a spoken quantity and the job name.
+const VOICE_TRAILING_FILLER = new Set(['of', 'x', 'more', 'extra', 'other', 'additional', 'further', 'new', 'the']);
+
+function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+// Read a spoken quantity: numbers ("six", "twenty two", "4") or quantifiers
+// ("a", "a couple of").
+function readQuantity(tokens, i) {
+  const n = readNumber(tokens, i);
+  if (n) return n;
+  if (VOICE_QUANTIFIERS[tokens[i]] !== undefined) return { value: VOICE_QUANTIFIERS[tokens[i]], used: 1 };
+  return null;
+}
+
+// Pull the quantity out of the text sitting immediately before a job phrase.
+// The number must run right up to the job name ("six breakdowns", "three more
+// services") so that stray digits elsewhere in the sentence aren't captured.
+function readLeadingQty(text) {
+  let tokens = String(text || '').trim().split(/\s+/).filter(Boolean);
+  while (tokens.length > 0 && VOICE_TRAILING_FILLER.has(tokens[tokens.length - 1])) tokens.pop();
+  for (let i = 0; i < tokens.length; i++) {
+    const q = readQuantity(tokens, i);
+    if (q && i + q.used === tokens.length) return Math.max(1, Math.round(q.value));
+  }
+  return 1;
+}
+
+// Does this leftover fragment contain anything worth flagging to the engineer?
+function hasMeaningfulWords(text) {
+  return String(text || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .some(function(t) {
+      return !VOICE_FILLER.has(t) && !readQuantity([t], 0) && !/^\d+(?:\.\d+)?$/.test(t);
+    });
+}
+
+// Locate every job phrase in the text, longest phrase first so that
+// "install hive trvs" wins over "hive trv" and "fire repair" over "fire".
+// Overlapping matches are discarded — each stretch of text belongs to one job.
+function findVoiceAliasMatches(text) {
+  const taken = new Array(text.length).fill(false);
+  const matches = [];
+
+  for (let i = 0; i < VOICE_ALIAS_INDEX.length; i++) {
+    const entry = VOICE_ALIAS_INDEX[i];
+    // Tolerate the spoken plural ("three gas services") without needing every
+    // alias listed twice. Longest-first ordering still uses the base phrase,
+    // so "gas service(s)" beats the shorter bare "services".
+    const plural = /s$/.test(entry.say) ? '' : '(?:e?s)?';
+    const re = new RegExp('\\b' + escapeRe(entry.say) + plural + '\\b', 'g');
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const start = m.index;
+      const end = m.index + m[0].length;
+      let free = true;
+      for (let c = start; c < end; c++) { if (taken[c]) { free = false; break; } }
+      if (!free) continue;
+      for (let c = start; c < end; c++) taken[c] = true;
+      matches.push({ start: start, end: end, jobId: entry.jobId, say: entry.say });
+    }
+  }
+
+  return matches.sort(function(a, b) { return a.start - b.start; });
+}
+
+// Parse a spoken log into draft entries.
+//   parseVoiceLog('six breakdowns and two boiler leads', '2026-07-29')
+// Returns { dayKey, dayPhrase, items: [...], unmatched: [...] }.
+// Each item: { jobId, job, qty, value, needsValue, phrase }
+//   `value`      — variable-job input, already in the job's own unit
+//                  (hours for wait work, minutes for NPT/trace & repair)
+//   `needsValue` — variable job with no duration spoken; the confirm sheet
+//                  must collect one before it can be logged.
+function parseVoiceLog(transcript, refDateStr) {
+  const refDay = refDateStr || getTodayKey();
+  const text = normaliseVoiceText(transcript);
+  if (!text) return { dayKey: refDay, dayPhrase: null, items: [], unmatched: [] };
+
+  const day = extractVoiceDay(text, refDay);
+  const body = day.phrase
+    ? text.replace(new RegExp('\\b' + escapeRe(day.phrase) + '\\b'), ' ').replace(/\s+/g, ' ').trim()
+    : text;
+
+  const matches = findVoiceAliasMatches(body);
+  const items = [];
+  const unmatched = [];
+
+  // Anything before the first job phrase that isn't a quantity or filler.
+  function noteLeftover(fragment) {
+    const cleaned = String(fragment || '').replace(/^\s*(?:and|then|plus|also|with|,)\s*/, '').trim();
+    if (cleaned && hasMeaningfulWords(cleaned)) unmatched.push(cleaned);
+  }
+
+  // Text carried forward when a duration was consumed from a job's tail, so
+  // the next job doesn't read that duration as its own quantity.
+  let pendingPrefix = null;
+  let cursor = 0;
+
+  matches.forEach(function(m, idx) {
+    const rawPrefix = pendingPrefix !== null ? pendingPrefix : body.slice(cursor, m.start);
+    pendingPrefix = null;
+    cursor = m.end;
+
+    const job = findJob(m.jobId);
+    if (!job) { noteLeftover(rawPrefix); return; }
+
+    // A duration may sit before the job ("two hours wait work") or after it
+    // ("trace and repair forty five minutes").
+    const before = extractDurationMins(rawPrefix);
+    let mins = before.mins;
+    let qtyText = before.rest;
+
+    if (mins === null && job.variable) {
+      const nextStart = idx + 1 < matches.length ? matches[idx + 1].start : body.length;
+      const after = extractDurationMins(body.slice(m.end, nextStart));
+      if (after.mins !== null) {
+        mins = after.mins;
+        pendingPrefix = after.rest;   // remainder still belongs to the next job
+        cursor = nextStart;
+      }
+    }
+
+    const qty = readLeadingQty(qtyText);
+    noteLeftover(qtyText);
+
+    let value = null;
+    if (job.variable && mins !== null) {
+      value = job.variableType === 'hours'
+        ? Math.round((mins / 60) * 100) / 100
+        : Math.round(mins);
+    }
+
+    items.push({
+      jobId: m.jobId,
+      job: job,
+      // Mentor days are a flag on the day, not a countable entry.
+      qty: (job.isMentorFull || job.isMentorPartial) ? 1 : qty,
+      value: value,
+      needsValue: !!job.variable && value === null,
+      phrase: m.say
+    });
+  });
+
+  // Trailing text after the last job phrase (or the whole thing if nothing matched).
+  noteLeftover(pendingPrefix !== null ? pendingPrefix : body.slice(cursor));
+
+  // Merge repeats of the same job ("two services ... and another service"),
+  // but keep variable entries separate — each carries its own duration.
+  const merged = [];
+  items.forEach(function(it) {
+    const prior = it.job.variable
+      ? null
+      : merged.find(function(m) { return m.jobId === it.jobId && !m.job.variable; });
+    if (prior) prior.qty += it.qty;
+    else merged.push(it);
+  });
+
+  return { dayKey: day.dayKey, dayPhrase: day.phrase, items: merged, unmatched: unmatched };
+}
+
+// Credit minutes one entry is worth. Mirrors the arithmetic in logJob() —
+// for variable jobs an 'hours' input scales the job's minutes, a 'minutes'
+// input *is* the credit.
+function voiceEntryCreditMins(job, value) {
+  if (!job || job.isNpt || job.isMentorFull || job.isMentorPartial) return 0;
+  if (!job.variable) return job.minutes;
+  if (value === null || value === undefined) return 0;
+  return job.variableType === 'hours' ? job.minutes * value : value;
+}
+
+// Total credit hours a parsed batch would add. Variable entries with no value
+// yet contribute nothing; NPT and mentor entries never add credit.
+function voiceBatchCreditHours(items) {
+  return (items || []).reduce(function(sum, it) {
+    const job = it.job || findJob(it.jobId);
+    return sum + (voiceEntryCreditMins(job, it.value) * it.qty) / 60;
+  }, 0);
+}
+
 // ── CommonJS export (browser is unaffected; this file is loaded as a plain ──
 // ── <script> in the app, where `module` is undefined and the guard skips).  ─
 if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
@@ -810,6 +1213,13 @@ if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     isCoachModeOn: isCoachModeOn,
     getCoachInsights: getCoachInsights,
     weekSummary: weekSummary,
+    VOICE_ALIASES: VOICE_ALIASES,
+    normaliseVoiceText: normaliseVoiceText,
+    extractDurationMins: extractDurationMins,
+    extractVoiceDay: extractVoiceDay,
+    parseVoiceLog: parseVoiceLog,
+    voiceEntryCreditMins: voiceEntryCreditMins,
+    voiceBatchCreditHours: voiceBatchCreditHours,
   };
 }
 

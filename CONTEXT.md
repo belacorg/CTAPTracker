@@ -91,6 +91,10 @@ A per-engineer toggle that controls whether **Coach Insight** surfaces are shown
 Once an engineer has 4+ completed weeks of credited work, the **CTAP target** stops using the static **CTAP percentage** and instead uses a rolling average of recent weeks (scaled by current roster).
 _Avoid_: "average target"
 
+**Voice draft**:
+The parsed, editable result of speaking a day's work into the Log Job page — a resolved day plus a list of proposed entries (job, count, and a value for variable jobs), alongside any spoken fragments the parser could not match. A **Voice draft** is a proposal, not a record: it holds no place in state until the engineer confirms it, at which point it is written through the same shapes the job tiles produce. See ADR-0007.
+_Avoid_: "voice entry", "voice log" (for the draft itself — the draft is what exists before confirmation)
+
 ## Relationships
 
 - An **Engineer** has one **CTAP percentage** and one base value for **Rostered hours**
