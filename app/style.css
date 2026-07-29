@@ -3566,3 +3566,25 @@ details[open] .info-chevron { transform: rotate(90deg); }
 .lj-empty { padding: 26px 0; text-align: center; font-size: 0.85rem; color: var(--muted); }
 
 body.light .lj-sec-sticky { background: var(--bg); }
+
+/* ── Pixel engineer (dashboard greeting) ── */
+.pixel-lane {
+  position: relative;
+  /* Taller than the sprite on purpose. Sizing the lane to exactly his height
+     lets a sub-pixel rounding error eat the top of his cap or the spanner —
+     the spare few px absorb it. */
+  height: 58px;
+  margin: 2px 0 -2px;
+  pointer-events: none;
+  overflow: hidden;
+}
+.pixel-eng {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 44px;
+  height: 54px;
+  /* No transition: he steps in whole pixels, frame by frame. Easing it would
+     glide the sprite between poses and lose the snap. */
+  image-rendering: pixelated;
+}

@@ -411,6 +411,7 @@ function buildDashboard() {
 
 
   return `
+    ${isCurrentWeek ? `<div class="pixel-lane" id="pixel-lane" aria-hidden="true"></div>` : ''}
     ${isCurrentWeek ? `<div class="dash-greeting" id="greeting-text" data-greeting="${greeting}">${greetDisplay}</div>` : ''}
     ${dateStr ? `<div class="date-header">${dateStr}</div>` : ''}
     <div class="hero-jobs-card">
@@ -2275,9 +2276,13 @@ function closeWeekSummary() {
 function attachListeners() {
   // Greeting typewriter + trailing dots (plays on open/refresh and when greeting changes)
   const greetEl = document.getElementById('greeting-text');
+  const isNewGreeting = !!greetEl && greetEl.dataset.greeting !== lastGreeting;
+  if (window.__pixelEngineer) {
+    window.__pixelEngineer.mount(document.getElementById('pixel-lane'), { intro: isNewGreeting });
+  }
   if (greetEl) {
     const text = greetEl.dataset.greeting;
-    if (text !== lastGreeting) {
+    if (isNewGreeting) {
       lastGreeting = text;
       greetEl.textContent = '';
       let i = 0;
