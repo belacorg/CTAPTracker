@@ -61,7 +61,22 @@
   var ARM_DOWN = ['KCK', 'KCK', 'KSK', 'KKK'];
   var ARM_HIGH = ['KKK', 'KSK', 'KSK', 'KLK', 'KCK', 'KCK', 'KKK'];
   var ARM_SWING = ['KKK', 'KCK', 'KCK', 'KSK', 'KKK'];
-  var SPANNER_UP = ['.K.K.', 'KGKGK', 'KG.GK', 'KGKGK', 'KGGGK', '.KGK.', '.KGK.', '.KGK.', '.KKK.'];
+  // A carried toolbox rather than a raised spanner — held up, the spanner's
+  // open jaws read as a trident. Carried at the hip it also lets him keep it
+  // while walking, which a raised tool can't.
+  // Handle in steel, not ink — an ink handle on a dark card is invisible, which
+  // left just the cyan body reading as a slab on the floor.
+  var TOOLBOX = [
+    '..GGG..',
+    '.G...G.',
+    'KKKKKKK',
+    'KCCCCCK',
+    'KCCCCCK',
+    'KKKKKKK'
+  ];
+  // Mouth open — the talking overlay for the Coach card.
+  var MOUTH_OPEN = ['KKKK'];
+  var ARM_OUT = ['KKKKK', 'KCLSK', 'KKKKK'];
 
   var W = 22, H = 27, BX = 2, BY = 6;
 
@@ -117,33 +132,54 @@
       { sp: ARM_SWING, x: BX + 11, y: BY + bob + 13 }
     ];
   }
+  // The toolbox hangs off his right hand, so the cap is tipped with the left —
+  // and the cap tilts away from the lifting arm, hence the shift right.
   function tipCap(lift) {
     return [
       { sp: BELOW_CAP, x: BX, y: BY + 6 },
-      { sp: CAP, x: BX - 2, y: BY - lift },
-      { sp: ARM_DOWN, x: BX, y: BY + 12 },
-      { sp: ARM_HIGH, x: BX + 11, y: BY + 1 }
+      { sp: CAP, x: BX + 2, y: BY - lift },
+      { sp: ARM_HIGH, x: BX - 1, y: BY + 1 },
+      { sp: ARM_DOWN, x: BX + 11, y: BY + 12 },
+      { sp: TOOLBOX, x: 11, y: BY + 12 }
     ];
   }
-  // Spanner shouldered — his resting pose here, since he's turned up to work.
-  function holdUp(bob) {
-    return stand(bob).concat([
-      { sp: ARM_HIGH, x: BX + 11, y: BY + 4 + bob },
-      { sp: SPANNER_UP, x: BX + 12, y: BY - 4 + bob }
-    ]);
+  // Stood with the toolbox — his resting pose, since he's turned up to work.
+  function carry(bob) {
+    bob = bob || 0;
+    return stand(bob).concat([{ sp: TOOLBOX, x: 11, y: BY + 12 + bob }]);
+  }
+  // Walking with it: the near arm swings, the far one keeps hold.
+  function strideCarry(bob) {
+    return [
+      { sp: ABOVE_LEGS, x: BX, y: BY + bob },
+      { sp: LEGS_STRIDE, x: BX, y: BY + bob + 16 },
+      { sp: ARM_SWING, x: BX, y: BY + bob + 11 },
+      { sp: ARM_DOWN, x: BX + 11, y: BY + bob + 12 },
+      { sp: TOOLBOX, x: 12, y: BY + bob + 13 }
+    ];
+  }
+  // Mid-sentence, for the Coach card — mouth open, one hand doing the talking.
+  function talking(gesture) {
+    return stand(0)
+      .concat([{ sp: MOUTH_OPEN, x: BX + 5, y: BY + 9 }])
+      .concat(gesture ? [{ sp: ARM_OUT, x: BX + 11, y: BY + 11 }] : []);
   }
 
   var FRAMES = {
     // No vertical bob: combined with the horizontal step it read as hopping
     // rather than walking. Legs alternate, height stays put.
-    walk: [compile(stride(0)), compile(stand(0))],
+    walk: [compile(strideCarry(0)), compile(carry(0))],
     greet: [
-      compile(stand(0)), compile(tipCap(2)), compile(tipCap(2)),
-      compile(tipCap(1)), compile(stand(0)), compile(stand(1))
+      compile(carry(0)), compile(tipCap(2)), compile(tipCap(2)),
+      compile(tipCap(1)), compile(carry(0)), compile(carry(1))
     ],
-    ready: [compile(holdUp(0)), compile(holdUp(0)), compile(holdUp(1)), compile(holdUp(0))]
+    ready: [compile(carry(0)), compile(carry(0)), compile(carry(1)), compile(carry(0))],
+    talk: [
+      compile(talking(false)), compile(talking(true)), compile(stand(0)),
+      compile(talking(true)), compile(talking(false)), compile(stand(0))
+    ]
   };
-  var FPS = { walk: 8, greet: 3, ready: 2 };
+  var FPS = { walk: 8, greet: 3, ready: 2, talk: 4 };
 
   function draw(svg, paths) {
     svg.innerHTML = paths.map(function (p) {
@@ -151,19 +187,28 @@
     }).join('');
   }
 
-  var _timer = null;
+  var _timers = [];
 
+  function later(fn, ms) {
+    var id = setTimeout(fn, ms);
+    _timers.push(id);
+    return id;
+  }
+
+  // Clears every running sprite. A full render rebuilds all the lanes, so the
+  // caller stops everything once and then mounts what's on the page.
   function stop() {
-    if (_timer) { clearTimeout(_timer); _timer = null; }
+    _timers.forEach(function (t) { clearTimeout(t); });
+    _timers = [];
   }
 
   // Walks in from the right, tips his cap, then settles holding the spanner.
   // `intro: false` skips straight to the resting pose — a re-render shouldn't
   // send him walking on again.
   function mount(lane, opts) {
-    stop();
     if (!lane) return;
     opts = opts || {};
+    var pose = opts.pose || 'ready';
     lane.innerHTML = '';
 
     var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -175,8 +220,8 @@
     var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (!opts.intro || reduced) {
       svg.style.transform = 'translateX(0px)';
-      draw(svg, FRAMES.ready[0]);
-      if (!reduced) loop('ready', 0);
+      draw(svg, FRAMES[pose][0]);
+      if (!reduced) loop(pose, 0);
       return;
     }
 
@@ -197,10 +242,10 @@
       draw(svg, FRAMES.walk[Math.floor(i / 2) % FRAMES.walk.length]);
       i++;
       if (i <= walkFrames) {
-        _timer = setTimeout(walkTick, 1000 / FPS.walk);
+        later(walkTick, 1000 / FPS.walk);
       } else {
         svg.style.transform = 'translateX(0px)';
-        playOnce('greet', function () { loop('ready', 0); });
+        playOnce('greet', function () { loop(pose, 0); });
       }
     })();
 
@@ -209,7 +254,7 @@
       (function tick() {
         draw(svg, FRAMES[name][f]);
         f++;
-        if (f < FRAMES[name].length) _timer = setTimeout(tick, 1000 / FPS[name]);
+        if (f < FRAMES[name].length) later(tick, 1000 / FPS[name]);
         else if (done) done();
       })();
     }
@@ -219,7 +264,7 @@
       (function tick() {
         draw(svg, FRAMES[name][f % FRAMES[name].length]);
         f++;
-        _timer = setTimeout(tick, 1000 / FPS[name]);
+        later(tick, 1000 / FPS[name]);
       })();
     }
   }

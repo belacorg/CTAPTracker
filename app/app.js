@@ -416,8 +416,10 @@ function buildDashboard() {
 
 
   return `
-    ${isCurrentWeek ? `<div class="pixel-lane" id="pixel-lane" aria-hidden="true"></div>` : ''}
-    ${isCurrentWeek ? `<div class="dash-greeting" id="greeting-text" data-greeting="${greeting}">${greetDisplay}</div>` : ''}
+    ${isCurrentWeek ? `<div class="dash-greeting-row">
+      <div class="dash-greeting" id="greeting-text" data-greeting="${greeting}">${greetDisplay}</div>
+      <div class="pixel-lane" id="pixel-lane" aria-hidden="true"></div>
+    </div>` : ''}
     ${dateStr ? `<div class="date-header">${dateStr}</div>` : ''}
     <div class="hero-jobs-card">
       <div class="ctap-hero-label" style="margin-bottom:10px">JOB CREDITS</div>
@@ -2367,7 +2369,9 @@ function attachListeners() {
   const greetEl = document.getElementById('greeting-text');
   const isNewGreeting = !!greetEl && greetEl.dataset.greeting !== lastGreeting;
   if (window.__pixelEngineer) {
+    window.__pixelEngineer.stop();   // one render rebuilt every lane
     window.__pixelEngineer.mount(document.getElementById('pixel-lane'), { intro: isNewGreeting });
+    window.__pixelEngineer.mount(document.getElementById('coach-eng'), { pose: 'talk' });
   }
   if (greetEl) {
     const text = greetEl.dataset.greeting;
@@ -3309,7 +3313,10 @@ function buildCoachCard() {
 
   if (!msgs.length) return '';
   return `<div class="coach-card">
-    <div class="coach-card-header"><span class="coach-label">Coach</span></div>
+    <div class="coach-card-header">
+      <div class="coach-eng" id="coach-eng" aria-hidden="true"></div>
+      <span class="coach-label">Coach</span>
+    </div>
     ${msgs.map(m => `<div class="coach-msg">${m}</div>`).join('')}
   </div>`;
 }

@@ -3568,13 +3568,21 @@ details[open] .info-chevron { transform: rotate(90deg); }
 body.light .lj-sec-sticky { background: var(--bg); }
 
 /* ── Pixel engineer (dashboard greeting) ── */
+/* He shares the greeting's line and walks in along it. */
+.dash-greeting-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-bottom: 2px;
+}
+.dash-greeting-row .dash-greeting { margin-bottom: 0; }
 .pixel-lane {
   position: relative;
+  flex: 1;
+  min-width: 40px;
   /* Taller than the sprite on purpose. Sizing the lane to exactly his height
-     lets a sub-pixel rounding error eat the top of his cap or the spanner —
-     the spare few px absorb it. */
-  height: 58px;
-  margin: 0 0 -8px;
+     lets a sub-pixel rounding error eat the top of his cap. */
+  height: 48px;
   pointer-events: none;
   overflow: hidden;
 }
@@ -3582,12 +3590,26 @@ body.light .lj-sec-sticky { background: var(--bg); }
   position: absolute;
   left: 0;
   bottom: 0;
-  width: 44px;
-  height: 54px;
+  width: 36px;
+  height: 44px;
   /* No transition: he steps in whole pixels, frame by frame. Easing it would
      glide the sprite between poses and lose the snap. */
   image-rendering: pixelated;
 }
+
+/* Coach card — he fronts it, so the animation reads as the coach talking. */
+.coach-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.coach-eng {
+  position: relative;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 32px;
+}
+.coach-eng .pixel-eng { width: 26px; height: 32px; }
 
 /* ── Voice: cheat sheet + guessed rows ── */
 .voice-live-transcript.empty { color: var(--muted2); }

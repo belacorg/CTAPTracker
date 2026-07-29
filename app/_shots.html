@@ -24,6 +24,6 @@ var tk=iso(today);
 days[tk]=(days[tk]||[]).concat([job('gas_repair','Gas Repair',56),job('asv_chb_cir_wh_swh','Gas Service',40),job('fv_chb','First Visit',48)]);
 var weeks={};weeks[wk]={deductionMins:30,deductionLog:[],shifts:{},mentorDays:{},excludeFromCtap:false,notes:'',days:days};
 localStorage.setItem('jct_state',JSON.stringify({baseHours:40,weeklyTargetPct:0.8,startingBalance:6.4,weeks:weeks}));
-localStorage.setItem('jcpd_theme','dark');})();
+localStorage.setItem('jcpd_theme','dark');localStorage.setItem('jcpd_coach_mode','true');})();
 </script>
 <script src="pixel-engineer.js"></script><script src="data.cjs"></script><script src="app.js"></script></body></html>

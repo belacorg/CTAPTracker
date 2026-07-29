@@ -58,7 +58,7 @@ describe('no Apprentice to Engineer branding comes across', () => {
 describe('sprite frames', () => {
   it('compiles every animation to drawable paths', () => {
     const frames = boot().__pixelEngineer.frames;
-    expect(Object.keys(frames).sort()).toEqual(['greet', 'ready', 'walk']);
+    expect(Object.keys(frames).sort()).toEqual(['greet', 'ready', 'talk', 'walk']);
     for (const [name, list] of Object.entries(frames)) {
       expect(list.length, name).toBeGreaterThan(1);
       list.forEach(frame => {
@@ -79,11 +79,25 @@ describe('sprite frames', () => {
     });
   });
 
-  it('holds a spanner in the resting pose but not while walking', () => {
+  it('carries the toolbox everywhere except when he is talking', () => {
+    // A raised spanner read as a trident, and couldn't be held while walking.
+    // The toolbox is carried, so it stays with him — but the Coach card pose
+    // needs both hands free to gesture.
     const frames = boot().__pixelEngineer.frames;
-    const steel = f => f.some(p => p.key === 'G');
+    const steel = f => f.some(p => p.key === 'G');   // the toolbox handle
     expect(frames.ready.every(steel)).toBe(true);
-    expect(frames.walk.some(steel)).toBe(false);
+    expect(frames.walk.every(steel)).toBe(true);
+    expect(frames.greet.every(steel)).toBe(true);
+    expect(frames.talk.some(steel)).toBe(false);
+  });
+
+  it('opens his mouth in the talking pose, and not otherwise', () => {
+    const frames = boot().__pixelEngineer.frames;
+    // The mouth overlay widens the face's dark run; compare path counts of ink.
+    const inkRuns = f => (f.find(p => p.key === 'K') || { d: '' }).d.split('M').length;
+    const talkMax = Math.max(...frames.talk.map(inkRuns));
+    const restMax = Math.max(...frames.ready.map(inkRuns));
+    expect(talkMax).toBeGreaterThan(restMax - 1);
   });
 });
 
