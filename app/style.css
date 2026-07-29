@@ -3478,7 +3478,15 @@ details[open] .info-chevron { transform: rotate(90deg); }
   display: flex; align-items: center; justify-content: center;
   background: var(--jcpd-accent-dim);
   color: var(--accent);
+  border: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
   animation: voicePulse 1.6s ease-in-out infinite;
+}
+.voice-mic-pulse:active { transform: scale(0.94); }
+.voice-listening-hint {
+  font-size: 0.74rem; color: var(--muted2);
+  margin: -4px 0 14px;
 }
 .voice-mic-pulse svg { width: 30px; height: 30px; }
 @keyframes voicePulse {

@@ -33,6 +33,8 @@ let voiceTranscript = '';
 let voiceDraft = null;         // { dayKey, dayPhrase, items, unmatched }
 let voiceMessage = '';
 let _recognition = null;
+let _voiceStartGuard = null;
+let _voiceSilenceGuard = null;
 let _ctapUser = null;          // populated by __ctapInit
 let _ctapDisplayName = '';     // populated by __ctapInit
 let _isOffline = false;
@@ -1645,9 +1647,10 @@ function buildVoiceBody() {
   if (voiceStatus === 'listening') {
     return `
       <div class="voice-listening">
-        <div class="voice-mic-pulse">${iconMic()}</div>
+        <button class="voice-mic-pulse" id="voice-stop-mic" aria-label="Stop listening">${iconMic()}</button>
         <div class="voice-listening-label">Listening…</div>
         <div class="voice-live-transcript" id="voice-live">${voiceTranscript || 'Say what you’ve done today'}</div>
+        <div class="voice-listening-hint">Stops on its own when you pause.</div>
         <button class="voice-primary-btn" id="voice-stop">Done</button>
         <button class="voice-link-btn" id="voice-type-instead">Type it instead</button>
       </div>`;
@@ -1781,6 +1784,46 @@ function speechRecognitionCtor() {
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
 }
 
+// Listening must always end by itself.
+//
+// While iOS holds the microphone it takes over touch input, so the page stops
+// receiving taps — a "Listening…" state that only a button can exit is a trap
+// with no way out. Two rules keep that from happening:
+//   1. continuous = false, so the recogniser stops on a natural pause. (iOS
+//      largely ignores continuous = true and then never fires onend at all.)
+//   2. Timers we own, not the engine's, are the real backstop — if the engine
+//      never starts, never speaks, or never ends, we abort it ourselves.
+const VOICE_START_TIMEOUT = 4000;   // engine never got going
+const VOICE_SILENCE_TIMEOUT = 8000; // no speech for this long → wrap up
+
+function clearVoiceTimers() {
+  if (_voiceStartGuard) { clearTimeout(_voiceStartGuard); _voiceStartGuard = null; }
+  if (_voiceSilenceGuard) { clearTimeout(_voiceSilenceGuard); _voiceSilenceGuard = null; }
+}
+
+function armVoiceSilenceGuard() {
+  if (_voiceSilenceGuard) clearTimeout(_voiceSilenceGuard);
+  _voiceSilenceGuard = setTimeout(function() {
+    _voiceSilenceGuard = null;
+    if (voiceStatus === 'listening') finishVoiceCapture();
+  }, VOICE_SILENCE_TIMEOUT);
+}
+
+// Single exit from listening, whether the engine ended it, a timer did, or the
+// engineer tapped Done.
+function finishVoiceCapture() {
+  clearVoiceTimers();
+  const heard = voiceTranscript;
+  stopVoiceCapture();
+  if (heard.trim()) {
+    parseVoiceInput(heard);
+  } else {
+    voiceStatus = 'typing';
+    voiceMessage = 'Didn’t catch anything — try again, or type it below.';
+    refreshVoiceSheet();
+  }
+}
+
 function startVoiceCapture() {
   const SR = speechRecognitionCtor();
   if (!SR) {
@@ -1794,29 +1837,49 @@ function startVoiceCapture() {
 
   try {
     stopVoiceCapture();
+    voiceTranscript = '';
     const rec = new SR();
     _recognition = rec;
     rec.lang = 'en-GB';
     rec.interimResults = true;
-    rec.continuous = true;
+    rec.continuous = false;
     rec.maxAlternatives = 1;
+
+    rec.onstart = function() {
+      if (_voiceStartGuard) { clearTimeout(_voiceStartGuard); _voiceStartGuard = null; }
+      armVoiceSilenceGuard();
+    };
+
+    rec.onspeechstart = armVoiceSilenceGuard;
+    rec.onaudiostart = armVoiceSilenceGuard;
 
     rec.onresult = function(e) {
       let text = '';
-      for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript + ' ';
+      let isFinal = false;
+      for (let i = 0; i < e.results.length; i++) {
+        text += e.results[i][0].transcript + ' ';
+        if (e.results[i].isFinal) isFinal = true;
+      }
       voiceTranscript = text.replace(/\s+/g, ' ').trim();
       const live = document.getElementById('voice-live');
       if (live) live.textContent = voiceTranscript;
+      // Still talking — give them longer.
+      armVoiceSilenceGuard();
+      // Engine has committed to a transcript: go straight to review rather
+      // than waiting for a Done tap the platform may never let through.
+      if (isFinal) finishVoiceCapture();
     };
 
     rec.onerror = function(e) {
       if (e.error === 'aborted') return;         // we stopped it deliberately
+      clearVoiceTimers();
       _recognition = null;
-      voiceStatus = e.error === 'no-speech' ? 'typing' : 'error';
-      voiceMessage = e.error === 'not-allowed'
-        ? 'Microphone access was blocked. Allow it in your browser settings, or type it below.'
+      if (e.error === 'no-speech' && voiceTranscript.trim()) { finishVoiceCapture(); return; }
+      voiceStatus = e.error === 'not-allowed' || e.error === 'service-not-allowed' ? 'error' : 'typing';
+      voiceMessage = e.error === 'not-allowed' || e.error === 'service-not-allowed'
+        ? 'Microphone access was blocked. Allow it in Settings, or type it below.'
         : e.error === 'no-speech'
-          ? 'Didn’t catch anything — try again or type it below.'
+          ? 'Didn’t catch anything — try again, or type it below.'
           : 'Voice capture failed. You can type it instead.';
       refreshVoiceSheet();
     };
@@ -1824,26 +1887,46 @@ function startVoiceCapture() {
     rec.onend = function() {
       _recognition = null;
       if (voiceStatus !== 'listening') return;   // already moved on
-      if (voiceTranscript.trim()) parseVoiceInput(voiceTranscript);
-      else { voiceStatus = 'typing'; voiceMessage = 'Didn’t catch anything — try again or type it below.'; refreshVoiceSheet(); }
+      finishVoiceCapture();
     };
 
     voiceStatus = 'listening';
     refreshVoiceSheet();
+
+    // Armed before start() — onstart can fire synchronously, and it clears
+    // this guard, so arming afterwards would leave a live timer that kills a
+    // perfectly healthy session a few seconds later.
+    _voiceStartGuard = setTimeout(function() {
+      _voiceStartGuard = null;
+      if (voiceStatus !== 'listening') return;
+      stopVoiceCapture();
+      voiceStatus = 'typing';
+      voiceMessage = 'Voice capture didn’t start on this device — type it below instead.';
+      refreshVoiceSheet();
+    }, VOICE_START_TIMEOUT);
+
     rec.start();
   } catch (err) {
+    clearVoiceTimers();
     _recognition = null;
-    voiceStatus = 'error';
+    voiceStatus = 'typing';
     voiceMessage = 'Voice capture failed to start. You can type it instead.';
     refreshVoiceSheet();
   }
 }
 
 function stopVoiceCapture() {
+  clearVoiceTimers();
   if (!_recognition) return;
   const rec = _recognition;
   _recognition = null;
-  try { rec.onend = null; rec.onresult = null; rec.onerror = null; rec.stop(); } catch (e) {}
+  try {
+    rec.onend = null; rec.onresult = null; rec.onerror = null;
+    rec.onstart = null; rec.onspeechstart = null; rec.onaudiostart = null;
+    // abort() drops the audio immediately; stop() waits for a final result and
+    // can hang on iOS, which is the trap we're avoiding.
+    if (rec.abort) rec.abort(); else rec.stop();
+  } catch (e) {}
 }
 
 function parseVoiceInput(text) {
@@ -1946,12 +2029,8 @@ function attachVoiceSheetListeners() {
     if (el) el.addEventListener('click', handler);
   };
 
-  on('voice-stop', function() {
-    const heard = voiceTranscript;
-    stopVoiceCapture();
-    if (heard.trim()) parseVoiceInput(heard);
-    else { voiceStatus = 'typing'; voiceMessage = 'Didn’t catch anything — try again or type it below.'; refreshVoiceSheet(); }
-  });
+  on('voice-stop', finishVoiceCapture);
+  on('voice-stop-mic', finishVoiceCapture);
 
   on('voice-type-instead', function() {
     stopVoiceCapture();
