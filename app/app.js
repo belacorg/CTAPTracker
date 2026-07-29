@@ -194,6 +194,7 @@ function buildApp() {
     ${buildWeekSummarySheet()}
     ${buildCashOutSheet()}
     ${buildVoiceSheet()}
+    ${(window.__protoVariant && window.__protoVariant() && window.__protoSwitcher) ? window.__protoSwitcher(window.__protoVariant()) : ''}
     <div class="toast" id="toast"></div>
   `;
 }
@@ -229,6 +230,10 @@ function buildTopBar() {
 }
 
 function buildMain() {
+  // PROTOTYPE hook — ?variant=A|B|C swaps the rendering of these two tabs only.
+  var _pv = window.__protoVariant && window.__protoVariant();
+  if (_pv && activeTab === 'log' && window.__protoLog) return window.__protoLog(_pv);
+  if (_pv && activeTab === 'dashboard' && window.__protoDash) return window.__protoDash(_pv);
   switch (activeTab) {
     case 'dashboard': return buildDashboard();
     case 'log':       return buildLogJobs();
@@ -1755,6 +1760,7 @@ function refreshVoiceSheet() {
   if (!body) { render(); return; }
   body.innerHTML = buildVoiceBody();
   attachVoiceSheetListeners();
+  if (window.__protoAttach) window.__protoAttach();
 }
 
 function openVoiceSheet() {
