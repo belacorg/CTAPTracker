@@ -1761,7 +1761,9 @@ function buildVoiceItemRow(item, idx) {
         <select class="voice-job-select" data-idx="${idx}" aria-label="Job type">${voiceJobOptions(item.jobId)}</select>
         <button class="voice-item-remove" data-voice-remove="${idx}" aria-label="Remove">✕</button>
       </div>
-      ${item.assumed ? `<div class="voice-item-assumed">Guessed from “${item.phrase}” — check ${/^hive\b/.test(item.phrase) ? 'which Hive job' : 'the appliance'}</div>` : ''}
+      ${item.assumed ? `<div class="voice-item-assumed">${/^hive\b/.test(item.phrase)
+        ? voiceAssumedHint(item.phrase)
+        : `Guessed from “${item.phrase}” — ${voiceAssumedHint(item.phrase)}`}</div>` : ''}
       <div class="voice-item-foot">
         ${qtyStepper}
         ${valueField}

@@ -15,7 +15,7 @@ import { dirname, join } from 'node:path';
 
 const require = createRequire(import.meta.url);
 const data = require(join(dirname(fileURLToPath(import.meta.url)), '..', 'app', 'data.cjs'));
-const { normaliseVoiceText, parseVoiceLog, VOICE_BROAD } = data;
+const { normaliseVoiceText, parseVoiceLog, VOICE_BROAD, voiceAssumedHint } = data;
 
 const REF = '2026-07-31';
 const parse = (say) => parseVoiceLog(say, REF);
@@ -42,11 +42,54 @@ describe('the case Jake hit', () => {
   });
 });
 
+describe('the Hive install guess', () => {
+  // Jake: mini and the standard wireless thermostat are most of them, wired is
+  // less common, TRV less again. So the default is right and the job of the
+  // prompt is to hand over the wording for the rarer two.
+  it('names what it guessed rather than just saying "check"', () => {
+    expect(voiceAssumedHint('hive installs')).toContain('Guessed wireless');
+  });
+
+  it('gives the exact words for the ones it might have got wrong', () => {
+    const hint = voiceAssumedHint('hive installs');
+    ['hive mini', 'hive wired', 'hive trvs'].forEach(say => expect(hint).toContain(say));
+  });
+
+  it('leaves the appliance wording alone for everything else', () => {
+    expect(voiceAssumedHint('repairs')).toBe('check the appliance');
+    expect(voiceAssumedHint('services')).toBe('check the appliance');
+  });
+
+  it('takes the exact wording without guessing at all', () => {
+    const exact = (say) => {
+      const it = parse(say).items[0];
+      return { id: it.jobId, qty: it.qty, assumed: it.assumed };
+    };
+    expect(exact('two hive minis')).toEqual({ id: 'hvi_min', qty: 2, assumed: false });
+    expect(exact('two hive wired')).toEqual({ id: 'hvi_wrd', qty: 2, assumed: false });
+    expect(exact('two hive trvs')).toEqual({ id: 'hvi_trv', qty: 2, assumed: false });
+    expect(exact('two hive wireless thermostats')).toEqual({ id: 'hvi_wls', qty: 2, assumed: false });
+  });
+
+  it('costs nothing in credit when the guess lands on the other common one', () => {
+    // Mini and wireless are both 90 minutes, so mishearing one for the other
+    // leaves the week's figure untouched. That is why the default is safe.
+    const credit = id => data.findJob(id).minutes;
+    expect(credit('hvi_wls')).toBe(credit('hvi_min'));
+  });
+});
+
 describe('folding "high" to "hive"', () => {
   it('folds when a Hive-shaped word follows', () => {
     expect(normaliseVoiceText('two high trvs')).toBe('two hive trvs');
     expect(normaliseVoiceText('a high repair')).toBe('a hive repair');
     expect(normaliseVoiceText('high wireless thermostat')).toBe('hive wireless thermostat');
+  });
+
+  it('folds in front of the plural too — "high minis" is as likely as "high mini"', () => {
+    expect(normaliseVoiceText('too high minis')).toBe('two hive minis');
+    expect(jobs('too high minis')).toEqual([{ id: 'hvi_min', qty: 2 }]);
+    expect(jobs('too high installs')).toEqual([{ id: 'hvi_wls', qty: 2 }]);
   });
 
   it('folds when the verb comes first', () => {

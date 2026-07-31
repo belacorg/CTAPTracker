@@ -966,6 +966,21 @@ const VOICE_BROAD = [
   'hive install', 'hive installs', 'hive installed', 'hive instals'
 ];
 
+// What the confirm sheet says under a guessed row.
+//
+// A broad match is only defensible if the engineer can see what was guessed and
+// knows the words that would have been exact — otherwise it is the app quietly
+// choosing a credit value. "Hive install" is the one where the alternatives are
+// worth naming outright: mini and wireless are the everyday pair and carry the
+// same credit, so the guess between those two is free, while wired and TRV are
+// rarer and worth a quarter to half an hour less.
+function voiceAssumedHint(phrase) {
+  if (/^hive\b/.test(String(phrase || ''))) {
+    return 'Guessed wireless — say “hive mini”, “hive wired” or “hive trvs” if it wasn’t';
+  }
+  return 'check the appliance';
+}
+
 // Flattened and sorted once: longest spoken phrase wins.
 const VOICE_ALIAS_INDEX = Object.keys(VOICE_ALIASES)
   .reduce(function(acc, jobId) {
@@ -989,7 +1004,9 @@ const VOICE_WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 
 // rely on inside a home-screen PWA.
 const VOICE_HOMOPHONES = [
   [/\b(install|installs|installed|fit|fitted|fitting|sold|uninstall|recall)\s+high\b/g, '$1 hive'],
-  [/\bhigh\b(?=\s+(?:install|installs|installed|hub|mini|thermostat|thermostats|trv|trvs|wireless|wired|zone|zones|repair|repairs|fault|faults|breakdown|breakdowns|recall|sale|sold|fit|fitting|uninstall)\b)/g, 'hive'],
+  // `e?s?` rather than listing every plural — "high minis" and "high trvs" are
+  // as likely to be said as the singular.
+  [/\bhigh\b(?=\s+(?:install|installed|hub|mini|thermostat|trv|wireless|wired|zone|repair|fault|breakdown|recall|sale|sold|fit|fitting|uninstall)e?s?\b)/g, 'hive'],
   // Number homophones. Each of these is a word with no place in a job
   // dictation, so folding costs nothing: "too"/"tree"/"won"/"ate" would
   // otherwise land in the unmatched pile and the count would silently be one.
@@ -1790,6 +1807,7 @@ if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     weekSummary: weekSummary,
     VOICE_ALIASES: VOICE_ALIASES,
     VOICE_BROAD: VOICE_BROAD,
+    voiceAssumedHint: voiceAssumedHint,
     normaliseVoiceText: normaliseVoiceText,
     extractDurationMins: extractDurationMins,
     extractVoiceDay: extractVoiceDay,
