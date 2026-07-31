@@ -1683,6 +1683,7 @@ const VOICE_CATEGORY_LABELS = { core: 'Gas', hive: 'Hive', sales: 'SGO', absent:
 // appliance, which is the one habit that removes most of the corrections.
 const VOICE_TIPS = [
   { say: 'four boiler repairs', why: 'Name the appliance — “four repairs” is guessed' },
+  { say: 'two hive wireless thermostats', why: 'Say which Hive — “hive install” is guessed' },
   { say: 'six breakdowns, two boiler leads', why: 'String jobs together, count first' },
   { say: 'a cooker service and two fires', why: '“a” counts as one' },
   { say: 'trace and repair forty five minutes', why: 'Give a time for min-for-min jobs' },
@@ -1760,7 +1761,7 @@ function buildVoiceItemRow(item, idx) {
         <select class="voice-job-select" data-idx="${idx}" aria-label="Job type">${voiceJobOptions(item.jobId)}</select>
         <button class="voice-item-remove" data-voice-remove="${idx}" aria-label="Remove">✕</button>
       </div>
-      ${item.assumed ? `<div class="voice-item-assumed">Guessed from “${item.phrase}” — check the appliance</div>` : ''}
+      ${item.assumed ? `<div class="voice-item-assumed">Guessed from “${item.phrase}” — check ${/^hive\b/.test(item.phrase) ? 'which Hive job' : 'the appliance'}</div>` : ''}
       <div class="voice-item-foot">
         ${qtyStepper}
         ${valueField}

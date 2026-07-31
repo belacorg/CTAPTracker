@@ -915,7 +915,13 @@ const VOICE_ALIASES = {
   // ── Hive ──
   hvi_hub: ['opentherm upgrade', 'open therm upgrade', 'opentherm', 'open therm', 'hive hub'],
   hvi_min: ['hive mini install', 'hive mini', 'mini thermostat'],
-  hvi_wls: ['hive wireless thermostat', 'wireless thermostat', 'hive wireless', 'wireless hive'],
+  // 'hive install' is genuinely ambiguous — mini, wireless, wired and TRV are
+  // all "a Hive install". It resolves here because refusing a phrase engineers
+  // say constantly is worse, and lands on wireless: the standard thermostat
+  // install, and identical in credit to the mini, so the common wrong guess
+  // costs nothing. Listed in VOICE_BROAD, so the sheet flags it to be checked.
+  hvi_wls: ['hive wireless thermostat', 'wireless thermostat', 'hive wireless', 'wireless hive',
+            'hive install', 'hive installs', 'hive installed', 'hive instals'],
   hvi_wrd: ['hive wired thermostat', 'wired thermostat', 'hive wired', 'wired hive'],
   hvi_imz: ['additional zone', 'extra zone', 'second zone', 'hive zone'],
   hvi_trv: ['hive trv', 'hive trvs', 'trv', 'trvs'],
@@ -956,7 +962,8 @@ const VOICE_ALIASES = {
 const VOICE_BROAD = [
   'repair', 'repairs', 'breakdown', 'breakdowns', 'call out', 'callout', 'call outs', 'callouts',
   'service', 'services', 'serviced', 'fire', 'fires', 'gas fire', 'gas fires',
-  'quote', 'quotes', 'quoted', 'lead', 'leads', 'job', 'jobs'
+  'quote', 'quotes', 'quoted', 'lead', 'leads', 'job', 'jobs',
+  'hive install', 'hive installs', 'hive installed', 'hive instals'
 ];
 
 // Flattened and sorted once: longest spoken phrase wins.
@@ -969,18 +976,49 @@ const VOICE_ALIAS_INDEX = Object.keys(VOICE_ALIASES)
 
 const VOICE_WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
+// Speech-to-text homophones.
+//
+// The recogniser is not ours to fix — iOS hears "two hive installs" as "too
+// high installs" and there is no dictionary to teach. So the repair happens
+// here, on one rule: only fold a word an engineer effectively never says into
+// one they say constantly.
+//
+// "high" is the awkward one, because "high pressure" is real trade speech. It
+// only folds when a Hive-shaped word sits next to it, which "high pressure"
+// never does. Lookahead only — Safari's lookbehind support is too recent to
+// rely on inside a home-screen PWA.
+const VOICE_HOMOPHONES = [
+  [/\b(install|installs|installed|fit|fitted|fitting|sold|uninstall|recall)\s+high\b/g, '$1 hive'],
+  [/\bhigh\b(?=\s+(?:install|installs|installed|hub|mini|thermostat|thermostats|trv|trvs|wireless|wired|zone|zones|repair|repairs|fault|faults|breakdown|breakdowns|recall|sale|sold|fit|fitting|uninstall)\b)/g, 'hive'],
+  // Number homophones. Each of these is a word with no place in a job
+  // dictation, so folding costs nothing: "too"/"tree"/"won"/"ate" would
+  // otherwise land in the unmatched pile and the count would silently be one.
+  // "free" is deliberately absent — it would break "free gas safety check".
+  [/\btoo\b/g, 'two'],
+  [/\btree\b/g, 'three'],
+  [/\bwon\b/g, 'one'],
+  [/\bate\b/g, 'eight'],
+];
+
 // Normalise speech-to-text output: lowercase, strip punctuation, fold the
 // spoken forms that would otherwise break clause splitting or alias matching.
 function normaliseVoiceText(text) {
-  return String(text || '')
+  let out = String(text || '')
     .toLowerCase()
     .replace(/[.,!?;:]/g, ' ')
     .replace(/[’']s\b/g, '')
+    // Remaining apostrophes go too, so "I've" reads as the filler word "ive"
+    // rather than surfacing as something the parser couldn't understand.
+    .replace(/[’']/g, '')
     .replace(/\bt\s*(?:&|and)\s*r\b/g, 'trace and repair')
     .replace(/\b(?:c\.?o\.?|carbon monoxide)\s*alarm/g, 'co alarm')
     .replace(/&/g, ' and ')
     .replace(/\s+/g, ' ')
     .trim();
+  // Homophone repair runs last, on already-tidied text, so the word-boundary
+  // rules above don't have to cope with punctuation.
+  VOICE_HOMOPHONES.forEach(function(pair) { out = out.replace(pair[0], pair[1]); });
+  return out;
 }
 
 // "forty five" → 45, "twenty" → 20, "6" → 6. Returns null when `tokens`
@@ -1183,7 +1221,10 @@ const VOICE_FILLER = new Set([
   'install', 'installed', 'fit', 'fitted', 'fitting', 'sold', 'sell', 'selling',
   'replace', 'replaced', 'change', 'changed', 'carried', 'complete', 'completed',
   'attend', 'attended', 'booked', 'went', 'nothing', 'this', 'that', 'there',
-  'here', 'it', 'its', 'all', 'day', 'morning', 'afternoon', 'evening'
+  'here', 'it', 'its', 'all', 'day', 'morning', 'afternoon', 'evening',
+  // "two of these services" — without these the whole run comes back as
+  // unrecognised, when the only word that mattered was matched already.
+  'these', 'those', 'them'
 ]);
 // Trailing words between a spoken quantity and the job name.
 const VOICE_TRAILING_FILLER = new Set(['of', 'x', 'more', 'extra', 'other', 'additional', 'further', 'new', 'the']);
