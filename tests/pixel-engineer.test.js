@@ -79,6 +79,45 @@ describe('sprite frames', () => {
     });
   });
 
+  it('leaves no hole under the cap when he tips it', () => {
+    // The cap lifts clear of the head in the greet frames. Without a scalp
+    // filling the rows it vacates, the card background showed through and the
+    // cap read as floating rather than raised.
+    const frames = boot().__pixelEngineer.frames;
+    // Decode the compiled runs back to a grid. The raised hand is skin too and
+    // sits above the head, so row-level reasoning misreads it — what actually
+    // matters is that no background shows through the middle of his head.
+    const gridOf = (frame) => {
+      const g = {};
+      frame.forEach(p => {
+        for (const seg of p.d.split('z').filter(Boolean)) {
+          const m = seg.match(/M(\d+) (\d+)h(\d+)/);
+          if (!m) continue;
+          const [, x, y, run] = m.map(Number);
+          for (let i = 0; i < run; i++) g[`${x + i},${y}`] = p.key;
+        }
+      });
+      return g;
+    };
+    // Columns inside the face, clear of the arm at either side. The crown
+    // narrows towards the top, so the brim is the reliable anchor: it is the
+    // one full-width solid row, and everything below it down to the chin is
+    // head — scalp or face — with no background between.
+    const FACE_COLS = [5, 6, 7, 8, 9, 10, 11, 12];
+    const BRIM_COLS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+    const FACE_BOTTOM = 16;
+
+    frames.greet.forEach((frame, i) => {
+      const g = gridOf(frame);
+      const filled = (x, y) => !!g[`${x},${y}`];
+      const brim = [...Array(FACE_BOTTOM).keys()].filter(y => BRIM_COLS.every(x => filled(x, y))).pop();
+      expect(brim, `greet[${i}] has a cap brim`).toBeDefined();
+      for (let y = brim + 1; y <= FACE_BOTTOM; y++) {
+        FACE_COLS.forEach(x => expect(filled(x, y), `greet[${i}] ${x},${y}`).toBe(true));
+      }
+    });
+  });
+
   it('carries the toolbox everywhere except when he is talking', () => {
     // A raised spanner read as a trident, and couldn't be held while walking.
     // The toolbox is carried, so it stays with him — but the Coach card pose

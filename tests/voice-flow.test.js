@@ -87,11 +87,50 @@ describe('Log Job — voice-first layout (ADR-0008)', () => {
     expect(new Set(labels).size).toBe(labels.length);
   });
 
-  it('keeps the day stepper compact and defaulted to today', () => {
+  it('shows the last seven days at once, defaulted to today', () => {
     const h = bootApp();
     expect(h.$('.lj-day-label').textContent.trim()).toBe('Today');
-    expect(h.$('#log-next-day').disabled).toBe(true);      // can't log forward
     expect(h.$('.day-picker')).toBeNull();                 // old full-width picker gone
+    expect(h.$$('#log-prev-day, #log-next-day')).toHaveLength(0);  // stepper gone too
+
+    const days = h.$$('.lj-strip-day');
+    expect(days).toHaveLength(7);
+    // Today is last on the strip and selected on arrival — the common case
+    // needs no interaction at all.
+    expect(days[6].classList.contains('today')).toBe(true);
+    expect(days[6].classList.contains('selected')).toBe(true);
+    expect(days[6].dataset.logDayPick).toBe(h.window.getTodayKey());
+    // Nothing on the strip is in the future.
+    days.forEach(d => expect(d.dataset.logDayPick <= h.window.getTodayKey()).toBe(true));
+  });
+
+  it('backdates in one tap, and shows what is already on each day', () => {
+    const h = bootApp();
+    // The most recent selectable day that isn't today. Picking by index would
+    // break on a Monday, when yesterday falls before the first tracked week.
+    const earlier = h.$$('.lj-strip-day')
+      .filter(d => !d.disabled && d.dataset.logDayPick !== h.window.getTodayKey())
+      .pop();
+    expect(earlier, 'a backdatable day on the strip').toBeTruthy();
+    const key = earlier.dataset.logDayPick;
+    expect(earlier.classList.contains('logged')).toBe(false);
+    expect(earlier.querySelector('.lj-strip-val').textContent.trim()).toBe('—');
+
+    h.click(earlier);
+    expect(h.$('.lj-day-label').textContent.trim()).not.toBe('Today');
+
+    // Logging now lands on the picked day, not today.
+    h.click(h.$$('.lj-row').find(r => r.dataset.jobId === 'gas_repair'));
+    const week = h.state().weeks[h.window.getWeekKey(new Date(key + 'T00:00:00'))];
+    expect(week.days[key].filter(e => e.id === 'gas_repair')).toHaveLength(1);
+    expect(week.days[h.window.getTodayKey()] || []).toHaveLength(0);
+
+    // And the strip now reports it, so the day reads as done.
+    const nav = (t) => h.click(h.$$('.bottom-nav button').find(b => b.dataset.tab === t));
+    nav('dashboard'); nav('log');
+    const after = h.$$('.lj-strip-day').find(d => d.dataset.logDayPick === key);
+    expect(after.classList.contains('logged')).toBe(true);
+    expect(after.querySelector('.lj-strip-val').textContent.trim()).not.toBe('—');
   });
 
   it('collapses search to an icon until asked for', () => {
@@ -130,17 +169,19 @@ describe('Log Job — voice-first layout (ADR-0008)', () => {
     expect(week.days[today].filter(e => e.id === 'gas_repair')).toHaveLength(1);
   });
 
-  it('surfaces recents on the next visit to the tab', () => {
+  it('promotes what you log to the front of Most used on the next visit', () => {
     // Logging deliberately does not re-render while you're on the Log tab —
     // a re-render would throw you back to the top of the list mid-tap.
     const h = bootApp();
-    h.click(h.$$('.lj-row').find(r => r.dataset.jobId === 'gas_repair'));
-    expect(h.$$('.lj-chip')).toHaveLength(0);
+    // Seeded from the common domestic gas day, so the grid is useful on day one
+    // rather than empty until the engineer has taught it something.
+    expect(h.$$('.lj-top-grid .lj-chip')).toHaveLength(6);
 
+    h.click(h.$$('.lj-row').find(r => r.dataset.jobId === 'hive_repair'));
     const nav = (t) => h.click(h.$$('.bottom-nav button').find(b => b.dataset.tab === t));
     nav('dashboard'); nav('log');
-    expect(h.$$('.lj-chip').length).toBeGreaterThan(0);
-    expect(h.$('.lj-chip').dataset.jobId).toBe('gas_repair');
+    // One logged job of the engineer's own outranks every seeded entry.
+    expect(h.$('.lj-top-grid .lj-chip').dataset.jobId).toBe('hive_repair');
   });
 });
 

@@ -132,11 +132,19 @@
       { sp: ARM_SWING, x: BX + 11, y: BY + bob + 13 }
     ];
   }
+  // The scalp: without it, lifting the cap leaves a hole between the brim and
+  // the top of his face, and the cap reads as floating rather than raised.
+  // Drawn to fill exactly the rows the cap vacates.
+  var SCALP = '.KSSSSSSSSSSK.';
+
   // The toolbox hangs off his right hand, so the cap is tipped with the left —
   // and the cap tilts away from the lifting arm, hence the shift right.
   function tipCap(lift) {
+    var scalp = [];
+    for (var i = 0; i < lift; i++) scalp.push(SCALP);
     return [
       { sp: BELOW_CAP, x: BX, y: BY + 6 },
+      { sp: scalp, x: BX, y: BY + 6 - lift },
       { sp: CAP, x: BX + 2, y: BY - lift },
       { sp: ARM_HIGH, x: BX - 1, y: BY + 1 },
       { sp: ARM_DOWN, x: BX + 11, y: BY + 12 },

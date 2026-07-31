@@ -323,37 +323,131 @@ function paceProjection(weekEarned, workedDaysSoFar, remainingDays, weekTarget) 
   return { projectedHours: projectedHours, gapVsTarget: projectedHours - weekTarget };
 }
 
-// ── Recent jobs ────────────────────────────────────────────────────────────
-function getRecentJobs(state, n) {
-  const seen = new Set();
-  const result = [];
-  const entries = [];
-  Object.values(state.weeks).forEach(function(week) {
-    Object.values(week.days || {}).forEach(function(dayJobs) {
-      dayJobs.forEach(function(j) { if (j.id && j.ts) entries.push(j); });
+// ── Log Job day strip ──────────────────────────────────────────────────────
+//
+// Replaces a ‹ Today › stepper. Stepping told you nothing about where you were
+// going: every day looked identical until you landed on it, so finding the day
+// you forgot to log meant walking backwards through them one at a time.
+//
+// The strip shows the last `n` days at once with what's on each, so a missed
+// day is visible rather than something you go hunting for — and reaching it is
+// one tap instead of several.
+//
+// Rolling from today rather than snapped to the current week, so yesterday is
+// always on the strip; on a Monday a Mon–Sun week view would hide it.
+// Every day on the strip is selectable. The `n`-day window is itself the
+// bound, and it matches what voice backdating already allows ("last Tuesday")
+// — the tile flow and the voice flow are the same model reached two ways, so
+// they must not disagree about which days exist. See ADR-0007.
+function getLogDayStrip(state, n, todayKey) {
+  const today = todayKey || getTodayKey();
+  const days = [];
+  const end = new Date(today + 'T00:00:00');
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(end);
+    d.setDate(end.getDate() - i);
+    const key = localDateStr(d);
+    const week = (state.weeks || {})[getWeekKey(d)] || {};
+    const entries = (week.days || {})[key] || [];
+    const hours = entries.reduce(function(s, j) { return s + (j.creditMins || 0); }, 0) / 60;
+    days.push({
+      key: key,
+      isToday: key === today,
+      // Single letter, so seven fit across a phone without wrapping.
+      initial: d.toLocaleDateString('en-GB', { weekday: 'short' }).charAt(0),
+      label: d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
+      count: entries.length,
+      hours: hours,
+      // Not rostered is a different thing from logged nothing: one is a gap
+      // worth chasing, the other is a day off. They must not look alike.
+      rostered: !dayIsLeave(week, key)
+    });
+  }
+  return days;
+}
+
+// ── Most-used jobs ─────────────────────────────────────────────────────────
+//
+// 51 job types is a long scroll to hit the same handful of tiles every day.
+// This ranks by how often the engineer has actually logged each one, over a
+// recent window so it tracks the work they're doing now rather than the work
+// they did last winter.
+//
+// A new engineer has no history, so the list seeds from the jobs that make up
+// most domestic gas days — repairs and services on boilers, services on fires,
+// landlord certificates, boiler leads. The seed only ever fills the empty
+// slots: one logged job of their own outranks it.
+const TOP_JOBS_WINDOW_WEEKS = 8;
+const TOP_JOBS_SEED = ['gas_repair', 'asv_chb_cir_wh_swh', 'asv_fre', 'as_inst', 'hi_lead', 'add_inhibitor'];
+
+function getTopJobs(state, n) {
+  const weekKeys = Object.keys(state.weeks || {}).sort().slice(-TOP_JOBS_WINDOW_WEEKS);
+  const counts = new Map();
+  const lastSeen = new Map();
+  weekKeys.forEach(function(wk) {
+    Object.values((state.weeks[wk] || {}).days || {}).forEach(function(dayJobs) {
+      dayJobs.forEach(function(j) {
+        if (!j.id) return;
+        const job = findJob(j.id);
+        if (!job || job.isNpt || job.isMentorFull || job.isMentorPartial) return;
+        counts.set(j.id, (counts.get(j.id) || 0) + 1);
+        if (j.ts && j.ts > (lastSeen.get(j.id) || 0)) lastSeen.set(j.id, j.ts);
+      });
     });
   });
-  entries.sort(function(a, b) { return b.ts - a.ts; });
-  for (const entry of entries) {
-    if (seen.has(entry.id)) continue;
-    const job = findJob(entry.id);
-    if (!job || job.isNpt) continue;
-    seen.add(entry.id);
+
+  // Ties break on recency, so the row stays stable day to day rather than
+  // reshuffling under the thumb every time something is logged.
+  const ranked = [...counts.keys()].sort(function(a, b) {
+    return (counts.get(b) - counts.get(a)) || ((lastSeen.get(b) || 0) - (lastSeen.get(a) || 0));
+  });
+
+  const result = [];
+  const taken = new Set();
+  ranked.concat(TOP_JOBS_SEED).forEach(function(id) {
+    if (result.length >= n || taken.has(id)) return;
+    const job = findJob(id);
+    if (!job) return;
+    taken.add(id);
     result.push(job);
-    if (result.length >= n) break;
-  }
+  });
   return result;
 }
 
-// ── Best fixed-credit job across core/hive/sales ───────────────────────────
-function getBestFixedJob() {
-  const all = [].concat(JOB_TYPES.core, JOB_TYPES.hive, JOB_TYPES.sales);
-  const fixed = all.filter(function(j) {
-    return !j.variable && !j.isMentorFull && !j.isMentorPartial && !j.isNpt && j.minutes > 0;
+// ── Elective jobs — the only ones Coach may hold up as an opportunity ───────
+//
+// The job you get is dispatch's call, not the engineer's. A service, a repair,
+// a first visit, a Long Duration — none of those are things you can decide to
+// do more of today. So Coach must never name one as a target: "Best
+// opportunity: Long Duration – Unvented, 5.50h" reads as an instruction to
+// find a 330-minute job, and the only way to find one that isn't there is to
+// raise it. That's a mis-raise, and it lands on the engineer, not the app.
+//
+// SGO is the exception, and it's the whole point of SGO: on a visit you are
+// already on, you choose whether to offer the inhibitor, the Hive, the CO
+// alarm, the quote. That is genuine discretion, and the scheme is designed to
+// reward it. So the elective set is the sales section and nothing else.
+//
+// Operational credits (Wait Work, EV charging, Bybox) are deliberately NOT
+// elective: they're circumstances you record, and nudging someone toward
+// logging more wait time is the same failure in a different coat.
+// See ADR-0009.
+function getElectiveJobs() {
+  return JOB_TYPES.sales.filter(function(j) {
+    return !j.variable && !j.isNpt && j.minutes > 0;
   });
-  return fixed.length
-    ? fixed.reduce(function(best, j) { return j.minutes > best.minutes ? j : best; }, fixed[0])
-    : null;
+}
+
+// The elective job whose credit best closes `gapHours`, or null when no single
+// elective job is a sensible answer to a gap that size.
+function getElectiveJobForGap(gapHours) {
+  const elective = getElectiveJobs();
+  if (!elective.length || !(gapHours > 0)) return null;
+  const best = elective.reduce(function(b, j) {
+    return Math.abs(j.minutes / 60 - gapHours) < Math.abs(b.minutes / 60 - gapHours) ? j : b;
+  }, elective[0]);
+  // Don't offer a 0.12h CO alarm against a 3h gap and call it a plan.
+  return Math.abs(best.minutes / 60 - gapHours) <= 0.6 ? best : null;
 }
 
 // ── Historically strong weekday (Mon–Fri name, or null) ────────────────────
@@ -1226,8 +1320,11 @@ if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     dailyRawOutputHours: dailyRawOutputHours,
     weekPFMins: weekPFMins,
     paceProjection: paceProjection,
-    getRecentJobs: getRecentJobs,
-    getBestFixedJob: getBestFixedJob,
+    getLogDayStrip: getLogDayStrip,
+    getTopJobs: getTopJobs,
+    TOP_JOBS_SEED: TOP_JOBS_SEED,
+    getElectiveJobs: getElectiveJobs,
+    getElectiveJobForGap: getElectiveJobForGap,
     getHistoricallyStrongDay: getHistoricallyStrongDay,
     isCoachModeOn: isCoachModeOn,
     getCoachInsights: getCoachInsights,

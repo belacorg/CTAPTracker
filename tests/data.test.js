@@ -132,3 +132,74 @@ describe('weekSummary', () => {
     expect(data.weekSummary(state, weekKey).ctapImpact).toBeNull();
   });
 });
+
+describe('getLogDayStrip', () => {
+  // The reference day is injected, so the strip is testable across week
+  // boundaries without freezing the clock.
+  const state = () => ({
+    weeks: {
+      '2026-07-20': { days: { '2026-07-22': [{ id: 'gas_repair', creditMins: 56, ts: 1 }] } },
+      '2026-07-27': {
+        days: {
+          '2026-07-27': [{ id: 'gas_repair', creditMins: 56, ts: 2 }, { id: 'asv_fre', creditMins: 47, ts: 3 }],
+          '2026-07-29': [{ id: 'gas_repair', creditMins: 56, ts: 4 }]
+        },
+        shifts: { '2026-07-28': { leave: true } }
+      }
+    }
+  });
+
+  it('returns n days ending on the reference day', () => {
+    const strip = data.getLogDayStrip(state(), 7, '2026-07-31');
+    expect(strip).toHaveLength(7);
+    expect(strip[0].key).toBe('2026-07-25');
+    expect(strip[6].key).toBe('2026-07-31');
+    expect(strip[6].isToday).toBe(true);
+    expect(strip.filter(d => d.isToday)).toHaveLength(1);
+  });
+
+  it('rolls back across the week boundary, so Monday still shows Sunday', () => {
+    // A Mon–Sun week view would put Monday first and hide the whole weekend
+    // behind a week change — exactly when you most need to catch up.
+    const strip = data.getLogDayStrip(state(), 7, '2026-07-27');
+    expect(strip[6].key).toBe('2026-07-27');
+    expect(strip.map(d => d.key)).toContain('2026-07-26');   // the Sunday before
+    expect(strip.map(d => d.key)).toContain('2026-07-22');   // the previous week
+  });
+
+  it('carries the credit hours and count logged on each day', () => {
+    const strip = data.getLogDayStrip(state(), 7, '2026-07-31');
+    const mon = strip.find(d => d.key === '2026-07-27');
+    expect(mon.count).toBe(2);
+    expect(mon.hours).toBeCloseTo((56 + 47) / 60, 5);
+    const wed = strip.find(d => d.key === '2026-07-29');
+    expect(wed.count).toBe(1);
+  });
+
+  it('reports an empty rostered day and a day off differently', () => {
+    // One is a gap worth chasing; the other is a day off. Same zero hours.
+    const strip = data.getLogDayStrip(state(), 7, '2026-07-31');
+    const empty = strip.find(d => d.key === '2026-07-30');
+    const leave = strip.find(d => d.key === '2026-07-28');
+    expect(empty.count).toBe(0);
+    expect(empty.rostered).toBe(true);
+    expect(leave.count).toBe(0);
+    expect(leave.rostered).toBe(false);
+  });
+
+  it('offers every day in the window, matching what voice backdating allows', () => {
+    // Voice resolves "last Tuesday" and writes to it with no floor, so a strip
+    // that locked the same day would make the two entry points disagree about
+    // which days exist. The window length is the only bound. See ADR-0007.
+    const empty = { weeks: {} };
+    const strip = data.getLogDayStrip(empty, 7, '2026-07-31');
+    expect(strip).toHaveLength(7);
+    strip.forEach(d => expect(d.disabled).toBeUndefined());
+    expect(strip.every(d => d.count === 0)).toBe(true);
+  });
+
+  it('never reaches past the reference day', () => {
+    const strip = data.getLogDayStrip(state(), 7, '2026-07-31');
+    strip.forEach(d => expect(d.key <= '2026-07-31').toBe(true));
+  });
+});

@@ -3414,20 +3414,41 @@ details[open] .info-chevron { transform: rotate(90deg); }
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
-.lj-day { display: flex; align-items: center; gap: 2px; }
-.lj-day-btn {
-  width: 30px; height: 30px;
-  background: none; border: none;
-  color: var(--accent);
-  font-size: 1.15rem; line-height: 1;
-  border-radius: 8px; cursor: pointer;
+.lj-day-label { font-size: 0.95rem; font-weight: 700; color: var(--fg); }
+.lj-day-label.today { color: var(--accent); }
+
+/* Day strip — the last seven days, all visible. Replaces a ‹ Today › stepper
+   that gave no indication of which day you were stepping towards. */
+.lj-strip {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 16px;
+}
+.lj-strip-day {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 7px 2px 5px;
+  background: var(--surface);
+  border: 1.5px solid transparent;
+  border-radius: 10px;
+  cursor: pointer; font-family: inherit;
   -webkit-tap-highlight-color: transparent;
 }
-.lj-day-btn:disabled { opacity: 0.28; cursor: default; }
-.lj-day-label { font-size: 0.88rem; font-weight: 600; color: var(--fg); min-width: 96px; text-align: center; }
-.lj-day-label.today { color: var(--accent); }
+.lj-strip-day.selected { border-color: var(--accent); background: var(--surface2); }
+.lj-strip-dow {
+  font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em;
+  color: var(--muted2); text-transform: uppercase;
+}
+.lj-strip-day.today .lj-strip-dow { color: var(--accent); font-size: 0.55rem; }
+.lj-strip-val { font-size: 0.78rem; font-weight: 600; color: var(--muted2); font-variant-numeric: tabular-nums; }
+.lj-strip-day.logged .lj-strip-val { color: var(--fg); }
+/* The mark is what makes a gap findable at a glance: filled = logged,
+   hollow = rostered but empty, faint dot = not on the roster at all. */
+.lj-strip-mark { font-size: 0.6rem; line-height: 1; color: var(--muted2); }
+.lj-strip-day.logged .lj-strip-mark { color: var(--accent); }
+.lj-strip-day.off .lj-strip-mark { opacity: 0.35; }
 .lj-icon-btn {
   width: 38px; height: 38px;
   display: flex; align-items: center; justify-content: center;
@@ -3509,6 +3530,11 @@ details[open] .info-chevron { transform: rotate(90deg); }
 
 .lj-chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
 .lj-chips::-webkit-scrollbar { display: none; }
+/* Most used: two columns, everything visible. A scroller here would just be a
+   shorter version of the problem it exists to solve. */
+.lj-top-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.lj-top-grid .lj-chip { width: 100%; }
+.lj-top-grid .lj-chip-name { white-space: normal; }
 .lj-chip {
   flex: 0 0 auto;
   display: flex; flex-direction: column; gap: 2px;
@@ -3575,7 +3601,15 @@ body.light .lj-sec-sticky { background: var(--bg); }
   gap: 10px;
   margin-bottom: 2px;
 }
-.dash-greeting-row .dash-greeting { margin-bottom: 0; }
+.dash-greeting-row .dash-greeting { margin-bottom: 0; position: relative; }
+/* The greeting is typed out a character at a time while the engineer is walking
+   in. Left to reflow, every character widened this box, pushed the flex lane's
+   left edge right, and shunted the sprite ~20px right per walk frame — he read
+   as skipping to the right rather than strolling left. The ghost holds the
+   final width (dots included) from the first frame so the lane never moves;
+   the live text sits over it. */
+.dash-greeting-ghost { visibility: hidden; }
+.dash-greeting-live { position: absolute; left: 0; top: 0; white-space: pre; }
 .pixel-lane {
   position: relative;
   flex: 1;

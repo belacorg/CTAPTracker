@@ -84,6 +84,10 @@ _Avoid_: "the report", "business data"
 A single observation derived from the engineer's current state — e.g. "you're on pace to clear your deficit in ~2 weeks", "NPT this week is above your recent average", "X days in a row hitting daily target". Each insight carries a **kind** (for grouping and dedupe), a priority (for ranking), a severity colour, and display text. Insights are produced as a ranked list and consumed by multiple UI surfaces (the Best Advice strip, the projection cards in the dashboard insights area). The kind enum lives in the calc module and grows as new insights are added.
 _Avoid_: "tip", "advice" (used informally in the UI; the domain term is **Coach Insight**)
 
+**Elective job**:
+A job type the engineer genuinely chooses to do, on a visit they are already making — the **SGO** and in-day sales items. Contrasted with a *dispatched* job (services, repairs, first visits, Long Durations, Hive installs), which is allocated by the employer and is not the engineer's to decide. Only **Elective jobs** may be named by a **Coach Insight** as an opportunity: pointing an engineer at a dispatched code invites raising work that was not done. **Operational credits** are not elective — they record a circumstance, not a choice. See ADR-0009.
+_Avoid_: "best job", "highest value job" (the framing ADR-0009 removes)
+
 **Coach mode**:
 A per-engineer toggle that controls whether **Coach Insight** surfaces are shown. Off by default. Does not affect calculation — only display.
 
@@ -97,6 +101,7 @@ _Avoid_: "voice entry", "voice log" (for the draft itself — the draft is what 
 
 ## Relationships
 
+- Every job type is either **Elective** or dispatched; **Coach Insight** may name only the former
 - An **Engineer** has one **CTAP percentage** and one base value for **Rostered hours**
 - A week is composed of seven days, each with an optional **Shift**; a **Shift** may be flagged as **Leave** or tagged as a **Mentor Day**
 - **Leave** and **Mentor Day** reductions feed into the week's **Rostered hours**; **NPT** is subtracted from the target *after* **CTAP percentage** is applied

@@ -417,7 +417,9 @@ function buildDashboard() {
 
   return `
     ${isCurrentWeek ? `<div class="dash-greeting-row">
-      <div class="dash-greeting" id="greeting-text" data-greeting="${greeting}">${greetDisplay}</div>
+      <div class="dash-greeting" id="greeting-text" data-greeting="${greeting}"><span
+        class="dash-greeting-ghost" aria-hidden="true">${greeting}...</span><span
+        class="dash-greeting-live" id="greeting-live">${greetDisplay}</span></div>
       <div class="pixel-lane" id="pixel-lane" aria-hidden="true"></div>
     </div>` : ''}
     ${dateStr ? `<div class="date-header">${dateStr}</div>` : ''}
@@ -756,7 +758,32 @@ function buildDayBlock(dayKey, jobs, isToday, week) {
   `;
 }
 
-// (getRecentJobs lives in data.cjs)
+
+// The last seven days at a glance, so a day you forgot to log is visible
+// rather than something you step backwards to find. See getLogDayStrip.
+function buildLogDayStrip() {
+  const days = getLogDayStrip(state, 7);
+  const cells = days.map(d => {
+    const selected = d.key === activeLogDay;
+    const logged = d.count > 0;
+    // A day off and a day with nothing on it must not read the same — one is a
+    // gap worth chasing, the other isn't.
+    const mark = logged ? '&#9679;' : (d.rostered ? '&#9675;' : '&#183;');
+    const cls = ['lj-strip-day',
+      selected ? 'selected' : '',
+      d.isToday ? 'today' : '',
+      logged ? 'logged' : '',
+      d.rostered ? '' : 'off'].filter(Boolean).join(' ');
+    return `<button class="${cls}" data-log-day-pick="${d.key}"
+      aria-label="${d.label}${logged ? ` — ${d.count} logged, ${d.hours.toFixed(2)} hours` : ' — nothing logged'}"
+      aria-pressed="${selected}">
+      <span class="lj-strip-dow">${d.isToday ? 'TODAY' : d.initial}</span>
+      <span class="lj-strip-val">${logged ? d.hours.toFixed(1) : '&mdash;'}</span>
+      <span class="lj-strip-mark">${mark}</span>
+    </button>`;
+  }).join('');
+  return `<div class="lj-strip" role="group" aria-label="Pick a day to log into">${cells}</div>`;
+}
 
 // ── Log Jobs ───────────────────────────────────────────────────────────────
 function buildLogJobs() {
@@ -766,12 +793,6 @@ function buildLogJobs() {
   const logDayLabel = isLoggingToday
     ? 'Today'
     : logDayDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-
-  const _logWeekKeys = Object.keys(state.weeks || {}).sort();
-  const minLogDate = _logWeekKeys.length > 0
-    ? new Date(_logWeekKeys[0] + 'T00:00:00')
-    : (() => { const d = new Date(); d.setFullYear(d.getFullYear() - 1); return d; })();
-  const atMin = activeLogDay <= localDateStr(minLogDate);
 
   // Session summary for the selected day
   const wkKey = getWeekKey(new Date(activeLogDay + 'T00:00:00'));
@@ -797,13 +818,10 @@ function buildLogJobs() {
       <button id="search-close" class="lj-search-cancel">Cancel</button>
     </div>` : `
     <div class="lj-head">
-      <div class="lj-day">
-        <button id="log-prev-day" class="lj-day-btn" ${atMin ? 'disabled' : ''} aria-label="Previous day">&#8249;</button>
-        <span class="lj-day-label${isLoggingToday ? ' today' : ''}">${logDayLabel}</span>
-        <button id="log-next-day" class="lj-day-btn" ${isLoggingToday ? 'disabled' : ''} aria-label="Next day">&#8250;</button>
-      </div>
+      <div class="lj-day-label${isLoggingToday ? ' today' : ''}">${logDayLabel}</div>
       <button id="log-search-open" class="lj-icon-btn" aria-label="Search jobs">${iconSearch()}</button>
-    </div>`;
+    </div>
+    ${buildLogDayStrip()}`;
 
   // Filtered results replace everything below the search bar.
   if (jobSearch.trim()) {
@@ -833,10 +851,12 @@ function buildLogJobs() {
       </span>
     </button>`;
 
-  const recentJobs = getRecentJobs(state, 5);
-  const recentHTML = recentJobs.length > 0 ? `
-    <div class="lj-sec">Recent</div>
-    <div class="lj-chips">${recentJobs.map(buildJobChipHTML).join('')}</div>` : '';
+  // A grid, not the horizontal chip scroller Recent used: the whole point is
+  // that the jobs you log every day are on screen without any scrolling at all.
+  const topJobs = getTopJobs(state, 6);
+  const recentHTML = topJobs.length > 0 ? `
+    <div class="lj-sec">Most used</div>
+    <div class="lj-top-grid">${topJobs.map(buildJobChipHTML).join('')}</div>` : '';
 
   const SECTIONS = [['core', 'Gas'], ['hive', 'Hive'], ['sales', 'SGO'], ['absent', 'Absence']];
   const sectionsHTML = SECTIONS.map(([key, label]) => `
@@ -2373,21 +2393,22 @@ function attachListeners() {
     window.__pixelEngineer.mount(document.getElementById('pixel-lane'), { intro: isNewGreeting });
     window.__pixelEngineer.mount(document.getElementById('coach-eng'), { pose: 'talk' });
   }
-  if (greetEl) {
+  const greetLive = document.getElementById('greeting-live');
+  if (greetEl && greetLive) {
     const text = greetEl.dataset.greeting;
     if (isNewGreeting) {
       lastGreeting = text;
-      greetEl.textContent = '';
+      greetLive.textContent = '';
       let i = 0;
       const timer = setInterval(() => {
         if (i < text.length) {
-          greetEl.textContent += text[i++];
+          greetLive.textContent += text[i++];
         } else {
           clearInterval(timer);
           // Dots roll: . .. ... . .. ... . .. ...  then settle clean
           let d = 1;
           const dotTimer = setInterval(() => {
-            greetEl.textContent = text + '.'.repeat(d);
+            greetLive.textContent = text + '.'.repeat(d);
             d++;
             if (d > 3) clearInterval(dotTimer);
           }, 380);
@@ -2476,24 +2497,14 @@ function attachListeners() {
     if (newKey <= getWeekKey(maxFuture)) { currentWeekKey = newKey; weekendExpanded = false; scheduleNoteOpenDay = null; render(); }
   });
 
-  // Log Job day picker
-  const logPrevDay = document.getElementById('log-prev-day');
-  const logNextDay = document.getElementById('log-next-day');
-  if (logPrevDay) logPrevDay.addEventListener('click', () => {
-    const d = new Date(activeLogDay + 'T00:00:00');
-    d.setDate(d.getDate() - 1);
-    const _wkKeys = Object.keys(state.weeks || {}).sort();
-    const minDate = _wkKeys.length > 0
-      ? new Date(_wkKeys[0] + 'T00:00:00')
-      : (() => { const fd = new Date(); fd.setFullYear(fd.getFullYear() - 1); return fd; })();
-    const newKey = localDateStr(d);
-    if (newKey >= localDateStr(minDate)) { activeLogDay = newKey; render(); }
-  });
-  if (logNextDay) logNextDay.addEventListener('click', () => {
-    const d = new Date(activeLogDay + 'T00:00:00');
-    d.setDate(d.getDate() + 1);
-    const newKey = localDateStr(d);
-    if (newKey <= getTodayKey()) { activeLogDay = newKey; render(); }
+  // Log Job day picker — tap any day on the strip to log into it.
+  document.querySelectorAll('[data-log-day-pick]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.logDayPick;
+      if (key > getTodayKey()) return;   // no logging into the future
+      activeLogDay = key;
+      render();
+    });
   });
 
   // Job search
@@ -3219,7 +3230,7 @@ function logJob(job, variableValue, optionalName) {
 }
 
 // ── Coach Mode ─────────────────────────────────────────────────────────────
-// (isCoachModeOn, getBestFixedJob, getHistoricallyStrongDay live in data.cjs)
+// (isCoachModeOn, getElectiveJobs, getHistoricallyStrongDay live in data.cjs)
 
 function buildCtapTrend() {
   const todayWk = getWeekKey(new Date());
@@ -3238,6 +3249,17 @@ function buildCtapTrend() {
     <span class="ctap-trend-label">CTAP Trend</span>
     <span class="ctap-trend-val${cls}">${arrow} ${sign}${netChange.toFixed(2)}h over ${pastWks.length} weeks</span>
   </div>`;
+}
+
+// Recovering a deficit is about the part of the week the engineer controls,
+// and that is SGO — not chasing a job code dispatch has to hand you. Framed as
+// what's on offer at every visit rather than as a single job to go and find.
+function sgoNudge() {
+  const elective = getElectiveJobs();
+  if (!elective.length) return 'Sales credits are the part of the week you control — they add up faster than they look.';
+  const best = elective.reduce((b, j) => j.minutes > b.minutes ? j : b, elective[0]);
+  const n = best.name.replace(/\s*\(.*$/, '').trim();
+  return `Sales credits are the part of the week you choose — a ${n} is ${(best.minutes/60).toFixed(2)}h, on a visit you're already making.`;
 }
 
 function buildCoachCard() {
@@ -3265,12 +3287,10 @@ function buildCoachCard() {
       } else if (contrib < -0.05) {
         msgs.push(`Your deficit grew slightly last week. One strong day can start turning that around.`);
       } else {
-        const bj = getBestFixedJob();
-        if (bj) msgs.push(`A ${bj.name.replace(/\s*\(.*$/, '').trim()} gives you ${(bj.minutes/60).toFixed(2)}h — your highest value single job.`);
+        msgs.push(sgoNudge());
       }
     } else {
-      const bj = getBestFixedJob();
-      if (bj) msgs.push(`A ${bj.name.replace(/\s*\(.*$/, '').trim()} gives you ${(bj.minutes/60).toFixed(2)}h — your highest value single job.`);
+      msgs.push(sgoNudge());
     }
   } else if (!bonus && targetHours > 0.05) {
     msgs.push(`You're in credit — staying consistent this week protects your balance.`);
@@ -3354,21 +3374,18 @@ function buildCoachLogBanner() {
   const todayHours = ((week.days || {})[todayKey] || []).reduce((s,j) => s+j.creditMins, 0) / 60;
   if (todayHours >= dailyTarget) return '';
   const gap = dailyTarget - todayHours;
-  const all = [...JOB_TYPES.core, ...JOB_TYPES.hive, ...JOB_TYPES.sales];
-  const EXCLUDE_FROM_BEST = new Set(['ld_completed', 'trace_repair']);
-  const fixed = all.filter(j => !j.variable && !j.isMentorFull && !j.isMentorPartial && !j.isNpt && j.minutes > 0 && !EXCLUDE_FROM_BEST.has(j.id));
-  const bestJob = fixed.reduce((b, j) => j.minutes > b.minutes ? j : b, fixed[0]);
+  // Only ever name a job the engineer can actually elect to do — see ADR-0009.
+  // Where no elective job fits the gap, say so plainly rather than reaching for
+  // the biggest number in the catalogue.
+  const closing = getElectiveJobForGap(gap);
   let text = '';
-  if (gap <= 1.0 + 0.05) {
-    const closing = fixed
-      .filter(j => Math.abs(j.minutes/60 - gap) < 0.6)
-      .sort((a,b) => Math.abs(a.minutes/60 - gap) - Math.abs(b.minutes/60 - gap))[0] || bestJob;
-    if (closing) {
-      const n = closing.name.replace(/\s*\(.*$/, '').trim();
-      text = `${gap.toFixed(2)}h to hit today's target — a ${n} (${(closing.minutes/60).toFixed(2)}h) would get you there.`;
-    }
-  } else if (bestJob) {
-    text = `Best opportunity: ${bestJob.name.replace(/\s*\(.*$/, '').trim()} — ${(bestJob.minutes/60).toFixed(2)}h`;
+  if (closing) {
+    const n = closing.name.replace(/\s*\(.*$/, '').trim();
+    text = `${gap.toFixed(2)}h to hit today's target — a ${n} (${(closing.minutes/60).toFixed(2)}h) would get you there.`;
+  } else if (gap > 1.0) {
+    text = `${gap.toFixed(2)}h to hit today's target — that's more than one job will close. Worth looking at the week rather than today.`;
+  } else {
+    text = `${gap.toFixed(2)}h to hit today's target.`;
   }
   if (!text) return '';
   return `<div class="coach-log-banner">${text}</div>`;
