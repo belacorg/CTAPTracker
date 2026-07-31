@@ -18,11 +18,16 @@ const require = createRequire(import.meta.url);
 const data = require(join(ROOT, 'app', 'data.cjs'));
 
 const {
-  CHECKIN_FACTORS, CHECKIN_RATINGS, CHECKIN_PROMPTS, CHECKIN_NOTE_MAX,
-  checkinFactorsForDay, checkinPromptForDay,
-  getOrCreateCheckin, checkinIsEmpty, checkinAnsweredCount,
+  CHECKIN_FACTORS, CHECKIN_RATINGS, CHECKIN_NOTE_MAX, CHECKIN_GOAL_MAX,
+  GROW_STAGES, GROW_QUESTIONS,
+  growStageForDay, growBankForDay, growQuestionForDay,
+  getWeekGoal, setWeekGoal, goalText, goalAsk, goalRatingTag,
+  checkinIsEmpty, checkinAnsweredCount,
   checkinRatingScore, weekCheckinAverage, checkinBand, checkinNoteWarning,
 } = data;
+
+// Every question the app can ever ask, flattened.
+const ALL_QUESTIONS = Object.values(GROW_QUESTIONS).flat();
 
 // Monday-anchored week used across the state-shaped tests.
 const WEEK = '2026-07-27';
@@ -49,58 +54,153 @@ describe('the rating scale', () => {
   });
 });
 
-describe('rotation', () => {
-  it('asks two factors a day — short enough to actually do daily', () => {
-    DAYS.forEach(dk => expect(checkinFactorsForDay(dk)).toHaveLength(2));
+describe('the GROW arc across the week', () => {
+  // 2026-07-27 is a Monday.
+  const [MON, TUE, WED, THU, FRI] = DAYS;
+  const SAT = '2026-08-01', SUN = '2026-08-02';
+
+  it('runs Goal, Reality, Reality, Options, Will across the working week', () => {
+    expect(DAYS.map(growStageForDay))
+      .toEqual(['goal', 'reality', 'reality', 'options', 'will']);
   });
 
-  it('never asks the same factor twice in one day', () => {
-    DAYS.forEach(dk => {
-      const [a, b] = checkinFactorsForDay(dk);
-      expect(a.tag).not.toBe(b.tag);
-    });
+  it('puts Reality mid-week, while there is still week left to change', () => {
+    // Reality after Will would just be a post-mortem. The order is the point.
+    const order = GROW_STAGES.map(s => s.id);
+    expect(order.indexOf(growStageForDay(TUE)))
+      .toBeLessThan(order.indexOf(growStageForDay(THU)));
+    expect(order.indexOf(growStageForDay(THU)))
+      .toBeLessThan(order.indexOf(growStageForDay(FRI)));
   });
 
-  it('covers all five factors across any five consecutive days', () => {
-    // Walk a whole year rather than one lucky window.
-    for (let offset = 0; offset < 365; offset++) {
-      const start = new Date('2026-01-01T00:00:00Z');
-      start.setUTCDate(start.getUTCDate() + offset);
-      const seen = new Set();
-      for (let d = 0; d < 5; d++) {
-        const day = new Date(start);
-        day.setUTCDate(start.getUTCDate() + d);
-        checkinFactorsForDay(day.toISOString().slice(0, 10)).forEach(f => seen.add(f.tag));
-      }
-      expect(seen.size, `window starting +${offset}d`).toBe(CHECKIN_FACTORS.length);
+  it('asks the two Reality days from different angles', () => {
+    // Tuesday looks for what is in the way; Wednesday looks for what worked.
+    // A week of only problem-hunting teaches the engineer nothing repeatable.
+    expect(growBankForDay(TUE)).toBe('reality_obstacle');
+    expect(growBankForDay(WED)).toBe('reality_exception');
+  });
+
+  it('holds on Will over the weekend rather than starting something new', () => {
+    // A Friday worked through can still be closed on Sunday night.
+    expect(growStageForDay(SAT)).toBe('will');
+    expect(growStageForDay(SUN)).toBe('will');
+  });
+
+  it('gives the same day the same question every time it is asked', () => {
+    // Re-opening the sheet must not reshuffle the question mid-answer.
+    expect(growQuestionForDay(TUE).id).toBe(growQuestionForDay(TUE).id);
+    expect(growQuestionForDay(TUE).text).toBe(growQuestionForDay(TUE).text);
+  });
+
+  it('varies the question week to week', () => {
+    // The same Tuesday question for a year stops being a question and becomes
+    // a form field.
+    const ids = new Set();
+    for (let w = 0; w < 4; w++) {
+      const d = new Date(TUE + 'T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() + w * 7);
+      ids.add(growQuestionForDay(d.toISOString().slice(0, 10)).id);
     }
-  });
-
-  it('gives the same day the same questions every time it is asked', () => {
-    // Re-opening the sheet must not reshuffle the questions mid-answer.
-    const first = checkinFactorsForDay('2026-07-31').map(f => f.tag);
-    const again = checkinFactorsForDay('2026-07-31').map(f => f.tag);
-    expect(again).toEqual(first);
-    expect(checkinPromptForDay('2026-07-31').id).toBe(checkinPromptForDay('2026-07-31').id);
-  });
-
-  it('rotates the reflection prompt rather than asking one thing forever', () => {
-    const ids = new Set(DAYS.map(dk => checkinPromptForDay(dk).id));
     expect(ids.size).toBeGreaterThan(1);
+  });
+
+  it('draws every question from the bank belonging to that day', () => {
+    for (let offset = 0; offset < 200; offset++) {
+      const d = new Date('2026-01-01T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() + offset);
+      const dk = d.toISOString().slice(0, 10);
+      const q = growQuestionForDay(dk);
+      const bank = GROW_QUESTIONS[growBankForDay(dk)];
+      expect(bank.map(x => x.id), dk).toContain(q.id);
+    }
   });
 });
 
-describe('the reflection prompts', () => {
-  it('ask about feeling and behaviour, never about which job or customer', () => {
-    const banned = ['customer name', 'address', 'which job', 'job number', 'postcode', 'who '];
-    CHECKIN_PROMPTS.forEach(p => {
-      banned.forEach(word =>
-        expect(p.text.toLowerCase(), `${p.id}: "${p.text}"`).not.toContain(word));
+describe('the questions themselves', () => {
+  it('are all open questions the engineer answers', () => {
+    ALL_QUESTIONS.forEach(q =>
+      expect(q.text.trim().endsWith('?'), `${q.id}: "${q.text}"`).toBe(true));
+  });
+
+  it('never supply the answer', () => {
+    // A coach that hands over the answer produces compliance, and compliance
+    // does not persist. The engineer generates the options, or this is just
+    // advice with a question mark on the end.
+    //
+    // Word boundaries, not substrings: "try tomorrow" contains "try to".
+    const TELLS = [
+      /\byou should\b/, /\byou ought\b/, /\byou need to\b/, /\byou must\b/,
+      /\bmake sure\b/, /\bremember to\b/, /\bthe best way\b/,
+      /\bwe suggest\b/, /\bwe recommend\b/, /\bwhy not\b/, /\bhave you tried\b/,
+    ];
+    ALL_QUESTIONS.forEach(q => {
+      TELLS.forEach(tell =>
+        expect(tell.test(q.text.toLowerCase()), `${q.id}: "${q.text}" matched ${tell}`).toBe(false));
     });
   });
 
-  it('are phrased as questions the engineer answers about themselves', () => {
-    CHECKIN_PROMPTS.forEach(p => expect(p.text.trim().endsWith('?'), p.id).toBe(true));
+  it('never ask about a customer, an address, or which job', () => {
+    ALL_QUESTIONS.forEach(q => {
+      const t = q.text.toLowerCase();
+      ['customer name', 'address', 'which customer', 'job number', 'postcode']
+        .forEach(word => expect(t, `${q.id}: "${q.text}"`).not.toContain(word));
+    });
+  });
+
+  it('asks at least one question that points at another person', () => {
+    // Relatedness is the weakest of the three needs in a single-user app. It
+    // isn't faked with social features; it's served by pointing outward at
+    // people who already exist. See ADR-0013.
+    expect(GROW_QUESTIONS.options.some(q => /\bwho\b/i.test(q.text))).toBe(true);
+  });
+});
+
+describe("the week's goal", () => {
+  it('is the engineer\'s to set — the app ships a menu, not a default', () => {
+    const s = stateWith({});
+    expect(getWeekGoal(s, WEEK)).toBeNull();
+  });
+
+  it('records a goal picked from the menu', () => {
+    const s = stateWith({});
+    setWeekGoal(s, WEEK, { factorTag: 'safety_first' });
+    const g = getWeekGoal(s, WEEK);
+    expect(g.factorTag).toBe('safety_first');
+    expect(goalText(g)).toBe(CHECKIN_FACTORS.find(f => f.tag === 'safety_first').goal);
+  });
+
+  it('records a goal the engineer wrote themselves', () => {
+    const s = stateWith({});
+    setWeekGoal(s, WEEK, { customText: 'Stop skipping my flue checks' });
+    const g = getWeekGoal(s, WEEK);
+    expect(g.factorTag).toBe('custom');
+    expect(goalText(g)).toBe('Stop skipping my flue checks');
+    expect(goalAsk(g)).toMatch(/\?$/);
+  });
+
+  it('caps a written goal at a sentence — a goal is not a plan', () => {
+    const s = stateWith({});
+    setWeekGoal(s, WEEK, { customText: 'x'.repeat(400) });
+    expect(goalText(getWeekGoal(s, WEEK)).length).toBe(CHECKIN_GOAL_MAX);
+  });
+
+  it('prefers what the engineer typed over what they tapped', () => {
+    const s = stateWith({});
+    setWeekGoal(s, WEEK, { factorTag: 'process', customText: 'My own thing' });
+    expect(goalText(getWeekGoal(s, WEEK))).toBe('My own thing');
+  });
+
+  it('files the daily rating under the goal, so the dots track what was chosen', () => {
+    expect(goalRatingTag({ factorTag: 'van_tools', customText: '' })).toBe('van_tools');
+    expect(goalRatingTag({ factorTag: 'custom', customText: 'mine' })).toBe('custom');
+    expect(goalRatingTag(null)).toBeNull();
+  });
+
+  it('every menu goal has a matching end-of-day question', () => {
+    CHECKIN_FACTORS.forEach(f => {
+      expect(f.goal, f.tag).toBeTruthy();
+      expect(f.ask.trim().endsWith('?'), f.tag).toBe(true);
+    });
   });
 });
 
@@ -223,30 +323,64 @@ describe('the schema gives customer detail nowhere to land', () => {
   });
 
   it('locks reads and writes to the row owner and grants nobody else access', () => {
-    const policies = schema.slice(schema.indexOf('create policy "checkins'));
+    const policies = schema.slice(schema.indexOf('create policy "checkins:'));
     const block = policies.slice(0, policies.indexOf('create unique index'));
     expect(block).toContain('using (user_id = auth.uid())');
     expect(block).toContain('with check (user_id = auth.uid())');
-    // One policy only. A second on this table is how a team-wide read sneaks in.
-    expect(schema.match(/create policy "checkins/g)).toHaveLength(1);
+    // One policy per table. A second is how a team-wide read sneaks in.
+    expect(schema.match(/create policy "checkins:/g)).toHaveLength(1);
+    expect(schema.match(/create policy "checkin_goals:/g)).toHaveLength(1);
+  });
+
+  it('locks the goals table to its owner too', () => {
+    const block = schema.slice(schema.indexOf('create policy "checkin_goals:'));
+    expect(block.slice(0, 300)).toContain('using (user_id = auth.uid())');
+    expect(block.slice(0, 300)).toContain('with check (user_id = auth.uid())');
+  });
+
+  it('keeps the engineer\'s goal in its own table, not alongside the CTAP target', () => {
+    // The CTAP target is the employer's number and lives on `weeks`. Putting the
+    // engineer's self-set goal there would make the two confusable, which is
+    // exactly the distinction the feature rests on.
+    expect(schema).toContain('create table if not exists public.checkin_goals');
+    const weeksTable = schema.slice(
+      schema.indexOf('create table if not exists public.weeks'),
+      schema.indexOf('alter table public.weeks enable row level security')
+    );
+    expect(weeksTable).not.toContain('goal');
   });
 });
 
 describe('what the check-in surfaces actually render', () => {
-  function boot() {
-    const h = bootApp();
+  // Fixed days so the arc is deterministic. 2026-07-27 is a Monday.
+  const MONDAY = '2026-07-27T09:00:00';
+  const TUESDAY = '2026-07-28T18:00:00';
+
+  function boot(now = TUESDAY) {
+    const h = bootApp({ now });
     const nav = (t) => h.click(h.$$('.bottom-nav button').find(b => b.dataset.tab === t));
     return Object.assign(h, { nav });
   }
 
+  // Open the sheet with this week's goal already chosen.
+  function withGoal(now = TUESDAY, tag = 'safety_first') {
+    const h = boot(now);
+    h.nav('dashboard');
+    h.click('#checkin-open');
+    h.click(`[data-goal-factor="${tag}"]`);
+    h.click('#checkin-save');
+    h.click('#checkin-open');
+    return h;
+  }
+
   // Eight completed weeks of credits, with self-ratings good in some and poor
   // in others — the exact setup where a "helpful" correlation line would appear.
-  function bootWithHistory() {
-    const h = boot();
+  function bootWithHistory(now = TUESDAY) {
+    const h = boot(now);
     const s = h.state();
     s.checkins = {};
     for (let i = 1; i <= 8; i++) {
-      const mon = new Date();
+      const mon = new Date(now);
       mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7) - i * 7);
       const wk = data.getWeekKey(mon);
       s.weeks[wk] = { deductionMins: 0, days: {} };
@@ -262,55 +396,133 @@ describe('what the check-in surfaces actually render', () => {
     expect(h.$('#checkin-open')).toBeTruthy();
   });
 
-  it('saves a rating and a note, and shows the day as checked in', () => {
-    const h = boot();
+  it('asks for a goal before anything else, and never picks one itself', () => {
+    const h = boot(MONDAY);
     h.nav('dashboard');
     h.click('#checkin-open');
-    const tag = checkinFactorsForDay(data.getTodayKey())[0].tag;
-    h.click(`[data-checkin-factor="${tag}"][data-checkin-rating="mid"]`);
+    expect(h.$$('[data-goal-factor]').length).toBe(CHECKIN_FACTORS.length);
+    // Nothing pre-selected: the engineer chooses, or there is no goal.
+    expect(h.$$('.goal-opt.selected')).toHaveLength(0);
+    expect(h.state().coachGoals || {}).toEqual({});
+  });
+
+  it('records a goal picked from the menu, against the week', () => {
+    const h = boot(MONDAY);
+    h.nav('dashboard');
+    h.click('#checkin-open');
+    h.click('[data-goal-factor="safety_first"]');
+    h.click('#checkin-save');
+    expect(h.state().coachGoals['2026-07-27'].factorTag).toBe('safety_first');
+  });
+
+  it('records a goal the engineer typed instead', () => {
+    const h = boot(MONDAY);
+    h.nav('dashboard');
+    h.click('#checkin-open');
+    h.setValue('#goal-custom', 'Stop skipping my flue checks', 'input');
+    h.click('#checkin-save');
+    const g = h.state().coachGoals['2026-07-27'];
+    expect(g.factorTag).toBe('custom');
+    expect(g.customText).toBe('Stop skipping my flue checks');
+  });
+
+  it('carries the goal into the following days and rates against it', () => {
+    const h = withGoal(TUESDAY, 'safety_first');
+    expect(h.$('.goal-banner-text').textContent)
+      .toBe(CHECKIN_FACTORS.find(f => f.tag === 'safety_first').goal);
+    // The single rating shown is about the chosen goal, not a fixed checklist.
+    const tags = new Set(h.$$('[data-checkin-factor]').map(b => b.dataset.checkinFactor));
+    expect([...tags]).toEqual(['safety_first']);
+  });
+
+  it('shows the week in figures on a Reality day, and passes no verdict on them', () => {
+    const h = withGoal(TUESDAY);
+    const panel = h.$('.reality-panel');
+    expect(panel).toBeTruthy();
+    const labels = h.$$('.reality-label').map(e => e.textContent);
+    expect(labels).toContain('EARNED');
+    expect(labels).toContain('JOBS');
+    expect(labels.some(l => l === 'TO GO' || l === 'AHEAD')).toBe(true);
+    // Figures only. The moment this panel gains an adjective it stops being
+    // Reality and becomes the app's opinion of the engineer.
+    const text = panel.textContent.toLowerCase();
+    ['should', 'need to', 'good', 'bad', 'poor', 'well done', 'behind schedule']
+      .forEach(word => expect(text, word).not.toContain(word));
+  });
+
+  it('never calls a half-finished week a shortfall', () => {
+    // On Tuesday the whole week's target is still ahead of you. "Short by" is a
+    // verdict on a week that has barely started.
+    const h = withGoal(TUESDAY);
+    const text = h.$('.reality-panel').textContent.toLowerCase();
+    ['short', 'behind', 'missed', 'failed', 'off track']
+      .forEach(word => expect(text, word).not.toContain(word));
+  });
+
+  it('asks why the goal matters on the day it is set, not what it is again', () => {
+    // The picker already asked what. Asking it twice in one sheet is the kind
+    // of thing that makes a daily habit feel like paperwork.
+    const h = boot(MONDAY);
+    h.nav('dashboard');
+    h.click('#checkin-open');
+    const asks = h.$$('.checkin-factor-ask').map(e => e.textContent);
+    expect(asks).toHaveLength(2);
+    expect(asks[0]).toContain('what do you want to be different'.replace(/^./, c => c.toUpperCase()));
+    expect(asks[1]).not.toBe(asks[0]);
+    expect(asks[1].toLowerCase()).toMatch(/why|worth|friday/);
+  });
+
+  it("shows where you are in the week's arc", () => {
+    const h = withGoal(TUESDAY);
+    expect(h.$$('.grow-pip').length).toBe(GROW_STAGES.length);
+    expect(h.$('.grow-pip.active').textContent).toBe('Reality');
+  });
+
+  it('saves a rating and a note, and shows the day as checked in', () => {
+    const h = withGoal(TUESDAY, 'safety_first');
+    h.click('[data-checkin-factor="safety_first"][data-checkin-rating="mid"]');
     h.setValue('#checkin-note', 'felt rushed by the last one', 'input');
     h.click('#checkin-save');
 
-    const entry = h.state().checkins[data.getTodayKey()];
-    expect(entry.ratings[tag]).toBe('mid');
+    const entry = h.state().checkins['2026-07-28'];
+    expect(entry.ratings.safety_first).toBe('mid');
     expect(entry.note).toBe('felt rushed by the last one');
     expect(h.$('.checkin-card-done')).toBeTruthy();
   });
 
-  it('saves a note on its own, with every rating skipped', () => {
-    const h = boot();
-    h.nav('dashboard');
-    h.click('#checkin-open');
+  it('records which question the note was answering', () => {
+    const h = withGoal(TUESDAY);
+    h.setValue('#checkin-note', 'kept getting pulled off it', 'input');
+    h.click('#checkin-save');
+    expect(h.state().checkins['2026-07-28'].promptId)
+      .toBe(growQuestionForDay('2026-07-28').id);
+  });
+
+  it('saves a note on its own, with the rating skipped', () => {
+    const h = withGoal(TUESDAY);
     h.setValue('#checkin-note', 'quiet one, felt fine', 'input');
     h.click('#checkin-save');
-    const entry = h.state().checkins[data.getTodayKey()];
+    const entry = h.state().checkins['2026-07-28'];
     expect(entry.ratings).toEqual({});
     expect(entry.note).toBe('quiet one, felt fine');
   });
 
   it('lets a tapped rating be untapped, so a mis-tap is not a permanent answer', () => {
-    const h = boot();
-    h.nav('dashboard');
-    h.click('#checkin-open');
-    const tag = checkinFactorsForDay(data.getTodayKey())[0].tag;
-    h.click(`[data-checkin-factor="${tag}"][data-checkin-rating="yes"]`);
-    h.click(`[data-checkin-factor="${tag}"][data-checkin-rating="yes"]`);
+    const h = withGoal(TUESDAY, 'process');
+    h.click('[data-checkin-factor="process"][data-checkin-rating="yes"]');
+    h.click('[data-checkin-factor="process"][data-checkin-rating="yes"]');
     h.click('#checkin-save');
-    expect(h.state().checkins[data.getTodayKey()].ratings[tag]).toBeUndefined();
+    expect(h.state().checkins['2026-07-28'].ratings.process).toBeUndefined();
   });
 
   it('carries the exact placeholder wording the note field is supposed to say', () => {
-    const h = boot();
-    h.nav('dashboard');
-    h.click('#checkin-open');
+    const h = withGoal(TUESDAY);
     expect(h.$('#checkin-note').getAttribute('placeholder'))
       .toBe('No customer names, addresses, or job details — how it felt, not what happened.');
   });
 
   it('tells the engineer the diary is theirs alone', () => {
-    const h = boot();
-    h.nav('dashboard');
-    h.click('#checkin-open');
+    const h = withGoal(TUESDAY);
     expect(h.$('.checkin-intro').textContent.toLowerCase()).toContain('only you');
   });
 

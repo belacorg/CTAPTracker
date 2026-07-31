@@ -96,34 +96,53 @@ Once an engineer has 4+ completed weeks of credited work, the **CTAP target** st
 _Avoid_: "average target"
 
 **Check-in**:
-A day's entry in the engineer's private diary — up to two **Factor rating**s and
-one **Reflection note**, all optional. Visible only to the engineer who wrote it:
-there is no team view, no aggregate, and no export, and that is a property of the
-feature rather than a current limitation. Distinct from everything else the app
-stores in that it records how the day *felt*, not what was produced. See ADR-0012.
-_Avoid_: "daily log" (collides with logging jobs), "review", "assessment"
-(both imply someone else reads it)
+A day's turn in a coaching conversation the engineer has with themselves — one
+**GROW stage** question, plus a rating against the **Week goal**. Optional
+throughout. Visible only to the engineer who wrote it: no team view, no aggregate,
+no export, and that is a property of the feature rather than a current limitation.
+Distinct from everything else the app stores in that it records how the day
+*felt*, not what was produced. See ADR-0012 and ADR-0013.
+_Avoid_: "daily log" (collides with logging jobs), "survey", "review",
+"assessment" (all imply an instrument administered to someone)
+
+**GROW stage**:
+Which part of the coaching arc a given day sits in — **Goal** (Mon), **Reality**
+(Tue, Wed), **Options** (Thu), **Will** (Fri, held over the weekend). One stage a
+day, so the arc completes across a working week and no single day takes more than
+a minute. The order is load-bearing: Reality lands mid-week while there is still
+week left to change it.
+_Avoid_: "step" (implies a checklist), "phase"
+
+**Week goal**:
+The one process habit the engineer chooses to work on for a week — *"do my safety
+checks before I start, every job"*. Set on Monday from a menu of five suggestions
+or written freehand, capped at 80 characters. Deliberately **not** the **CTAP
+target**: that is the employer's number and is presented as **Reality**. The
+distinction is the point — a goal the engineer was handed does not produce
+ownership. Lives in `checkin_goals`, never on **weeks**.
+_Avoid_: "target" (reserved for **CTAP target**), "objective", "KPI"
 
 **Factor**:
-One of five process habits a **Check-in** asks about — van & tools organised,
-safety checks done first, followed good process, confident on fault-finding, good
-customer interaction. Two are asked per day, rotated by date so all five are
-covered across any five consecutive days and the same day always asks the same
-pair.
+One of the five suggested habits the **Week goal** menu offers — van & tools,
+safety first, process, fault-finding, customer. A starting set, not a limit; a
+goal the engineer writes themselves is tagged `custom`.
 _Avoid_: "metric", "KPI" (nothing here is measured against a standard)
 
-**Factor rating**:
-The engineer's own three-way answer to a **Factor** — *not really* / *so-so* /
-*yes*. Three-way rather than binary because a forced yes/no on a middling day
-gets skipped or answered dishonestly. Skippable, and un-tappable after the fact.
-Averaged over a week (no=0, mid=1, yes=2) to produce the week's dot on the trend
-view.
+**Goal rating**:
+The engineer's own three-way end-of-day answer on their **Week goal** — *not
+really* / *so-so* / *yes*. Three-way rather than binary because a forced yes/no on
+a middling day gets skipped or answered dishonestly. Skippable, and un-tappable
+after the fact. Averaged over a week (no=0, mid=1, yes=2) to produce the week's
+dot on the trend view, so the dots track the thing the engineer chose.
+_Avoid_: "score", "self-assessment"
 
 **Reflection note**:
-The short free-text answer to the day's rotating prompt, capped at 280 characters
-by the database. Prompts are framed around feeling and behaviour ("did any job
-feel rushed today?"), never around events, because event framing invites exactly
-the customer and job detail the `checkins` table deliberately has no column for.
+The short free-text answer to the day's **GROW stage** question, capped at 280
+characters by the database. Questions are open and answered by the engineer; none
+of them contains a suggestion, because a coach that supplies the answer produces
+compliance rather than change. Framed around feeling and behaviour, never around
+events — event framing invites exactly the customer and job detail the `checkins`
+table deliberately has no column for.
 _Avoid_: "job note" (that's the **Shift** note, a different thing entirely)
 
 **Voice draft**:
@@ -137,8 +156,10 @@ _Avoid_: "voice entry", "voice log" (for the draft itself — the draft is what 
 - A week is composed of seven days, each with an optional **Shift**; a **Shift** may be flagged as **Leave** or tagged as a **Mentor Day**
 - **Leave** and **Mentor Day** reductions feed into the week's **Rostered hours**; **NPT** is subtracted from the target *after* **CTAP percentage** is applied
 - **CTAP balance** accumulates across many weeks of progress against **CTAP target**
-- A **Check-in** belongs to one day and holds up to two **Factor rating**s plus one **Reflection note**; a week's ratings average into the single dot shown beneath the weekly credits chart
-- **Check-in** data flows nowhere else: no **Coach Insight** reads it, and nothing in the app compares it between engineers
+- A week has one **Week goal**; each **Check-in** in that week holds one **Goal rating** against it plus one **Reflection note** answering that day's **GROW stage** question
+- A week's **Goal rating**s average into the single dot shown beneath the weekly credits chart
+- **CTAP target** is presented to the engineer as **Reality**, never as their goal — the **Week goal** is the only thing in the app the engineer chooses for themselves
+- **Coach Insight** reports figures; the **Check-in** asks questions. Neither reads the other: no **Coach Insight** touches **Check-in** data, and nothing in the app compares it between engineers
 
 ## Flagged ambiguities
 

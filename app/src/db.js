@@ -34,11 +34,12 @@ export async function updateProfileField(userId, fields) {
 // ── Load state from Supabase ───────────────────────────────────────────────
 
 export async function loadStateFromSupabase(user) {
-  const [profileRes, weeksRes, jobsRes, checkinsRes] = await Promise.all([
+  const [profileRes, weeksRes, jobsRes, checkinsRes, goalsRes] = await Promise.all([
     supabase.from('users_profile').select('*').eq('id', user.id).single(),
     supabase.from('weeks').select('*').eq('user_id', user.id),
     supabase.from('job_logs').select('*').eq('user_id', user.id).order('sort_order'),
-    supabase.from('checkins').select('*').eq('user_id', user.id)
+    supabase.from('checkins').select('*').eq('user_id', user.id),
+    supabase.from('checkin_goals').select('*').eq('user_id', user.id)
   ]);
 
   if (profileRes.error) throw profileRes.error;
@@ -47,11 +48,13 @@ export async function loadStateFromSupabase(user) {
   // A check-in failure must not cost the engineer their job data. The diary is
   // the optional part of the app; the CTAP ledger is not.
   if (checkinsRes.error) console.warn('Check-ins failed to load:', checkinsRes.error.message);
+  if (goalsRes.error) console.warn('Goals failed to load:', goalsRes.error.message);
 
   const profile = profileRes.data;
   const weeks = weeksRes.data || [];
   const jobs = jobsRes.data || [];
   const checkins = checkinsRes.error ? [] : (checkinsRes.data || []);
+  const goals = goalsRes.error ? [] : (goalsRes.data || []);
 
   // Reconstruct state object matching the existing app.js shape
   const state = {
@@ -59,8 +62,16 @@ export async function loadStateFromSupabase(user) {
     weeklyTargetPct: profile.weekly_target_pct,
     startingBalance: profile.starting_balance,
     weeks: {},
-    checkins: {}
+    checkins: {},
+    coachGoals: {}
   };
+
+  for (const row of goals) {
+    state.coachGoals[row.week_key] = {
+      factorTag: row.factor_tag,
+      customText: row.custom_text || ''
+    };
+  }
 
   // Row-per-answer in Postgres, day-keyed object in the app — the same shape
   // shift job_logs makes into week.days.
@@ -215,12 +226,38 @@ export async function syncCheckinDay(user, state, dayKey) {
   }
 }
 
+// ── Sync one week's goal ──────────────────────────────────────────────────
+
+export async function syncWeekGoal(user, state, weekKey) {
+  const goal = (state.coachGoals || {})[weekKey];
+
+  if (!goal) {
+    const { error } = await supabase
+      .from('checkin_goals')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('week_key', weekKey);
+    if (error) throw error;
+    return;
+  }
+
+  const { error } = await supabase.from('checkin_goals').upsert({
+    user_id: user.id,
+    week_key: weekKey,
+    factor_tag: goal.factorTag,
+    custom_text: goal.customText || null
+  }, { onConflict: 'user_id,week_key' });
+  if (error) throw error;
+}
+
 // ── Delete all rows for a user ────────────────────────────────────────────
 // Wipes everything the app stores (checkins, job_logs, weeks, users_profile).
 // Does NOT delete the auth.users record — that requires a service-role edge
 // function (see docs/edge-function-delete-auth.md).
 
 export async function deleteAllUserData(user) {
+  const { error: goalsErr } = await supabase.from('checkin_goals').delete().eq('user_id', user.id);
+  if (goalsErr) throw goalsErr;
   const { error: checkinsErr } = await supabase.from('checkins').delete().eq('user_id', user.id);
   if (checkinsErr) throw checkinsErr;
   const { error: jobsErr } = await supabase.from('job_logs').delete().eq('user_id', user.id);

@@ -553,6 +553,24 @@ body {
 }
 
 /* Settings number pill */
+/* iOS decimal keypads have no minus key, so the sign of the starting balance is
+   a control rather than something you type. Sized to the same 44px touch target
+   the rest of the settings rows use. */
+.st-sign-btn {
+  flex: 0 0 auto;
+  width: 34px; height: 32px;
+  background: var(--surface2);
+  border: 1px solid var(--tile-border);
+  border-radius: 10px;
+  color: var(--green);
+  font-size: 1rem; font-weight: 700; font-family: inherit;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.st-sign-btn.negative { color: var(--red); border-color: var(--red); }
+.st-sign-btn:active { background: var(--surface3); }
+
 .st-num-wrap {
   display: flex;
   align-items: center;
@@ -3766,10 +3784,102 @@ body.light .lj-sec-sticky { background: var(--bg); }
   font-size: 0.8rem; font-weight: 700;
 }
 
+/* Where you are in the week's arc. Shown so five days read as one conversation
+   rather than five unrelated questions. */
+.grow-rail {
+  display: flex; gap: 4px;
+  margin-bottom: 14px;
+}
+.grow-pip {
+  flex: 1;
+  text-align: center;
+  font-size: 0.6rem; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--muted2);
+  padding: 5px 2px;
+  border-top: 2px solid var(--sep);
+}
+.grow-pip.done   { color: var(--muted); border-top-color: var(--jcpd-hair-2); }
+.grow-pip.active { color: var(--accent); border-top-color: var(--accent); }
+
 .checkin-intro {
   font-size: 0.78rem; color: var(--muted); line-height: 1.4;
   margin-bottom: 16px;
 }
+
+/* The week's goal, carried across every day that follows it. */
+.goal-banner {
+  display: flex; flex-direction: column; gap: 3px;
+  background: var(--jcpd-accent-dim);
+  border-left: 2px solid var(--accent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  padding: 10px 12px;
+  margin-bottom: 18px;
+}
+.goal-banner-label {
+  font-size: 0.58rem; font-weight: 700;
+  letter-spacing: 0.1em; color: var(--accent);
+}
+.goal-banner-text { font-size: 0.86rem; font-weight: 600; color: var(--fg); line-height: 1.35; }
+
+.goal-options { display: flex; flex-direction: column; gap: 6px; }
+.goal-opt {
+  display: flex; flex-direction: column; gap: 2px;
+  text-align: left;
+  background: var(--surface2);
+  border: 1px solid var(--sep);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-family: inherit; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.goal-opt.selected { border-color: var(--accent); border-width: 1.5px; background: var(--jcpd-accent-dim); }
+.goal-opt-label {
+  font-size: 0.6rem; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted2);
+}
+.goal-opt.selected .goal-opt-label { color: var(--accent); }
+.goal-opt-goal { font-size: 0.86rem; font-weight: 600; color: var(--fg); line-height: 1.3; }
+.goal-custom {
+  width: 100%;
+  margin-top: 8px;
+  background: var(--surface2);
+  border: 1px solid var(--sep);
+  border-radius: var(--radius-sm);
+  padding: 11px 12px;
+  color: var(--fg);
+  font-size: 0.88rem; font-family: inherit;
+}
+.goal-custom::placeholder { color: var(--muted2); }
+.goal-custom:focus { outline: none; border-color: var(--accent); }
+
+/* Reality: the engineer's own week in figures, stated and not interpreted.
+   No adjectives here — the numbers sit there and the engineer says what they
+   mean. Anything that reads as a verdict belongs somewhere else. */
+.reality-panel {
+  background: var(--surface2);
+  border: 1px solid var(--tile-border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 18px;
+}
+.reality-head {
+  font-size: 0.6rem; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--muted2); margin-bottom: 10px;
+}
+.reality-grid { display: flex; flex-wrap: wrap; gap: 14px 20px; }
+.reality-cell { display: flex; flex-direction: column; gap: 2px; }
+.reality-label {
+  font-size: 0.56rem; font-weight: 700;
+  letter-spacing: 0.08em; color: var(--muted2);
+}
+.reality-value {
+  font-size: 1.02rem; font-weight: 700; color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+.reality-value.amber { color: var(--amber); }
+.reality-value.green { color: var(--green); }
 .checkin-factor { margin-bottom: 18px; }
 .checkin-factor-ask {
   font-size: 0.88rem; font-weight: 600; color: var(--fg);

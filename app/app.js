@@ -20,6 +20,10 @@ let ctapProjectedMode = false;
 let expandedZeroWeek = null;
 let weekendExpanded = false;
 let openSettingsInfo = null;
+// Sign of the starting balance, held separately from the value so it survives
+// the number being zero or cleared. null = take it from state. iOS shows no
+// minus key on a decimal keypad, so the sign has to be a control, not a keystroke.
+let startBalSignNeg = null;
 let legalInfoExpanded = false;
 let scheduleNoteOpenDay = null;
 let deleteAccountStep = 'idle';
@@ -984,6 +988,14 @@ function buildHistory() {
 }
 
 // ── Settings ───────────────────────────────────────────────────────────────
+// Is the starting balance a deficit? Falls back to the stored value's sign, but
+// an explicit tap wins — otherwise picking "−" on a zero balance would spring
+// straight back to "+", since zero has no sign to read.
+function startBalNegative() {
+  if (startBalSignNeg !== null) return startBalSignNeg;
+  return (state.startingBalance || 0) < 0;
+}
+
 const SVG_SUN  = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="8" cy="8" r="2.5"/><line x1="8" y1="1" x2="8" y2="3"/><line x1="8" y1="13" x2="8" y2="15"/><line x1="1" y1="8" x2="3" y2="8"/><line x1="13" y1="8" x2="15" y2="8"/><line x1="3.5" y1="3.5" x2="4.6" y2="4.6"/><line x1="11.4" y1="11.4" x2="12.5" y2="12.5"/><line x1="12.5" y1="3.5" x2="11.4" y2="4.6"/><line x1="4.6" y1="11.4" x2="3.5" y2="12.5"/></svg>`;
 const SVG_MOON = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 10.5A6 6 0 0 1 5.5 2.5a6 6 0 1 0 8 8z"/></svg>`;
 
@@ -1060,11 +1072,13 @@ function buildSettings() {
       <div class="st-row">
         <span class="st-row-label">Starting CTAP balance</span>
         <div class="st-row-controls">
-          ${numInput('start-bal-input', startBal.toFixed(1), 'h', 'min="-999" max="999" step="0.5" inputmode="decimal"')}
+          <button class="st-sign-btn${startBalNegative() ? ' negative' : ''}" id="start-bal-sign"
+            aria-label="${startBalNegative() ? 'In deficit — tap for in credit' : 'In credit — tap for in deficit'}">${startBalNegative() ? '&minus;' : '+'}</button>
+          ${numInput('start-bal-input', Math.abs(startBal).toFixed(1), 'h', 'min="0" max="999" step="0.5" inputmode="decimal"')}
           ${infoBtn('balance')}
         </div>
       </div>
-      ${openSettingsInfo === 'balance' ? infoPopover('Your accumulated balance carried in. Use a negative number if in deficit (e.g. −22). Added to your weekly performance history to give your overall CTAP balance.') : ''}
+      ${openSettingsInfo === 'balance' ? infoPopover('Your accumulated balance carried in. Tap +/− to say whether you are in credit or in deficit, then enter the hours. Added to your weekly performance history to give your overall CTAP balance.') : ''}
     </div>
 
     ${sectionLabel('HELP')}
@@ -2301,41 +2315,124 @@ function buildCheckinCard() {
       </button>`;
   }
 
-  const prompt = checkinPromptForDay(todayKey);
+  const q = growQuestionForDay(todayKey);
+  const stage = findGrowStage(q.stage);
+  const goal = getWeekGoal(state, getWeekKey(new Date()));
   return `
     <button class="checkin-card" id="checkin-open">
       <span class="checkin-card-txt">
-        <strong>Today's check-in</strong>
-        <small>${prompt.text}</small>
+        <strong>${stage.label}${goal ? '' : ' — set this week\'s goal'}</strong>
+        <small>${goal ? q.text : 'What do you want to be different about this week?'}</small>
       </span>
       <span class="checkin-card-go">Under a minute ›</span>
     </button>`;
 }
 
+// ── Reality, stated and not interpreted ────────────────────────────────────
+// The engineer's own week, in figures. This is the stage the app can genuinely
+// answer, and answering it is the accountability: what you've done, how many
+// jobs, where you fall short. No adjectives, no verdict, no "you should" — the
+// numbers sit there and the engineer says what they mean.
+function buildRealityPanel(dk) {
+  const wkKey = getWeekKey(new Date(dk + 'T00:00:00'));
+  const week = state.weeks[wkKey] || { days: {} };
+  const earned = weekCreditHours(week);
+  const target = effectiveTargetHours(state, week, wkKey).hours;
+  const gap = target - earned;
+  const jobs = Object.values(week.days || {}).reduce((s, arr) => s + arr.length, 0);
+  const npt = (week.deductionMins || 0) / 60;
+
+  const cell = (label, value, cls) =>
+    `<div class="reality-cell"><div class="reality-label">${label}</div>
+      <div class="reality-value${cls ? ' ' + cls : ''}">${value}</div></div>`;
+
+  // "TO GO", not "SHORT BY". On a Tuesday the whole week's target is still
+  // ahead of you — labelling the arithmetic as a shortfall passes a verdict on
+  // a week that has barely started, which is the one thing Reality must not do.
+  // Only "AHEAD" carries a colour, because being ahead is a fact rather than a
+  // warning; an amber "to go" would read as the app tutting at you.
+  return `
+    <div class="reality-panel">
+      <div class="reality-head">Your week so far</div>
+      <div class="reality-grid">
+        ${cell('EARNED', earned.toFixed(2) + 'h')}
+        ${cell('WEEK TARGET', target.toFixed(2) + 'h')}
+        ${gap > 0
+          ? cell('TO GO', gap.toFixed(2) + 'h')
+          : cell('AHEAD', Math.abs(gap).toFixed(2) + 'h', 'green')}
+        ${cell('JOBS', String(jobs))}
+        ${npt > 0 ? cell('NPT', npt.toFixed(2) + 'h') : ''}
+      </div>
+    </div>`;
+}
+
+// ── Goal picker (Monday, or any day without a goal set) ────────────────────
+// Five suggestions and a blank line. The app never picks — a goal handed to
+// someone is the employer's target with a friendlier font.
+function buildGoalPicker(draft) {
+  const chosen = draft.goalFactorTag;
+  const custom = draft.goalCustom || '';
+  return `
+    <div class="checkin-factor">
+      <div class="checkin-factor-ask">What do you want to be different about this week?</div>
+      <div class="goal-options">
+        ${CHECKIN_FACTORS.map(f => `
+          <button class="goal-opt${chosen === f.tag && !custom ? ' selected' : ''}"
+            data-goal-factor="${f.tag}" aria-pressed="${chosen === f.tag && !custom}">
+            <span class="goal-opt-label">${f.label}</span>
+            <span class="goal-opt-goal">${f.goal}</span>
+          </button>`).join('')}
+      </div>
+      <input type="text" id="goal-custom" class="goal-custom" maxlength="${CHECKIN_GOAL_MAX}"
+        placeholder="…or write your own" value="${custom.replace(/"/g, '&quot;')}">
+    </div>`;
+}
+
 function buildCheckinBody() {
   const dk = checkinDayKey || getTodayKey();
-  const factors = checkinFactorsForDay(dk);
-  const prompt = checkinPromptForDay(dk);
+  const wkKey = getWeekKey(new Date(dk + 'T00:00:00'));
   const draft = checkinDraft || { ratings: {}, note: '' };
+  const q = growQuestionForDay(dk);
+  const stage = findGrowStage(q.stage);
   const warning = checkinNoteWarning(draft.note);
   const remaining = CHECKIN_NOTE_MAX - (draft.note || '').length;
 
-  const factorRows = factors.map(f => `
+  // The draft carries the goal so Monday's pick and Monday's answers commit
+  // together; on other days it mirrors whatever is already set for the week.
+  const goal = (draft.goalFactorTag || draft.goalCustom)
+    ? { factorTag: draft.goalCustom ? CHECKIN_CUSTOM_TAG : draft.goalFactorTag, customText: draft.goalCustom || '' }
+    : getWeekGoal(state, wkKey);
+  const needsGoal = q.stage === 'goal' || !goal;
+
+  // Where you are in the arc. Shown so the week reads as one conversation
+  // rather than five unrelated questions.
+  const rail = GROW_STAGES.map(s => `
+    <span class="grow-pip${s.id === q.stage ? ' active' : ''}${GROW_STAGES.findIndex(x => x.id === s.id) < GROW_STAGES.findIndex(x => x.id === q.stage) ? ' done' : ''}">${s.label}</span>`).join('');
+
+  const tag = goalRatingTag(goal);
+  const ratingBlock = (goal && tag && q.stage !== 'goal') ? `
     <div class="checkin-factor">
-      <div class="checkin-factor-ask">${f.ask}</div>
-      <div class="checkin-scale" role="group" aria-label="${f.ask}">
+      <div class="checkin-factor-ask">${goalAsk(goal)}</div>
+      <div class="checkin-scale" role="group" aria-label="${goalAsk(goal)}">
         ${CHECKIN_RATINGS.map(r => `
-          <button class="checkin-opt${draft.ratings[f.tag] === r.value ? ' selected ' + r.value : ''}"
-            data-checkin-factor="${f.tag}" data-checkin-rating="${r.value}"
-            aria-pressed="${draft.ratings[f.tag] === r.value}">${r.label}</button>`).join('')}
+          <button class="checkin-opt${draft.ratings[tag] === r.value ? ' selected ' + r.value : ''}"
+            data-checkin-factor="${tag}" data-checkin-rating="${r.value}"
+            aria-pressed="${draft.ratings[tag] === r.value}">${r.label}</button>`).join('')}
       </div>
-    </div>`).join('');
+    </div>` : '';
 
   return `
-    <p class="checkin-intro">Only you can see this. Skip anything you don't fancy answering.</p>
-    ${factorRows}
+    <div class="grow-rail">${rail}</div>
+    <p class="checkin-intro">${stage.blurb}. Only you can see this — skip anything you don't fancy answering.</p>
+    ${goal && q.stage !== 'goal' ? `<div class="goal-banner">
+      <span class="goal-banner-label">THIS WEEK</span>
+      <span class="goal-banner-text">${goalText(goal)}</span>
+    </div>` : ''}
+    ${needsGoal ? buildGoalPicker(draft) : ''}
+    ${q.stage === 'reality' ? buildRealityPanel(dk) : ''}
+    ${ratingBlock}
     <div class="checkin-factor">
-      <div class="checkin-factor-ask">${prompt.text}</div>
+      <div class="checkin-factor-ask">${q.text}</div>
       <textarea id="checkin-note" class="checkin-note" rows="3"
         maxlength="${CHECKIN_NOTE_MAX}"
         placeholder="${CHECKIN_NOTE_PLACEHOLDER}">${(draft.note || '').replace(/</g, '&lt;')}</textarea>
@@ -2376,9 +2473,12 @@ function openCheckinSheet() {
   if (_isOffline) { showToast("You're offline — check-in unavailable"); return; }
   checkinDayKey = getTodayKey();
   const existing = getCheckin(state, checkinDayKey);
+  const goal = getWeekGoal(state, getWeekKey(new Date()));
   checkinDraft = {
     ratings: Object.assign({}, (existing && existing.ratings) || {}),
-    note: (existing && existing.note) || ''
+    note: (existing && existing.note) || '',
+    goalFactorTag: goal ? goal.factorTag : null,
+    goalCustom: goal ? (goal.customText || '') : ''
   };
   checkinSheetOpen = true;
   const sheet = document.getElementById('checkin-sheet');
@@ -2398,11 +2498,19 @@ function closeCheckinSheet() {
 // that is entirely blank, which is a legitimate "opened it, nothing to say".
 function commitCheckin() {
   const dk = checkinDayKey || getTodayKey();
+  const wkKey = getWeekKey(new Date(dk + 'T00:00:00'));
   const draft = checkinDraft || { ratings: {}, note: '' };
+
+  // The goal commits with the day it was set on, so Monday is one save.
+  if (draft.goalFactorTag || draft.goalCustom) {
+    setWeekGoal(state, wkKey, { factorTag: draft.goalFactorTag, customText: draft.goalCustom });
+    if (window.__ctapSyncGoal) window.__ctapSyncGoal(wkKey);
+  }
+
   const entry = getOrCreateCheckin(state, dk);
   entry.ratings = Object.assign({}, draft.ratings);
   entry.note = (draft.note || '').slice(0, CHECKIN_NOTE_MAX);
-  entry.promptId = checkinPromptForDay(dk).id;
+  entry.promptId = growQuestionForDay(dk).id;
   saveState(state);
   if (window.__ctapSyncCheckin) window.__ctapSyncCheckin(dk);
   showToast('Check-in saved');
@@ -2410,6 +2518,32 @@ function commitCheckin() {
 }
 
 function attachCheckinSheetListeners() {
+  // Goal picker — tap to choose, tap again to unset. Choosing from the menu
+  // clears any typed goal and vice versa; there is one goal, not two.
+  document.querySelectorAll('[data-goal-factor]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!checkinDraft) return;
+      const tag = btn.dataset.goalFactor;
+      const already = checkinDraft.goalFactorTag === tag && !checkinDraft.goalCustom;
+      checkinDraft.goalFactorTag = already ? null : tag;
+      checkinDraft.goalCustom = '';
+      refreshCheckinSheet();
+    });
+  });
+
+  const goalCustom = document.getElementById('goal-custom');
+  if (goalCustom) {
+    goalCustom.addEventListener('input', () => {
+      if (!checkinDraft) return;
+      checkinDraft.goalCustom = goalCustom.value;
+      // Deselect the menu without a re-render — retyping would lose the caret.
+      if (goalCustom.value.trim()) {
+        document.querySelectorAll('.goal-opt.selected')
+          .forEach(el => el.classList.remove('selected'));
+      }
+    });
+  }
+
   document.querySelectorAll('[data-checkin-rating]').forEach(btn => {
     btn.addEventListener('click', () => {
       if (!checkinDraft) return;
@@ -2657,6 +2791,7 @@ function attachListeners() {
       activeTab = tab;
       if (activeTab === 'dashboard') { currentWeekKey = getWeekKey(new Date()); ctapProjectedMode = false; }
       if (activeTab === 'log') { activeLogDay = getTodayKey(); jobSearch = ''; logSearchOpen = false; }
+      if (activeTab === 'settings') startBalSignNeg = null;   // re-derive from the stored value
       render();
     });
   });
@@ -3149,10 +3284,23 @@ function attachListeners() {
     v => { state.weeklyTargetPct = v / 100; },
     v => Math.max(50, Math.min(100, parseInt(v) || 80)),
     () => Math.round((state.weeklyTargetPct || 0.8) * 100));
+  // The field holds the magnitude; the +/− button holds the sign.
   bindNumInput('start-bal-input',
-    v => { state.startingBalance = parseFloat(v.toFixed(1)); },
-    v => Math.max(-999, Math.min(999, parseFloat(v) || 0)),
-    () => (state.startingBalance || 0).toFixed(1));
+    v => { state.startingBalance = parseFloat(((startBalNegative() ? -1 : 1) * v).toFixed(1)); },
+    v => Math.max(0, Math.min(999, Math.abs(parseFloat(v) || 0))),
+    () => Math.abs(state.startingBalance || 0).toFixed(1));
+
+  // In credit / in deficit. Applied to the stored value straight away so the
+  // dashboard doesn't sit on the wrong side of zero until the field is touched.
+  const startBalSign = document.getElementById('start-bal-sign');
+  if (startBalSign) startBalSign.addEventListener('click', () => {
+    startBalSignNeg = !startBalNegative();
+    const mag = Math.abs(state.startingBalance || 0);
+    state.startingBalance = parseFloat(((startBalSignNeg ? -1 : 1) * mag).toFixed(1));
+    saveState(state);
+    showToast(startBalSignNeg ? 'In deficit' : 'In credit');
+    render();
+  });
 
   // Best advice strip dismiss
   document.querySelectorAll('[data-dismiss-opp]').forEach(btn => {

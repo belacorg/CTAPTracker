@@ -184,7 +184,7 @@ function loadState() {
 }
 
 function defaultState() {
-  return { baseHours: 40, weeks: {}, checkins: {} };
+  return { baseHours: 40, weeks: {}, checkins: {}, coachGoals: {} };
 }
 
 function saveState(state) {
@@ -1283,17 +1283,38 @@ function voiceBatchCreditHours(items) {
 }
 
 // ── Daily check-in ─────────────────────────────────────────────────────────
-// A self-facing diary, not a monitoring tool. Nothing here ranks the engineer
-// against anyone, and nothing here draws a conclusion for them — the trend
-// view puts credits and self-ratings side by side and stops. See ADR-0012.
+// A coaching conversation the engineer has with themselves, structured as GROW
+// across the working week. Self-facing, never ranked, and the app never answers
+// its own questions — the whole effect depends on the engineer supplying the
+// answer. See ADR-0012 and ADR-0013.
 
+// The goal menu. These are process habits an engineer can actually choose to
+// work on, in contrast to the CTAP target, which is handed to them.
+//   goal — how it reads once picked, in the engineer's own voice
+//   ask  — the end-of-day question while it is this week's goal
 const CHECKIN_FACTORS = [
-  { tag: 'van_tools',     label: 'Van & tools',    ask: 'Van and tools organised?' },
-  { tag: 'safety_first',  label: 'Safety first',   ask: 'Safety checks done before you started?' },
-  { tag: 'process',       label: 'Process',        ask: 'Followed your own process?' },
-  { tag: 'fault_finding', label: 'Fault-finding',  ask: 'Confident on the fault-finding?' },
-  { tag: 'customer',      label: 'Customer',       ask: 'Customer conversations go well?' },
+  { tag: 'van_tools',     label: 'Van & tools',
+    goal: 'Keep the van and my tools organised',
+    ask:  'Van and tools organised today?' },
+  { tag: 'safety_first',  label: 'Safety first',
+    goal: 'Do my safety checks before I start, every job',
+    ask:  'Safety checks done first today?' },
+  { tag: 'process',       label: 'Process',
+    goal: 'Follow my own process instead of winging it',
+    ask:  'Followed your own process today?' },
+  { tag: 'fault_finding', label: 'Fault-finding',
+    goal: 'Work to a fault-finding order I actually trust',
+    ask:  'Stuck to your fault-finding order today?' },
+  { tag: 'customer',      label: 'Customer',
+    goal: 'Stop over-explaining — say it once, clearly',
+    ask:  'Customer conversations go the way you wanted?' },
 ];
+
+// A goal the engineer wrote themselves. Autonomy is the point: a menu of five
+// is a starting set, not the boundary of what someone is allowed to work on.
+const CHECKIN_CUSTOM_TAG = 'custom';
+const CHECKIN_CUSTOM_ASK = 'How did you do on that today?';
+const CHECKIN_GOAL_MAX = 80;
 
 // Three-way, never binary. A yes/no forces a false answer on a middling day.
 const CHECKIN_RATINGS = [
@@ -1302,20 +1323,63 @@ const CHECKIN_RATINGS = [
   { value: 'yes', label: 'Yes' },
 ];
 
-// Feelings and behaviour, not events — "did it feel rushed", never "which job".
-const CHECKIN_PROMPTS = [
-  { id: 'rushed',       text: 'Did any job feel rushed today?' },
-  { id: 'over_explain', text: 'Were you over-explaining to a customer?' },
-  { id: 'differently',  text: "One thing you'd do differently tomorrow?" },
-  { id: 'stuck',        text: 'Did anything leave you stuck longer than it should have?' },
-  { id: 'energy',       text: 'How was your energy by the last job?' },
-  { id: 'asked_help',   text: 'Was there a moment you wanted to ask someone?' },
-  { id: 'went_well',    text: 'What went better than you expected?' },
-];
-
 const CHECKIN_NOTE_MAX = 280;
 const CHECKIN_NOTE_PLACEHOLDER =
   'No customer names, addresses, or job details — how it felt, not what happened.';
+
+// ── GROW ──
+// One stage a day, so the arc completes across a working week and each day's
+// ask stays under a minute. Reality lands Tue/Wed, while there is still week
+// left to change; Options and Will close it out.
+//
+// Every question here is open and answered by the engineer. None of them offers
+// a suggestion, and none of them contains the app's opinion — a coach that
+// supplies the answer produces compliance, which does not persist. That is the
+// property the guardrail tests exist to hold.
+const GROW_STAGES = [
+  { id: 'goal',    label: 'Goal',    blurb: 'What you want to be different' },
+  { id: 'reality', label: 'Reality', blurb: "What's actually happening" },
+  { id: 'options', label: 'Options', blurb: 'What you could try' },
+  { id: 'will',    label: 'Will',    blurb: "What you'll actually do" },
+];
+
+const GROW_QUESTIONS = {
+  // The picker already asked *what*. These ask *why* — putting the reason into
+  // your own words is what turns a picked option into a goal you own, and it is
+  // the difference between Monday taking twenty seconds and being a formality.
+  goal: [
+    { id: 'goal_why',     text: 'Why that one, this week?' },
+    { id: 'goal_friday',  text: 'What would be different by Friday if you got it right?' },
+    { id: 'goal_worth',   text: 'What makes that one worth the effort?' },
+  ],
+  // Tuesday — where it is slipping. Asked before Wednesday's exception question
+  // so the week still has room to move.
+  reality_obstacle: [
+    { id: 'real_inway',   text: "What's getting in the way of that so far?" },
+    { id: 'real_slip',    text: 'Where did it slip today?' },
+    { id: 'real_cost',    text: "What's it actually costing you when it goes wrong?" },
+  ],
+  // Wednesday — exception-finding. Asking when it went *right* and what you did
+  // differently surfaces the engineer's own working method, which is the thing
+  // that can be repeated. A week of only problem-hunting teaches nothing.
+  reality_exception: [
+    { id: 'real_wellwhat', text: 'When it did go well today, what were you doing differently?' },
+    { id: 'real_easiest',  text: 'Which job went easiest today, and what made it easy?' },
+    { id: 'real_closest',  text: 'When did you come closest to how you wanted to work?' },
+  ],
+  options: [
+    { id: 'opt_try',    text: 'What could you try tomorrow?' },
+    { id: 'opt_more',   text: 'What would you do more of, if the week started again?' },
+    // Relatedness — pointing outward, at people who already exist. See ADR-0013.
+    { id: 'opt_who',    text: 'Who could you ask about this?' },
+    { id: 'opt_remove', text: 'What could you stop doing to make room for it?' },
+  ],
+  will: [
+    { id: 'will_do',     text: 'What will you actually do next week?' },
+    { id: 'will_first',  text: 'What will you do first thing Monday?' },
+    { id: 'will_keep',   text: "What's worth keeping from this week?" },
+  ],
+};
 
 // Days since epoch. Rotation is derived from the date so the same day always
 // asks the same thing — re-opening the sheet must not reshuffle the questions
@@ -1324,27 +1388,89 @@ function checkinDayIndex(dayKey) {
   return Math.floor(Date.parse(dayKey + 'T00:00:00Z') / 86400000);
 }
 
-// Two factors a day, stepping by two through a list of five: over any five
-// consecutive days every factor is asked, and no day repeats a factor.
-function checkinFactorsForDay(dayKey) {
-  const n = CHECKIN_FACTORS.length;
-  const i = ((checkinDayIndex(dayKey) * 2) % n + n) % n;
-  return [CHECKIN_FACTORS[i], CHECKIN_FACTORS[(i + 1) % n]];
+// Mon sets the goal, Tue/Wed look at reality, Thu opens options, Fri commits.
+// The weekend holds on Will rather than starting something new — a Friday the
+// engineer worked through can still be closed on Sunday night.
+function growStageForDay(dayKey) {
+  const dow = new Date(dayKey + 'T00:00:00').getDay();   // 0 = Sunday
+  if (dow === 1) return 'goal';
+  if (dow === 2 || dow === 3) return 'reality';
+  if (dow === 4) return 'options';
+  return 'will';
 }
 
-function checkinPromptForDay(dayKey) {
-  const n = CHECKIN_PROMPTS.length;
-  return CHECKIN_PROMPTS[((checkinDayIndex(dayKey) % n) + n) % n];
+// Which bank a day draws from — Reality splits into two distinct angles.
+function growBankForDay(dayKey) {
+  const stage = growStageForDay(dayKey);
+  if (stage !== 'reality') return stage;
+  return new Date(dayKey + 'T00:00:00').getDay() === 2 ? 'reality_obstacle' : 'reality_exception';
+}
+
+// Stable within a day, varied week to week — the same Tuesday question every
+// Tuesday for a year stops being a question and becomes a form field.
+function growQuestionForDay(dayKey) {
+  const bank = growBankForDay(dayKey);
+  const list = GROW_QUESTIONS[bank];
+  const wk = Math.floor(checkinDayIndex(dayKey) / 7);
+  const q = list[((wk % list.length) + list.length) % list.length];
+  return { stage: growStageForDay(dayKey), bank: bank, id: q.id, text: q.text };
+}
+
+function findGrowStage(id) {
+  return GROW_STAGES.filter(function(s) { return s.id === id; })[0] || null;
 }
 
 function findCheckinFactor(tag) {
   return CHECKIN_FACTORS.filter(function(f) { return f.tag === tag; })[0] || null;
 }
 
+// ── The week's goal ──
+// Week-keyed, not day-keyed: the goal is the thread the daily questions hang
+// off, and it is the engineer's own — the app never picks one for them.
+
+function getWeekGoal(state, weekKey) {
+  return (state.coachGoals || {})[weekKey] || null;
+}
+
+function setWeekGoal(state, weekKey, goal) {
+  if (!state.coachGoals) state.coachGoals = {};
+  if (!goal) { delete state.coachGoals[weekKey]; return null; }
+  const custom = (goal.customText || '').trim().slice(0, CHECKIN_GOAL_MAX);
+  state.coachGoals[weekKey] = custom
+    ? { factorTag: CHECKIN_CUSTOM_TAG, customText: custom }
+    : { factorTag: goal.factorTag, customText: '' };
+  return state.coachGoals[weekKey];
+}
+
+// The goal as a sentence, however it was set.
+function goalText(goal) {
+  if (!goal) return '';
+  if (goal.customText) return goal.customText;
+  const f = findCheckinFactor(goal.factorTag);
+  return f ? f.goal : '';
+}
+
+// The end-of-day question for whatever the goal is.
+function goalAsk(goal) {
+  if (!goal) return '';
+  if (goal.customText) return CHECKIN_CUSTOM_ASK;
+  const f = findCheckinFactor(goal.factorTag);
+  return f ? f.ask : CHECKIN_CUSTOM_ASK;
+}
+
+// The tag a day's rating is filed under — the goal's factor, so the trend dots
+// track the thing the engineer chose rather than a fixed checklist.
+function goalRatingTag(goal) {
+  if (!goal) return null;
+  return goal.customText ? CHECKIN_CUSTOM_TAG : goal.factorTag;
+}
+
 // ── Check-in state ──
-// state.checkins is keyed by day: { ratings: {tag: rating}, note, promptId }.
-// The Supabase table is row-per-answer; this day-level shape is what the UI
-// reads, the same way week.days holds job objects that become job_logs rows.
+// state.checkins is keyed by day: { ratings: {tag: rating}, note, promptId },
+// where promptId is the GROW question the note answers and the rating is filed
+// under the week goal's tag. The Supabase table is row-per-answer; this
+// day-level shape is what the UI reads, the same way week.days holds job
+// objects that become job_logs rows.
 
 function getCheckin(state, dayKey) {
   return (state.checkins || {})[dayKey] || null;
@@ -1505,12 +1631,23 @@ if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     voiceBatchCreditHours: voiceBatchCreditHours,
     CHECKIN_FACTORS: CHECKIN_FACTORS,
     CHECKIN_RATINGS: CHECKIN_RATINGS,
-    CHECKIN_PROMPTS: CHECKIN_PROMPTS,
     CHECKIN_NOTE_MAX: CHECKIN_NOTE_MAX,
     CHECKIN_NOTE_PLACEHOLDER: CHECKIN_NOTE_PLACEHOLDER,
-    checkinFactorsForDay: checkinFactorsForDay,
-    checkinPromptForDay: checkinPromptForDay,
+    CHECKIN_CUSTOM_TAG: CHECKIN_CUSTOM_TAG,
+    CHECKIN_CUSTOM_ASK: CHECKIN_CUSTOM_ASK,
+    CHECKIN_GOAL_MAX: CHECKIN_GOAL_MAX,
+    GROW_STAGES: GROW_STAGES,
+    GROW_QUESTIONS: GROW_QUESTIONS,
+    growStageForDay: growStageForDay,
+    growBankForDay: growBankForDay,
+    growQuestionForDay: growQuestionForDay,
+    findGrowStage: findGrowStage,
     findCheckinFactor: findCheckinFactor,
+    getWeekGoal: getWeekGoal,
+    setWeekGoal: setWeekGoal,
+    goalText: goalText,
+    goalAsk: goalAsk,
+    goalRatingTag: goalRatingTag,
     getCheckin: getCheckin,
     getOrCreateCheckin: getOrCreateCheckin,
     checkinIsEmpty: checkinIsEmpty,

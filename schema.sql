@@ -105,9 +105,11 @@ create table if not exists public.checkins (
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now(),
 
+  -- 'custom' covers a goal the engineer wrote themselves. The five named tags
+  -- are a starting menu, not the limit of what someone may work on.
   constraint checkins_factor_tag_known check (
     factor_tag is null or factor_tag in
-      ('van_tools', 'safety_first', 'process', 'fault_finding', 'customer')
+      ('van_tools', 'safety_first', 'process', 'fault_finding', 'customer', 'custom')
   ),
   -- Three-way, never binary. A forced yes/no on a middling day gets skipped or
   -- answered dishonestly, so 'mid' is a first-class answer.
@@ -119,6 +121,14 @@ create table if not exists public.checkins (
   constraint checkins_note_short check (
     reflection_note is null or char_length(reflection_note) <= 280
   )
+);
+
+-- `create table if not exists` skips an existing install, so a widened CHECK has
+-- to be rebuilt explicitly. Adds 'custom' for engineer-written goals. Re-runnable.
+alter table public.checkins drop constraint if exists checkins_factor_tag_known;
+alter table public.checkins add constraint checkins_factor_tag_known check (
+  factor_tag is null or factor_tag in
+    ('van_tools', 'safety_first', 'process', 'fault_finding', 'customer', 'custom')
 );
 
 alter table public.checkins enable row level security;
@@ -135,6 +145,38 @@ create unique index if not exists checkins_user_day_factor
   on public.checkins(user_id, day_key, coalesce(factor_tag, ''));
 
 create index if not exists checkins_user_day on public.checkins(user_id, day_key);
+
+-- ── checkin_goals ──────────────────────────────────────────────────────────
+-- One goal per week, set by the engineer. Deliberately a separate table from
+-- `weeks`: the CTAP target lives there and is the employer's number, while this
+-- is the engineer's own, and the two must not be confusable. Same owner-only
+-- rule as everything else in the diary — see ADR-0013.
+create table if not exists public.checkin_goals (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references auth.users(id) on delete cascade,
+  week_key     text not null,             -- 'YYYY-MM-DD' (Monday), as in weeks
+  factor_tag   text not null,
+  custom_text  text,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+
+  constraint checkin_goals_factor_tag_known check (
+    factor_tag in ('van_tools', 'safety_first', 'process', 'fault_finding', 'customer', 'custom')
+  ),
+  -- A goal is a sentence, not a plan. Short enough that it stays a goal.
+  constraint checkin_goals_text_short check (
+    custom_text is null or char_length(custom_text) <= 80
+  ),
+  unique(user_id, week_key)
+);
+
+alter table public.checkin_goals enable row level security;
+
+create policy "checkin_goals: own rows only"
+  on public.checkin_goals
+  for all
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
 
 -- ── updated_at trigger (shared function) ───────────────────────────────────
 create or replace function public.set_updated_at()
@@ -155,4 +197,8 @@ create or replace trigger weeks_updated_at
 
 create or replace trigger checkins_updated_at
   before update on public.checkins
+  for each row execute procedure public.set_updated_at();
+
+create or replace trigger checkin_goals_updated_at
+  before update on public.checkin_goals
   for each row execute procedure public.set_updated_at();

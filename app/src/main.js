@@ -1,5 +1,5 @@
 import { supabase } from './supabase.js';
-import { deleteAllUserData, ensureProfile, loadStateFromSupabase, syncCheckinDay, syncStateToSupabase, syncWeekJobLogs, syncWeekMeta, updateProfileField } from './db.js';
+import { deleteAllUserData, ensureProfile, loadStateFromSupabase, syncCheckinDay, syncStateToSupabase, syncWeekGoal, syncWeekJobLogs, syncWeekMeta, updateProfileField } from './db.js';
 import { checkAndMigrate } from './migrate.js';
 import { showAuthScreen } from './auth.js';
 
@@ -92,6 +92,15 @@ window.__ctapSyncCheckin = async function(dayKey) {
     await syncCheckinDay(_currentUser, window.__ctapGetState(), dayKey);
   } catch (e) {
     console.warn('Check-in sync failed:', e.message);
+  }
+};
+
+window.__ctapSyncGoal = async function(weekKey) {
+  if (!navigator.onLine || !_currentUser || !window.__ctapGetState) return;
+  try {
+    await syncWeekGoal(_currentUser, window.__ctapGetState(), weekKey);
+  } catch (e) {
+    console.warn('Goal sync failed:', e.message);
   }
 };
 

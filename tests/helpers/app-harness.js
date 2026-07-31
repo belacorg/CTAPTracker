@@ -48,7 +48,23 @@ function runScript(window, src) {
   window.document.body.appendChild(el);
 }
 
-export function bootApp({ speechRecognition = null, online = true } = {}) {
+// Pins `new Date()` and Date.now() to a fixed instant, leaving every explicit
+// `new Date(...)` alone. Anything keyed on the weekday — the GROW arc runs Goal
+// on Monday through Will on Friday — is otherwise a different test each day.
+function freezeDate(window, iso) {
+  const RealDate = window.Date;
+  const fixed = new RealDate(iso).getTime();
+  function FakeDate(...args) {
+    return args.length === 0 ? new RealDate(fixed) : new RealDate(...args);
+  }
+  FakeDate.prototype = RealDate.prototype;
+  FakeDate.now = () => fixed;
+  FakeDate.parse = RealDate.parse;
+  FakeDate.UTC = RealDate.UTC;
+  window.Date = FakeDate;
+}
+
+export function bootApp({ speechRecognition = null, online = true, now = null } = {}) {
   const dom = new JSDOM('<!DOCTYPE html><html><body><div id="app"></div></body></html>', {
     runScripts: 'dangerously',
     url: 'http://localhost:3737/',
@@ -59,6 +75,8 @@ export function bootApp({ speechRecognition = null, online = true } = {}) {
   const advance = installClock(window);
   if (speechRecognition) window.SpeechRecognition = speechRecognition;
   if (!online) Object.defineProperty(window.navigator, 'onLine', { value: false, configurable: true });
+  // Before the scripts run — app.js resolves the current week at load time.
+  if (now) freezeDate(window, now);
 
   runScript(window, dataSrc);
   runScript(window, appSrc);
