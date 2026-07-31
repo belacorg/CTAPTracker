@@ -26,6 +26,10 @@ let deleteAccountStep = 'idle';
 let howToExpanded = false;
 let graphWeekKey = getWeekKey(new Date());
 let graphSelectedDay = null;
+// ── Daily check-in ──
+let checkinSheetOpen = false;
+let checkinDayKey = null;      // the day being checked in on (always today)
+let checkinDraft = null;       // { ratings: {tag: rating}, note } — uncommitted
 // ── Voice logging ──
 let voiceSheetOpen = false;
 let voiceStatus = 'idle';      // idle | listening | parsed | typing | error
@@ -153,6 +157,8 @@ window.__ctapInit = function(loadedState, profile, user) {
   if (profile) {
     localStorage.setItem('jcpd_theme', profile.theme || 'dark');
     localStorage.setItem('jcpd_coach_mode', profile.coach_mode ? 'true' : 'false');
+    // Absent on an install whose schema predates the column — default to on.
+    localStorage.setItem('jcpd_checkin_on', profile.checkin_enabled === false ? 'false' : 'true');
   }
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(function() {});
@@ -181,6 +187,7 @@ window.__ctapSetOffline = function(offline) {
   // Signal can drop while the engineer is sat on the Log tab — now the default
   // landing tab, so this is common. Move them off it rather than let them log
   // entries that the next successful load would discard.
+  if (offline && !wasOffline && checkinSheetOpen) closeCheckinSheet();
   if (offline && !wasOffline && activeTab === 'log') {
     if (voiceSheetOpen) closeVoiceSheet();
     activeTab = 'dashboard';
@@ -219,6 +226,7 @@ function buildApp() {
     ${buildWeekSummarySheet()}
     ${buildCashOutSheet()}
     ${buildVoiceSheet()}
+    ${buildCheckinSheet()}
     <div class="toast" id="toast"></div>
   `;
 }
@@ -449,6 +457,7 @@ function buildDashboard() {
       ${contextLine ? `<div class="hero-context-line">${contextLine}</div>` : ''}
     </div>
 
+    ${isCurrentWeek ? buildCheckinCard() : ''}
     ${isCurrentWeek ? buildDeficitClearedCard() : ''}
     ${isCurrentWeek ? buildCoachCard() : ''}
 
@@ -900,6 +909,34 @@ function buildHistory() {
       const barCls = earned === 0 ? 'zero' : bonus ? 'green' : 'grey';
       return `<div class="trend-col" data-goto-week="${wk}"><div class="trend-bar ${barCls}" style="height:${barH.toFixed(1)}px"></div><div class="trend-wk-label${bonus ? ' green' : ''}">W${isoWkNum(wk)}</div></div>`;
     }).join('');
+    // ── Self-rating dots ──
+    // One dot per week, on the same columns as the bars above. Put side by side
+    // and left alone: no correlation line, no "the weeks you rated X earned
+    // more". If there's a pattern here it is the engineer's to spot, and theirs
+    // to disagree with. See ADR-0012.
+    let dotsHTML = '';
+    if (isCheckinOn()) {
+      const anyRated = chartWeeks.some(wk => weekCheckinAverage(state, wk) !== null);
+      if (anyRated) {
+        const dots = chartWeeks.map(wk => {
+          const wa = weekCheckinAverage(state, wk);
+          const band = checkinBand(wa ? wa.avg : null);
+          const title = wa
+            ? `${wa.n} self-${wa.n === 1 ? 'rating' : 'ratings'} that week`
+            : 'No check-ins that week';
+          return `<div class="trend-dot-col"><span class="trend-dot ${band}" title="${title}"></span></div>`;
+        }).join('');
+        dotsHTML = `
+          <div class="trend-dots-row">${dots}</div>
+          <div class="trend-dots-legend">
+            <span class="trend-dot-label">Your check-in</span>
+            <span class="trend-dot-key"><span class="trend-dot red"></span>not really</span>
+            <span class="trend-dot-key"><span class="trend-dot amber"></span>so-so</span>
+            <span class="trend-dot-key"><span class="trend-dot green"></span>mostly yes</span>
+          </div>`;
+      }
+    }
+
     trendHTML = `
       <div class="trend-chart-wrap">
         <div class="trend-header">
@@ -907,6 +944,7 @@ function buildHistory() {
           <span class="trend-stat"><span${hitCount > 0 ? ' style="color:var(--green)"' : ''}>${hitCount}</span> / ${chartWeeks.length} weeks bonus</span>
         </div>
         <div class="trend-chart">${cols}</div>
+        ${dotsHTML}
       </div>`;
   }
 
@@ -952,6 +990,7 @@ const SVG_MOON = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" st
 function buildSettings() {
   const isLight = document.body.classList.contains('light');
   const coachOn = isCoachModeOn();
+  const checkinOn = isCheckinOn();
   const baseHours = state.baseHours || 40;
   const wkPct = Math.round((typeof state.weeklyTargetPct === 'number' ? state.weeklyTargetPct : 0.8) * 100);
   const startBal = state.startingBalance || 0;
@@ -982,6 +1021,17 @@ function buildSettings() {
         </div>
         <label class="coach-slider-wrap">
           <input type="checkbox" id="coach-mode-toggle"${coachOn ? ' checked' : ''}>
+          <span class="coach-slider"></span>
+        </label>
+      </div>
+      ${rowDiv()}
+      <div class="st-row">
+        <div style="flex:1;min-width:0">
+          <span class="st-row-label">Daily check-in</span>
+          <div class="st-row-sub">A private diary only you can read</div>
+        </div>
+        <label class="coach-slider-wrap">
+          <input type="checkbox" id="checkin-toggle"${checkinOn ? ' checked' : ''}>
           <span class="coach-slider"></span>
         </label>
       </div>
@@ -2224,6 +2274,184 @@ function attachVoiceSheetListeners() {
   });
 }
 
+// ── Daily check-in ─────────────────────────────────────────────────────────
+// A diary the engineer keeps for themselves. Nobody else can read it, nothing
+// here compares them to another engineer, and no surface draws a conclusion on
+// their behalf. See ADR-0012 before adding anything that says "because".
+
+function buildCheckinCard() {
+  if (!isCheckinOn()) return '';
+  // Check-ins live in their own table and sync per-day, so an offline write
+  // would be discarded by the next successful load — exactly the reason the Log
+  // tab goes dead offline. Same call here rather than a second data-loss path.
+  if (_isOffline) return '';
+  const todayKey = getTodayKey();
+  const entry = getCheckin(state, todayKey);
+  const done = !checkinIsEmpty(entry);
+
+  if (done) {
+    const count = checkinAnsweredCount(entry);
+    return `
+      <button class="checkin-card checkin-card-done" id="checkin-open">
+        <span class="checkin-card-tick">✓</span>
+        <span class="checkin-card-txt">
+          <strong>Checked in today</strong>
+          <small>${count} ${count === 1 ? 'answer' : 'answers'} — tap to change</small>
+        </span>
+      </button>`;
+  }
+
+  const prompt = checkinPromptForDay(todayKey);
+  return `
+    <button class="checkin-card" id="checkin-open">
+      <span class="checkin-card-txt">
+        <strong>Today's check-in</strong>
+        <small>${prompt.text}</small>
+      </span>
+      <span class="checkin-card-go">Under a minute ›</span>
+    </button>`;
+}
+
+function buildCheckinBody() {
+  const dk = checkinDayKey || getTodayKey();
+  const factors = checkinFactorsForDay(dk);
+  const prompt = checkinPromptForDay(dk);
+  const draft = checkinDraft || { ratings: {}, note: '' };
+  const warning = checkinNoteWarning(draft.note);
+  const remaining = CHECKIN_NOTE_MAX - (draft.note || '').length;
+
+  const factorRows = factors.map(f => `
+    <div class="checkin-factor">
+      <div class="checkin-factor-ask">${f.ask}</div>
+      <div class="checkin-scale" role="group" aria-label="${f.ask}">
+        ${CHECKIN_RATINGS.map(r => `
+          <button class="checkin-opt${draft.ratings[f.tag] === r.value ? ' selected ' + r.value : ''}"
+            data-checkin-factor="${f.tag}" data-checkin-rating="${r.value}"
+            aria-pressed="${draft.ratings[f.tag] === r.value}">${r.label}</button>`).join('')}
+      </div>
+    </div>`).join('');
+
+  return `
+    <p class="checkin-intro">Only you can see this. Skip anything you don't fancy answering.</p>
+    ${factorRows}
+    <div class="checkin-factor">
+      <div class="checkin-factor-ask">${prompt.text}</div>
+      <textarea id="checkin-note" class="checkin-note" rows="3"
+        maxlength="${CHECKIN_NOTE_MAX}"
+        placeholder="${CHECKIN_NOTE_PLACEHOLDER}">${(draft.note || '').replace(/</g, '&lt;')}</textarea>
+      <div class="checkin-note-foot">
+        ${warning ? `<span class="checkin-note-warn">${warning}</span>` : '<span></span>'}
+        <span class="checkin-note-count${remaining < 30 ? ' low' : ''}">${remaining}</span>
+      </div>
+    </div>
+    <button class="checkin-save" id="checkin-save">Save check-in</button>
+  `;
+}
+
+function buildCheckinSheet() {
+  return `
+    <div class="forecast-sheet checkin-sheet${checkinSheetOpen ? '' : ' hidden'}" id="checkin-sheet">
+      <div class="forecast-backdrop" id="checkin-backdrop"></div>
+      <div class="forecast-panel">
+        <div class="forecast-handle"></div>
+        <div class="forecast-header">
+          <span class="forecast-title">Check-in</span>
+          <button class="forecast-close" id="checkin-close">✕</button>
+        </div>
+        <div class="forecast-body">${buildCheckinBody()}</div>
+      </div>
+    </div>`;
+}
+
+// Swap only the body, so the panel doesn't re-animate and the keyboard stays
+// put while the engineer is part-way through the note.
+function refreshCheckinSheet() {
+  const body = document.querySelector('#checkin-sheet .forecast-body');
+  if (!body) { render(); return; }
+  body.innerHTML = buildCheckinBody();
+  attachCheckinSheetListeners();
+}
+
+function openCheckinSheet() {
+  if (_isOffline) { showToast("You're offline — check-in unavailable"); return; }
+  checkinDayKey = getTodayKey();
+  const existing = getCheckin(state, checkinDayKey);
+  checkinDraft = {
+    ratings: Object.assign({}, (existing && existing.ratings) || {}),
+    note: (existing && existing.note) || ''
+  };
+  checkinSheetOpen = true;
+  const sheet = document.getElementById('checkin-sheet');
+  if (sheet) sheet.classList.remove('hidden');
+  refreshCheckinSheet();
+}
+
+function closeCheckinSheet() {
+  checkinSheetOpen = false;
+  checkinDraft = null;
+  const sheet = document.getElementById('checkin-sheet');
+  if (sheet) sheet.classList.add('hidden');
+  render();
+}
+
+// Everything is optional, so this writes whatever is there — including an entry
+// that is entirely blank, which is a legitimate "opened it, nothing to say".
+function commitCheckin() {
+  const dk = checkinDayKey || getTodayKey();
+  const draft = checkinDraft || { ratings: {}, note: '' };
+  const entry = getOrCreateCheckin(state, dk);
+  entry.ratings = Object.assign({}, draft.ratings);
+  entry.note = (draft.note || '').slice(0, CHECKIN_NOTE_MAX);
+  entry.promptId = checkinPromptForDay(dk).id;
+  saveState(state);
+  if (window.__ctapSyncCheckin) window.__ctapSyncCheckin(dk);
+  showToast('Check-in saved');
+  closeCheckinSheet();
+}
+
+function attachCheckinSheetListeners() {
+  document.querySelectorAll('[data-checkin-rating]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!checkinDraft) return;
+      const tag = btn.dataset.checkinFactor;
+      const val = btn.dataset.checkinRating;
+      // Tapping the selected answer again clears it — skipping stays available
+      // after you've answered, so a mis-tap isn't a permanent wrong answer.
+      if (checkinDraft.ratings[tag] === val) delete checkinDraft.ratings[tag];
+      else checkinDraft.ratings[tag] = val;
+      refreshCheckinSheet();
+    });
+  });
+
+  const note = document.getElementById('checkin-note');
+  if (note) {
+    note.addEventListener('input', () => {
+      if (!checkinDraft) return;
+      const hadWarning = !!checkinNoteWarning(checkinDraft.note);
+      checkinDraft.note = note.value;
+      const hasWarning = !!checkinNoteWarning(checkinDraft.note);
+      // Only re-render when the warning appears or clears — a full body swap on
+      // every keystroke would fight the caret.
+      if (hadWarning !== hasWarning) {
+        const caret = note.selectionStart;
+        refreshCheckinSheet();
+        const fresh = document.getElementById('checkin-note');
+        if (fresh) { fresh.focus(); fresh.setSelectionRange(caret, caret); }
+      } else {
+        const counter = document.querySelector('#checkin-sheet .checkin-note-count');
+        if (counter) {
+          const left = CHECKIN_NOTE_MAX - note.value.length;
+          counter.textContent = left;
+          counter.classList.toggle('low', left < 30);
+        }
+      }
+    });
+  }
+
+  const save = document.getElementById('checkin-save');
+  if (save) save.addEventListener('click', commitCheckin);
+}
+
 // ── Week Summary Sheet ─────────────────────────────────────────────────────
 function buildWeekSummarySheet() {
   const emptySheet = '<div class="week-summary-sheet hidden" id="week-summary-sheet"><div class="forecast-backdrop" id="summary-backdrop"></div><div class="forecast-panel"></div></div>';
@@ -2715,6 +2943,15 @@ function attachListeners() {
     render();
   });
 
+  // Daily check-in toggle
+  const checkinToggle = document.getElementById('checkin-toggle');
+  if (checkinToggle) checkinToggle.addEventListener('change', () => {
+    const on = checkinToggle.checked;
+    localStorage.setItem('jcpd_checkin_on', on ? 'true' : 'false');
+    if (window.__ctapSyncProfile) window.__ctapSyncProfile({ checkin_enabled: on });
+    render();
+  });
+
   // Sign out (logged-in view)
   const signOutBtn = document.getElementById('sign-out-btn');
   if (signOutBtn) signOutBtn.addEventListener('click', async () => {
@@ -3063,10 +3300,12 @@ function attachListeners() {
   const summaryPanel  = document.querySelector('#week-summary-sheet .forecast-panel');
   const cashoutPanel  = document.querySelector('#cashout-sheet .forecast-panel');
   const voicePanel    = document.querySelector('#voice-sheet .forecast-panel');
+  const checkinPanel  = document.querySelector('#checkin-sheet .forecast-panel');
   addSheetSwipe(forecastPanel, closeForecastSheet);
   addSheetSwipe(summaryPanel,  closeWeekSummary);
   addSheetSwipe(cashoutPanel,  closeCashOutSheet);
   addSheetSwipe(voicePanel,    closeVoiceSheet);
+  addSheetSwipe(checkinPanel,  closeCheckinSheet);
 
   // Voice logging
   const voiceBtn = document.getElementById('voice-btn');
@@ -3076,6 +3315,15 @@ function attachListeners() {
   const voiceBackdrop = document.getElementById('voice-backdrop');
   if (voiceBackdrop) voiceBackdrop.addEventListener('click', closeVoiceSheet);
   attachVoiceSheetListeners();
+
+  // Daily check-in
+  const checkinOpen = document.getElementById('checkin-open');
+  if (checkinOpen) checkinOpen.addEventListener('click', openCheckinSheet);
+  const checkinClose = document.getElementById('checkin-close');
+  if (checkinClose) checkinClose.addEventListener('click', closeCheckinSheet);
+  const checkinBackdrop = document.getElementById('checkin-backdrop');
+  if (checkinBackdrop) checkinBackdrop.addEventListener('click', closeCheckinSheet);
+  attachCheckinSheetListeners();
 
   // CTAP tile → cash-out sheet
   const ctapTile = document.getElementById('ctap-tile');

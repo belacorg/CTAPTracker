@@ -768,6 +768,54 @@ body {
 }
 .trend-wk-label.green { color: var(--green); }
 
+/* Self-rating dots — same 6px gap and flex:1 columns as .trend-chart, so each
+   dot sits under its own week's bar. Juxtaposition is the whole point. */
+.trend-dots-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 0.5px solid var(--sep);
+}
+.trend-dot-col {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+.trend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+}
+.trend-dot.green { background: var(--green); }
+.trend-dot.amber { background: var(--amber); }
+.trend-dot.red   { background: var(--red); }
+/* A week with no check-ins is hollow, never red — silence is not a bad score. */
+.trend-dot.none  { background: transparent; border: 1px solid var(--sep); }
+.trend-dots-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 8px;
+}
+.trend-dot-label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted2);
+}
+.trend-dot-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.625rem;
+  color: var(--muted2);
+}
+
 /* ── History ── */
 .history-item {
   background: var(--surface);
@@ -3684,3 +3732,95 @@ body.light .lj-sec-sticky { background: var(--bg); }
   margin-top: 7px;
   line-height: 1.35;
 }
+
+/* ── Daily check-in ────────────────────────────────────────────────────────
+   Quieter than .lj-voice on purpose. The check-in is an invitation, not the
+   app's main action — if it shouts as loud as logging a job it starts reading
+   as something asked of the engineer rather than offered to them. */
+.checkin-card {
+  width: 100%;
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--tile-border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  text-align: left; cursor: pointer; font-family: inherit;
+  color: var(--fg);
+  -webkit-tap-highlight-color: transparent;
+}
+.checkin-card:active { background: var(--surface2); }
+.checkin-card-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.checkin-card-txt strong { font-size: 0.92rem; font-weight: 700; }
+.checkin-card-txt small { font-size: 0.76rem; color: var(--muted); line-height: 1.35; }
+.checkin-card-go {
+  flex: 0 0 auto;
+  font-size: 0.72rem; font-weight: 600; color: var(--accent); white-space: nowrap;
+}
+.checkin-card-done { border-color: var(--sep); }
+.checkin-card-tick {
+  flex: 0 0 auto;
+  width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(95, 210, 138, 0.16); color: var(--green);
+  font-size: 0.8rem; font-weight: 700;
+}
+
+.checkin-intro {
+  font-size: 0.78rem; color: var(--muted); line-height: 1.4;
+  margin-bottom: 16px;
+}
+.checkin-factor { margin-bottom: 18px; }
+.checkin-factor-ask {
+  font-size: 0.88rem; font-weight: 600; color: var(--fg);
+  margin-bottom: 8px; line-height: 1.35;
+}
+.checkin-scale { display: flex; gap: 6px; }
+/* Three equal targets. Nothing is pre-selected and nothing is styled as the
+   right answer — "so-so" must not read as the option you avoid picking. */
+.checkin-opt {
+  flex: 1;
+  padding: 11px 6px;
+  background: var(--surface2);
+  border: 1px solid var(--sep);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 0.8rem; font-weight: 600; font-family: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.checkin-opt.selected { color: var(--fg); border-width: 1.5px; }
+.checkin-opt.selected.yes { border-color: var(--green); background: rgba(95, 210, 138, 0.14); }
+.checkin-opt.selected.mid { border-color: var(--amber); background: rgba(255, 200, 87, 0.14); }
+.checkin-opt.selected.no  { border-color: var(--red);   background: rgba(255, 112, 96, 0.14); }
+
+.checkin-note {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--sep);
+  border-radius: var(--radius-sm);
+  padding: 11px 12px;
+  color: var(--fg);
+  font-size: 0.88rem; font-family: inherit; line-height: 1.45;
+  resize: none;
+}
+.checkin-note::placeholder { color: var(--muted2); }
+.checkin-note:focus { outline: none; border-color: var(--accent); }
+.checkin-note-foot {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+  margin-top: 6px;
+}
+.checkin-note-warn { font-size: 0.72rem; color: var(--amber); line-height: 1.35; }
+.checkin-note-count { font-size: 0.7rem; color: var(--muted2); font-variant-numeric: tabular-nums; }
+.checkin-note-count.low { color: var(--amber); }
+
+.checkin-save {
+  width: 100%;
+  padding: 14px;
+  background: var(--accent); color: var(--jcpd-accent-ink);
+  border: none; border-radius: var(--radius-sm);
+  font-size: 0.92rem; font-weight: 700; font-family: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.checkin-save:active { filter: brightness(0.93); }

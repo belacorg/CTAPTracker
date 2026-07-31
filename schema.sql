@@ -10,10 +10,16 @@ create table if not exists public.users_profile (
   starting_balance numeric not null default 0,
   theme            text not null default 'dark',
   coach_mode       boolean not null default false,
+  checkin_enabled  boolean not null default true,
   migration_complete boolean not null default false,
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now()
 );
+
+-- `create table if not exists` above skips existing installs, so new columns
+-- need spelling out separately. Safe to re-run.
+alter table public.users_profile
+  add column if not exists checkin_enabled boolean not null default true;
 
 alter table public.users_profile enable row level security;
 
@@ -74,6 +80,62 @@ create policy "job_logs: own rows only"
 create index if not exists job_logs_user_week on public.job_logs(user_id, week_key);
 create index if not exists job_logs_user_day  on public.job_logs(user_id, day_key);
 
+-- ── checkins ───────────────────────────────────────────────────────────────
+-- The daily check-in diary. Self-facing only: there is deliberately no policy
+-- here granting anyone but the author read access, and no service-role view
+-- aggregating across engineers. If a future requirement asks for one, that is
+-- a change to what this feature IS, not a schema tweak — see ADR-0012.
+--
+-- There is no column for a customer name, address, or job reference. That is a
+-- deliberate omission, not an oversight: the schema is the enforcement point,
+-- so the data cannot exist even if the UI is bypassed.
+--
+-- One row per answer. A day the engineer answers fully writes three rows: two
+-- factor ratings (factor_tag set, rating set) and one reflection note
+-- (factor_tag null, prompt_id set). Anything can be skipped, so any of those
+-- rows may be absent and `rating` may be null on a row that exists.
+create table if not exists public.checkins (
+  id               uuid primary key default gen_random_uuid(),
+  user_id          uuid not null references auth.users(id) on delete cascade,
+  day_key          date not null,
+  factor_tag       text,
+  rating           text,
+  prompt_id        text,
+  reflection_note  text,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now(),
+
+  constraint checkins_factor_tag_known check (
+    factor_tag is null or factor_tag in
+      ('van_tools', 'safety_first', 'process', 'fault_finding', 'customer')
+  ),
+  -- Three-way, never binary. A forced yes/no on a middling day gets skipped or
+  -- answered dishonestly, so 'mid' is a first-class answer.
+  constraint checkins_rating_known check (
+    rating is null or rating in ('no', 'mid', 'yes')
+  ),
+  -- Short by design: this is a feeling, not an incident report. A long note is
+  -- where job detail starts creeping in.
+  constraint checkins_note_short check (
+    reflection_note is null or char_length(reflection_note) <= 280
+  )
+);
+
+alter table public.checkins enable row level security;
+
+create policy "checkins: own rows only"
+  on public.checkins
+  for all
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+-- coalesce rather than `nulls not distinct` so this works on any PG version:
+-- the reflection row (factor_tag null) still gets exactly one slot per day.
+create unique index if not exists checkins_user_day_factor
+  on public.checkins(user_id, day_key, coalesce(factor_tag, ''));
+
+create index if not exists checkins_user_day on public.checkins(user_id, day_key);
+
 -- ── updated_at trigger (shared function) ───────────────────────────────────
 create or replace function public.set_updated_at()
 returns trigger language plpgsql as $$
@@ -89,4 +151,8 @@ create or replace trigger users_profile_updated_at
 
 create or replace trigger weeks_updated_at
   before update on public.weeks
+  for each row execute procedure public.set_updated_at();
+
+create or replace trigger checkins_updated_at
+  before update on public.checkins
   for each row execute procedure public.set_updated_at();

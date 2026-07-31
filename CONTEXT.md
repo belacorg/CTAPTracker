@@ -95,6 +95,37 @@ A per-engineer toggle that controls whether **Coach Insight** surfaces are shown
 Once an engineer has 4+ completed weeks of credited work, the **CTAP target** stops using the static **CTAP percentage** and instead uses a rolling average of recent weeks (scaled by current roster).
 _Avoid_: "average target"
 
+**Check-in**:
+A day's entry in the engineer's private diary — up to two **Factor rating**s and
+one **Reflection note**, all optional. Visible only to the engineer who wrote it:
+there is no team view, no aggregate, and no export, and that is a property of the
+feature rather than a current limitation. Distinct from everything else the app
+stores in that it records how the day *felt*, not what was produced. See ADR-0012.
+_Avoid_: "daily log" (collides with logging jobs), "review", "assessment"
+(both imply someone else reads it)
+
+**Factor**:
+One of five process habits a **Check-in** asks about — van & tools organised,
+safety checks done first, followed good process, confident on fault-finding, good
+customer interaction. Two are asked per day, rotated by date so all five are
+covered across any five consecutive days and the same day always asks the same
+pair.
+_Avoid_: "metric", "KPI" (nothing here is measured against a standard)
+
+**Factor rating**:
+The engineer's own three-way answer to a **Factor** — *not really* / *so-so* /
+*yes*. Three-way rather than binary because a forced yes/no on a middling day
+gets skipped or answered dishonestly. Skippable, and un-tappable after the fact.
+Averaged over a week (no=0, mid=1, yes=2) to produce the week's dot on the trend
+view.
+
+**Reflection note**:
+The short free-text answer to the day's rotating prompt, capped at 280 characters
+by the database. Prompts are framed around feeling and behaviour ("did any job
+feel rushed today?"), never around events, because event framing invites exactly
+the customer and job detail the `checkins` table deliberately has no column for.
+_Avoid_: "job note" (that's the **Shift** note, a different thing entirely)
+
 **Voice draft**:
 The parsed, editable result of speaking a day's work into the Log Job page — a resolved day plus a list of proposed entries (job, count, and a value for variable jobs), alongside any spoken fragments the parser could not match. A **Voice draft** is a proposal, not a record: it holds no place in state until the engineer confirms it, at which point it is written through the same shapes the job tiles produce. See ADR-0007.
 _Avoid_: "voice entry", "voice log" (for the draft itself — the draft is what exists before confirmation)
@@ -106,6 +137,8 @@ _Avoid_: "voice entry", "voice log" (for the draft itself — the draft is what 
 - A week is composed of seven days, each with an optional **Shift**; a **Shift** may be flagged as **Leave** or tagged as a **Mentor Day**
 - **Leave** and **Mentor Day** reductions feed into the week's **Rostered hours**; **NPT** is subtracted from the target *after* **CTAP percentage** is applied
 - **CTAP balance** accumulates across many weeks of progress against **CTAP target**
+- A **Check-in** belongs to one day and holds up to two **Factor rating**s plus one **Reflection note**; a week's ratings average into the single dot shown beneath the weekly credits chart
+- **Check-in** data flows nowhere else: no **Coach Insight** reads it, and nothing in the app compares it between engineers
 
 ## Flagged ambiguities
 

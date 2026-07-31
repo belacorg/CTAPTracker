@@ -184,7 +184,7 @@ function loadState() {
 }
 
 function defaultState() {
-  return { baseHours: 40, weeks: {} };
+  return { baseHours: 40, weeks: {}, checkins: {} };
 }
 
 function saveState(state) {
@@ -1282,6 +1282,172 @@ function voiceBatchCreditHours(items) {
   }, 0);
 }
 
+// ── Daily check-in ─────────────────────────────────────────────────────────
+// A self-facing diary, not a monitoring tool. Nothing here ranks the engineer
+// against anyone, and nothing here draws a conclusion for them — the trend
+// view puts credits and self-ratings side by side and stops. See ADR-0012.
+
+const CHECKIN_FACTORS = [
+  { tag: 'van_tools',     label: 'Van & tools',    ask: 'Van and tools organised?' },
+  { tag: 'safety_first',  label: 'Safety first',   ask: 'Safety checks done before you started?' },
+  { tag: 'process',       label: 'Process',        ask: 'Followed your own process?' },
+  { tag: 'fault_finding', label: 'Fault-finding',  ask: 'Confident on the fault-finding?' },
+  { tag: 'customer',      label: 'Customer',       ask: 'Customer conversations go well?' },
+];
+
+// Three-way, never binary. A yes/no forces a false answer on a middling day.
+const CHECKIN_RATINGS = [
+  { value: 'no',  label: 'Not really' },
+  { value: 'mid', label: 'So-so' },
+  { value: 'yes', label: 'Yes' },
+];
+
+// Feelings and behaviour, not events — "did it feel rushed", never "which job".
+const CHECKIN_PROMPTS = [
+  { id: 'rushed',       text: 'Did any job feel rushed today?' },
+  { id: 'over_explain', text: 'Were you over-explaining to a customer?' },
+  { id: 'differently',  text: "One thing you'd do differently tomorrow?" },
+  { id: 'stuck',        text: 'Did anything leave you stuck longer than it should have?' },
+  { id: 'energy',       text: 'How was your energy by the last job?' },
+  { id: 'asked_help',   text: 'Was there a moment you wanted to ask someone?' },
+  { id: 'went_well',    text: 'What went better than you expected?' },
+];
+
+const CHECKIN_NOTE_MAX = 280;
+const CHECKIN_NOTE_PLACEHOLDER =
+  'No customer names, addresses, or job details — how it felt, not what happened.';
+
+// Days since epoch. Rotation is derived from the date so the same day always
+// asks the same thing — re-opening the sheet must not reshuffle the questions
+// under someone mid-answer.
+function checkinDayIndex(dayKey) {
+  return Math.floor(Date.parse(dayKey + 'T00:00:00Z') / 86400000);
+}
+
+// Two factors a day, stepping by two through a list of five: over any five
+// consecutive days every factor is asked, and no day repeats a factor.
+function checkinFactorsForDay(dayKey) {
+  const n = CHECKIN_FACTORS.length;
+  const i = ((checkinDayIndex(dayKey) * 2) % n + n) % n;
+  return [CHECKIN_FACTORS[i], CHECKIN_FACTORS[(i + 1) % n]];
+}
+
+function checkinPromptForDay(dayKey) {
+  const n = CHECKIN_PROMPTS.length;
+  return CHECKIN_PROMPTS[((checkinDayIndex(dayKey) % n) + n) % n];
+}
+
+function findCheckinFactor(tag) {
+  return CHECKIN_FACTORS.filter(function(f) { return f.tag === tag; })[0] || null;
+}
+
+// ── Check-in state ──
+// state.checkins is keyed by day: { ratings: {tag: rating}, note, promptId }.
+// The Supabase table is row-per-answer; this day-level shape is what the UI
+// reads, the same way week.days holds job objects that become job_logs rows.
+
+function getCheckin(state, dayKey) {
+  return (state.checkins || {})[dayKey] || null;
+}
+
+function getOrCreateCheckin(state, dayKey) {
+  if (!state.checkins) state.checkins = {};
+  if (!state.checkins[dayKey]) state.checkins[dayKey] = { ratings: {}, note: '', promptId: null };
+  if (!state.checkins[dayKey].ratings) state.checkins[dayKey].ratings = {};
+  return state.checkins[dayKey];
+}
+
+// Nothing is required, so "answered" means at least one field carries content.
+function checkinIsEmpty(entry) {
+  if (!entry) return true;
+  const hasRating = Object.keys(entry.ratings || {}).some(function(k) {
+    return !!entry.ratings[k];
+  });
+  return !hasRating && !(entry.note || '').trim();
+}
+
+function checkinAnsweredCount(entry) {
+  if (!entry) return 0;
+  const rated = Object.keys(entry.ratings || {}).filter(function(k) {
+    return !!entry.ratings[k];
+  }).length;
+  return rated + ((entry.note || '').trim() ? 1 : 0);
+}
+
+// ── Weekly self-rating average (the dot row on the trend view) ──
+
+function checkinRatingScore(rating) {
+  if (rating === 'yes') return 2;
+  if (rating === 'mid') return 1;
+  if (rating === 'no') return 0;
+  return null;
+}
+
+// Average of every rating given across the week's seven days, on a 0–2 scale.
+// Returns null when the engineer rated nothing that week — an unrated week
+// shows a hollow dot, not a red one. Silence is not a bad score.
+function weekCheckinAverage(state, weekKey) {
+  const days = weekDays(weekKey);
+  let sum = 0;
+  let n = 0;
+  days.forEach(function(dk) {
+    const entry = (state.checkins || {})[dk];
+    if (!entry) return;
+    Object.keys(entry.ratings || {}).forEach(function(tag) {
+      const score = checkinRatingScore(entry.ratings[tag]);
+      if (score === null) return;
+      sum += score;
+      n += 1;
+    });
+  });
+  if (n === 0) return null;
+  return { avg: sum / n, n: n };
+}
+
+// green = mostly yes, amber = so-so, red = not really. A band, not a verdict:
+// it is the engineer's own answer played back, not the app's assessment.
+function checkinBand(avg) {
+  if (avg === null || avg === undefined) return 'none';
+  if (avg >= 1.5) return 'green';
+  if (avg >= 0.75) return 'amber';
+  return 'red';
+}
+
+// ── Keeping job detail out of the note ──
+// The schema is the real enforcement — there is nowhere to put a customer name.
+// This is the second line: a live warning while typing, so the engineer catches
+// themselves. Deliberately advisory, not a block. Any regex is bypassable, and
+// a save button that refuses to save would break a sub-minute daily habit.
+
+const CHECKIN_NOTE_PATTERNS = [
+  { re: /\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/i,                  why: 'a postcode' },
+  { re: /\b(?:0\d{9,10}|\+44\s?\d{9,10})\b/,                        why: 'a phone number' },
+  { re: /\b\d+[a-z]?\s+[A-Za-z]+\s+(?:road|rd|street|st|avenue|ave|lane|ln|close|drive|dr|way|court|crescent|terrace|grove|gardens)\b/i,
+    why: 'an address' },
+  { re: /\b\d{5,}\b/,                                               why: 'a job or account number' },
+];
+
+function checkinNoteWarning(text) {
+  const t = (text || '').trim();
+  if (!t) return null;
+  for (let i = 0; i < CHECKIN_NOTE_PATTERNS.length; i++) {
+    if (CHECKIN_NOTE_PATTERNS[i].re.test(t)) {
+      return 'That looks like ' + CHECKIN_NOTE_PATTERNS[i].why +
+        '. This is for how it felt, not what happened.';
+    }
+  }
+  return null;
+}
+
+// ── Check-in display toggle (per-engineer, same shape as Coach mode) ────────
+function isCheckinOn() {
+  try {
+    return localStorage.getItem('jcpd_checkin_on') !== 'false';
+  } catch (e) {
+    return true;
+  }
+}
+
 // ── CommonJS export (browser is unaffected; this file is loaded as a plain ──
 // ── <script> in the app, where `module` is undefined and the guard skips).  ─
 if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
@@ -1337,6 +1503,23 @@ if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     parseVoiceLog: parseVoiceLog,
     voiceEntryCreditMins: voiceEntryCreditMins,
     voiceBatchCreditHours: voiceBatchCreditHours,
+    CHECKIN_FACTORS: CHECKIN_FACTORS,
+    CHECKIN_RATINGS: CHECKIN_RATINGS,
+    CHECKIN_PROMPTS: CHECKIN_PROMPTS,
+    CHECKIN_NOTE_MAX: CHECKIN_NOTE_MAX,
+    CHECKIN_NOTE_PLACEHOLDER: CHECKIN_NOTE_PLACEHOLDER,
+    checkinFactorsForDay: checkinFactorsForDay,
+    checkinPromptForDay: checkinPromptForDay,
+    findCheckinFactor: findCheckinFactor,
+    getCheckin: getCheckin,
+    getOrCreateCheckin: getOrCreateCheckin,
+    checkinIsEmpty: checkinIsEmpty,
+    checkinAnsweredCount: checkinAnsweredCount,
+    checkinRatingScore: checkinRatingScore,
+    weekCheckinAverage: weekCheckinAverage,
+    checkinBand: checkinBand,
+    checkinNoteWarning: checkinNoteWarning,
+    isCheckinOn: isCheckinOn,
   };
 }
 

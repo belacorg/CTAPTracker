@@ -34,27 +34,46 @@ export async function updateProfileField(userId, fields) {
 // ── Load state from Supabase ───────────────────────────────────────────────
 
 export async function loadStateFromSupabase(user) {
-  const [profileRes, weeksRes, jobsRes] = await Promise.all([
+  const [profileRes, weeksRes, jobsRes, checkinsRes] = await Promise.all([
     supabase.from('users_profile').select('*').eq('id', user.id).single(),
     supabase.from('weeks').select('*').eq('user_id', user.id),
-    supabase.from('job_logs').select('*').eq('user_id', user.id).order('sort_order')
+    supabase.from('job_logs').select('*').eq('user_id', user.id).order('sort_order'),
+    supabase.from('checkins').select('*').eq('user_id', user.id)
   ]);
 
   if (profileRes.error) throw profileRes.error;
   if (weeksRes.error) throw weeksRes.error;
   if (jobsRes.error) throw jobsRes.error;
+  // A check-in failure must not cost the engineer their job data. The diary is
+  // the optional part of the app; the CTAP ledger is not.
+  if (checkinsRes.error) console.warn('Check-ins failed to load:', checkinsRes.error.message);
 
   const profile = profileRes.data;
   const weeks = weeksRes.data || [];
   const jobs = jobsRes.data || [];
+  const checkins = checkinsRes.error ? [] : (checkinsRes.data || []);
 
   // Reconstruct state object matching the existing app.js shape
   const state = {
     baseHours: profile.base_hours,
     weeklyTargetPct: profile.weekly_target_pct,
     startingBalance: profile.starting_balance,
-    weeks: {}
+    weeks: {},
+    checkins: {}
   };
+
+  // Row-per-answer in Postgres, day-keyed object in the app — the same shape
+  // shift job_logs makes into week.days.
+  for (const row of checkins) {
+    const dk = row.day_key;
+    if (!state.checkins[dk]) state.checkins[dk] = { ratings: {}, note: '', promptId: null };
+    if (row.factor_tag) {
+      if (row.rating) state.checkins[dk].ratings[row.factor_tag] = row.rating;
+    } else {
+      state.checkins[dk].note = row.reflection_note || '';
+      state.checkins[dk].promptId = row.prompt_id || null;
+    }
+  }
 
   // Build weeks map
   for (const wk of weeks) {
@@ -158,12 +177,52 @@ export async function syncWeekJobLogs(user, state, weekKey) {
   }
 }
 
+// ── Sync one day's check-in ───────────────────────────────────────────────
+// Delete-then-insert for the day, so clearing an answer removes its row rather
+// than leaving a stale one behind. Scoped to the single day being edited.
+
+export async function syncCheckinDay(user, state, dayKey) {
+  const entry = (state.checkins || {})[dayKey];
+
+  const { error: delErr } = await supabase
+    .from('checkins')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('day_key', dayKey);
+  if (delErr) throw delErr;
+
+  if (!entry) return;
+
+  const rows = [];
+  for (const [tag, rating] of Object.entries(entry.ratings || {})) {
+    if (!rating) continue;
+    rows.push({ user_id: user.id, day_key: dayKey, factor_tag: tag, rating });
+  }
+  const note = (entry.note || '').trim();
+  if (note) {
+    rows.push({
+      user_id: user.id,
+      day_key: dayKey,
+      factor_tag: null,
+      prompt_id: entry.promptId || null,
+      reflection_note: note.slice(0, 280)
+    });
+  }
+
+  if (rows.length > 0) {
+    const { error: insErr } = await supabase.from('checkins').insert(rows);
+    if (insErr) throw insErr;
+  }
+}
+
 // ── Delete all rows for a user ────────────────────────────────────────────
-// Wipes everything the app stores (job_logs, weeks, users_profile). Does NOT
-// delete the auth.users record — that requires a service-role edge function
-// (see docs/edge-function-delete-auth.md).
+// Wipes everything the app stores (checkins, job_logs, weeks, users_profile).
+// Does NOT delete the auth.users record — that requires a service-role edge
+// function (see docs/edge-function-delete-auth.md).
 
 export async function deleteAllUserData(user) {
+  const { error: checkinsErr } = await supabase.from('checkins').delete().eq('user_id', user.id);
+  if (checkinsErr) throw checkinsErr;
   const { error: jobsErr } = await supabase.from('job_logs').delete().eq('user_id', user.id);
   if (jobsErr) throw jobsErr;
   const { error: weeksErr } = await supabase.from('weeks').delete().eq('user_id', user.id);
