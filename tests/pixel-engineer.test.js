@@ -1,6 +1,16 @@
-// The engineer sprite is ported from Apprentice to Engineer, and the two apps
-// are deliberately separate entities. These guard the separation as much as
-// the drawing: nothing amber, nothing cobalt, no chevron.
+// The mascot is a fuzzball, and he has to stay clear of two other things —
+// in opposite directions.
+//
+//   - Nothing of Apprentice to Engineer: that app's mascot wears amber and
+//     cobalt with its chevron. The two apps are deliberately separate entities.
+//   - Nothing of British Gas's advertising characters: those are Centrica's own
+//     IP, and this is a personal tool carrying internal job codes. Borrowing the
+//     employer's mascot would make it read as an official app.
+//
+// The second can't be asserted mechanically — "is this an original character"
+// isn't a property of the pixel grid. What is testable is that he stays a
+// simple, low-resolution blue blob of this app's own making rather than drifting
+// toward a detailed likeness of anything. See ADR-0011.
 import { describe, it, expect } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
@@ -20,6 +30,22 @@ function boot() {
   return dom.window;
 }
 
+// Decode the compiled runs back to a grid — several checks below are about
+// shape, which the path strings alone don't show.
+const W = 24, H = 24;
+function gridOf(frame) {
+  const g = Array.from({ length: H }, () => new Array(W).fill(null));
+  for (const p of frame) {
+    for (const seg of p.d.split('z').filter(Boolean)) {
+      const m = seg.match(/M(\d+) (\d+)h(\d+)/);
+      if (!m) continue;
+      const [, x, y, run] = m.map(Number);
+      for (let i = 0; i < run; i++) g[y][x + i] = p.key;
+    }
+  }
+  return g;
+}
+
 describe('no Apprentice to Engineer branding comes across', () => {
   const A2E_AMBER = ['#FDAF3F', '#fdaf3f'];
   const A2E_COBALT = ['#1002A0', '#1002a0'];
@@ -30,28 +56,55 @@ describe('no Apprentice to Engineer branding comes across', () => {
     [...A2E_AMBER, ...A2E_COBALT].forEach(c => expect(values).not.toContain(c));
   });
 
-  it('has no chevron on his chest', () => {
-    // 'A' was the chevron's colour key in the original rows.
+  it('has no chevron on him', () => {
+    // 'A' was the chevron's colour key in the original A2E rows.
     const body = boot().__pixelEngineer.body;
     expect(body.join('')).not.toContain('A');
   });
+});
 
-  it('wears a cyan yoke across both shoulders in one unbroken run', () => {
-    const body = boot().__pixelEngineer.body;
-    const yoke = body.filter(r => r.includes('C'));
-    expect(yoke.length).toBeGreaterThan(0);
-    // No row may break the cyan into separate patches — that reads as spots.
-    yoke.forEach(row => expect(row.replace(/[^C]/g, ' ').trim().split(/\s+/)).toHaveLength(1));
+describe('he stays a simple blue fuzzball', () => {
+  it('is built from a handful of flat colours, not a detailed likeness', () => {
+    // A low palette count is what keeps him a blob rather than a rendering of
+    // some specific character.
+    const p = boot().__pixelEngineer.palette;
+    expect(Object.keys(p).length).toBeLessThanOrEqual(8);
   });
 
-  it('keeps a cap, not a hard hat — and it is not yellow', () => {
-    const w = boot();
-    const body = w.__pixelEngineer.body;
-    const capRows = body.slice(0, 5).join('');
-    // Crown is uniform navy (B), and the brim below it is solid ink.
-    expect(capRows).toContain('B');
-    expect(capRows).not.toContain('C');
-    expect(body[5]).toBe('KKKKKKKKKKKKKK');
+  it('is round — no corner of the canvas is his', () => {
+    const frames = boot().__pixelEngineer.frames;
+    const g = gridOf(frames.ready[0]);
+    // The ball occupies the left; the toolbox sits bottom-right, so only the
+    // three corners clear of it are checked.
+    expect(g[0][0]).toBeNull();
+    expect(g[0][W - 1]).toBeNull();
+    expect(g[H - 1][0]).toBeNull();
+  });
+
+  it('has a ragged outline, because that is the only thing saying "fur"', () => {
+    // A smooth silhouette at this size reads as a bouncing ball. Count how many
+    // rows differ in where their ink starts — a clean circle changes gradually,
+    // fur jitters.
+    const body = boot().__pixelEngineer.body;
+    const starts = body.map(r => r.search(/[^.]/));
+    const jumps = starts.slice(1).filter((s, i) => Math.abs(s - starts[i]) >= 1).length;
+    expect(jumps).toBeGreaterThan(4);
+  });
+
+  it('has two eyes, level with each other', () => {
+    const g = gridOf(boot().__pixelEngineer.frames.ready[0]);
+    const whiteRows = new Set();
+    const whiteCols = [];
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (g[y][x] === 'W') { whiteRows.add(y); whiteCols.push(x); }
+      }
+    }
+    expect(whiteRows.size).toBeGreaterThan(0);
+    // Two separated clusters of white, on the same rows.
+    const cols = [...new Set(whiteCols)].sort((a, b) => a - b);
+    const gaps = cols.slice(1).filter((c, i) => c - cols[i] > 1);
+    expect(gaps, 'a gap between the two eyes').toHaveLength(1);
   });
 });
 
@@ -65,78 +118,66 @@ describe('sprite frames', () => {
         expect(frame.length).toBeGreaterThan(0);
         frame.forEach(p => {
           expect(p.d).toMatch(/^M[\d\s]/);
-          expect(p.key).toMatch(/^[KSCBLGT]$/);
+          expect(p.key).toMatch(/^[KLCBWGT]$/);
         });
       });
     }
   });
 
-  it('never draws into the top row, so his cap cannot clip', () => {
-    // The canvas keeps a spare row top and bottom for exactly this reason.
+  it('never draws into the outer ring, so nothing clips at the lane edge', () => {
+    // The greet bounce is the tight one — he hops upward, and the canvas keeps
+    // a spare row top and bottom for exactly that.
     const frames = boot().__pixelEngineer.frames;
-    Object.values(frames).flat().forEach(frame => {
-      frame.forEach(p => expect(p.d).not.toMatch(/M\d+ 0h/));
-    });
-  });
-
-  it('leaves no hole under the cap when he tips it', () => {
-    // The cap lifts clear of the head in the greet frames. Without a scalp
-    // filling the rows it vacates, the card background showed through and the
-    // cap read as floating rather than raised.
-    const frames = boot().__pixelEngineer.frames;
-    // Decode the compiled runs back to a grid. The raised hand is skin too and
-    // sits above the head, so row-level reasoning misreads it — what actually
-    // matters is that no background shows through the middle of his head.
-    const gridOf = (frame) => {
-      const g = {};
-      frame.forEach(p => {
-        for (const seg of p.d.split('z').filter(Boolean)) {
-          const m = seg.match(/M(\d+) (\d+)h(\d+)/);
-          if (!m) continue;
-          const [, x, y, run] = m.map(Number);
-          for (let i = 0; i < run; i++) g[`${x + i},${y}`] = p.key;
+    Object.entries(frames).forEach(([name, list]) => {
+      list.forEach((frame, i) => {
+        const g = gridOf(frame);
+        for (let x = 0; x < W; x++) {
+          expect(g[0][x], `${name}[${i}] top`).toBeNull();
+          expect(g[H - 1][x], `${name}[${i}] bottom`).toBeNull();
+        }
+        for (let y = 0; y < H; y++) {
+          expect(g[y][0], `${name}[${i}] left`).toBeNull();
+          expect(g[y][W - 1], `${name}[${i}] right`).toBeNull();
         }
       });
-      return g;
-    };
-    // Columns inside the face, clear of the arm at either side. The crown
-    // narrows towards the top, so the brim is the reliable anchor: it is the
-    // one full-width solid row, and everything below it down to the chin is
-    // head — scalp or face — with no background between.
-    const FACE_COLS = [5, 6, 7, 8, 9, 10, 11, 12];
-    const BRIM_COLS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
-    const FACE_BOTTOM = 16;
-
-    frames.greet.forEach((frame, i) => {
-      const g = gridOf(frame);
-      const filled = (x, y) => !!g[`${x},${y}`];
-      const brim = [...Array(FACE_BOTTOM).keys()].filter(y => BRIM_COLS.every(x => filled(x, y))).pop();
-      expect(brim, `greet[${i}] has a cap brim`).toBeDefined();
-      for (let y = brim + 1; y <= FACE_BOTTOM; y++) {
-        FACE_COLS.forEach(x => expect(filled(x, y), `greet[${i}] ${x},${y}`).toBe(true));
-      }
     });
   });
 
-  it('carries the toolbox everywhere except when he is talking', () => {
-    // A raised spanner read as a trident, and couldn't be held while walking.
-    // The toolbox is carried, so it stays with him — but the Coach card pose
-    // needs both hands free to gesture.
+  it('keeps hold of the toolbox in every pose', () => {
+    // He turned up to work. Unlike the engineer before him he has no hands to
+    // free up for gesturing, so he never puts it down — including while talking.
     const frames = boot().__pixelEngineer.frames;
     const steel = f => f.some(p => p.key === 'G');   // the toolbox handle
-    expect(frames.ready.every(steel)).toBe(true);
-    expect(frames.walk.every(steel)).toBe(true);
-    expect(frames.greet.every(steel)).toBe(true);
-    expect(frames.talk.some(steel)).toBe(false);
+    Object.entries(frames).forEach(([name, list]) => {
+      list.forEach((frame, i) => expect(steel(frame), `${name}[${i}]`).toBe(true));
+    });
+  });
+
+  it('actually leaves the ground when he bounces hello', () => {
+    const frames = boot().__pixelEngineer.frames;
+    const topOf = (frame) => {
+      const g = gridOf(frame);
+      for (let y = 0; y < H; y++) if (g[y].some(Boolean)) return y;
+      return H;
+    };
+    const rest = topOf(frames.ready[0]);
+    const peak = Math.min(...frames.greet.map(topOf));
+    expect(peak).toBeLessThan(rest);
   });
 
   it('opens his mouth in the talking pose, and not otherwise', () => {
+    // He has no jaw, so the mouth is the whole expression — it must be a real
+    // difference, not a pixel.
     const frames = boot().__pixelEngineer.frames;
-    // The mouth overlay widens the face's dark run; compare path counts of ink.
-    const inkRuns = f => (f.find(p => p.key === 'K') || { d: '' }).d.split('M').length;
-    const talkMax = Math.max(...frames.talk.map(inkRuns));
-    const restMax = Math.max(...frames.ready.map(inkRuns));
-    expect(talkMax).toBeGreaterThan(restMax - 1);
+    const inkCount = (frame) => {
+      const g = gridOf(frame);
+      let n = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (g[y][x] === 'K') n++;
+      return n;
+    };
+    const talkMax = Math.max(...frames.talk.map(inkCount));
+    const restMax = Math.max(...frames.ready.map(inkCount));
+    expect(talkMax).toBeGreaterThan(restMax);
   });
 });
 
@@ -148,6 +189,7 @@ describe('mounting', () => {
     const svg = lane.querySelector('svg');
     expect(svg).toBeTruthy();
     expect(svg.getAttribute('shape-rendering')).toBe('crispEdges');
+    expect(svg.getAttribute('viewBox')).toBe('0 0 24 24');
     expect(svg.querySelectorAll('path').length).toBeGreaterThan(0);
   });
 

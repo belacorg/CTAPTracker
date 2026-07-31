@@ -3624,8 +3624,9 @@ body.light .lj-sec-sticky { background: var(--bg); }
   position: absolute;
   left: 0;
   bottom: 0;
-  width: 36px;
-  height: 44px;
+  /* Square, matching the 24×24 sprite canvas — he's a ball now, not a figure. */
+  width: 40px;
+  height: 40px;
   /* No transition: he steps in whole pixels, frame by frame. Easing it would
      glide the sprite between poses and lose the snap. */
   image-rendering: pixelated;
@@ -3640,10 +3641,10 @@ body.light .lj-sec-sticky { background: var(--bg); }
 .coach-eng {
   position: relative;
   flex: 0 0 auto;
-  width: 26px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
 }
-.coach-eng .pixel-eng { width: 26px; height: 32px; }
+.coach-eng .pixel-eng { width: 30px; height: 30px; }
 
 /* ── Voice: cheat sheet + guessed rows ── */
 .voice-live-transcript.empty { color: var(--muted2); }

@@ -1,14 +1,23 @@
-// The little engineer — 8-bit sprite on a 22×27 grid.
+// The little fuzzball — 8-bit sprite on a 24×24 grid.
 //
-// Ported from the Apprentice to Engineer app, re-dressed for this one. The two
-// apps stay separate entities: none of A2E's branding comes across. Its mascot
-// wears amber and cobalt with the A2E chevron on his chest — here the chevron
-// is gone entirely and the palette is a British Gas engineer's: navy uniform,
-// cyan shoulder yoke and upper sleeves, navy cap. Cap, not a hard hat —
-// domestic gas engineers don't wear site PPE.
+// He replaces the pixel engineer who stood here before. Two separations matter,
+// and they point in opposite directions:
+//
+//   1. Nothing of Apprentice to Engineer comes across. That app's mascot wears
+//      amber and cobalt with its chevron on his chest. None of those colours
+//      appear here and there is no chevron. The apps stay separate entities.
+//
+//   2. He is not one of British Gas's advertising characters either. Those are
+//      Centrica's own IP, and this is a personal tool that already carries
+//      internal job codes — borrowing the employer's mascot would make it read
+//      as an official app, which is the thing to avoid. So he is an original:
+//      a round blue fuzzball of this app's own design, sharing nothing with
+//      that campaign beyond being blue and being fuzzy.
+//
+// He keeps the toolbox. He turned up to work.
 //
 // Sprites are rows of single-character colour keys, compiled once at load into
-// one SVG path per colour, so a frame is ~6 <path>s rather than 300 <rect>s.
+// one SVG path per colour, so a frame is ~6 <path>s rather than 500 <rect>s.
 // Frame rates are low on purpose: the snapping is what makes it read as a
 // sprite rather than a smooth animation with a pixel filter over it.
 (function () {
@@ -16,54 +25,63 @@
 
   var PALETTE = {
     K: '#0B0A14', // ink outline
-    S: '#F7C99B', // face
-    C: '#3FC1F0', // cyan — shoulder yoke and sleeves
-    B: '#1D4E89', // navy uniform
-    L: '#2A6BB0', // limbs, a lift on the navy
+    L: '#7FD8F7', // lit fur, catching the light up top
+    C: '#3FC1F0', // cyan — his body colour
+    B: '#1D4E89', // navy — the shadow he sits in
+    W: '#FFFFFF', // eyes
     G: '#D6DBEF', // steel
     T: '#FFC857'  // sparks
   };
 
-  // Rows 11–12 are the cyan yoke: a solid band across both shoulders and the
-  // top of the chest, which is where the real uniform carries it. In the A2E
-  // original those pixels were the brand chevron — replacing rather than
-  // deleting them keeps his silhouette identical while removing the branding.
-  // Cyan picked out per-shoulder instead reads as four disconnected patches at
-  // this size; it needs to be one unbroken run to say "yoke".
-  var BODY = [
-    '.....KKKK.....',
-    '...KKBBBBKK...',
-    '..KBBBBBBBBK..',
-    '.KBBBBBBBBBBK.',
-    'KBBBBBBBBBBBBK',
-    'KKKKKKKKKKKKKK',
-    '.KSSSSSSSSSSK.',
-    '.KSKKSSSSKKSK.',
-    '.KSSSSSSSSSSK.',
-    '.KSSSSKKSSSSK.',
-    '..KKSSSSSSKK..',
-    '...KCCCCCCK...',
-    '..KCCCCCCCCK..',
-    '..KBBBBBBBBK..',
-    '..KBBBBBBBBK..',
-    '...KBBBBBBK...',
-    '....KBKKBK....',
-    '....KBKKBK....',
-    '...KKKKKKKK...'
+  // Sixteen rows square. The silhouette is deliberately ragged rather than a
+  // clean circle — at this resolution a smooth outline reads as a bouncing
+  // ball, and the single-pixel bumps are the only thing saying "fur".
+  var BALL = [
+    '....K.KK.KK.K...',
+    '...KKKKKKKKKKK..',
+    '..KKLLLLLLLLLKK.',
+    '.KLLLLLLLLLLLLK.',
+    'KKLLLLLLLLLLLLKK',
+    'KLLLLLLLLLLLLLLK',
+    'KLLLLLLLLLLLLLLK',
+    'KLLLLLLLLLLLLLLK',
+    'KCCCCCCCCCCCCCCK',
+    'KCCCCCCCCCCCCCCK',
+    'KCCCCCCCCCCCCCCK',
+    'KKCCCCCCCCCCCCKK',
+    '.KCCCCCCCCCCCCK.',
+    '.KKBBBBBBBBBBKK.',
+    '..KKKBBBBBBKKK..',
+    '....KKK..KKK....'
   ];
 
-  var CAP = BODY.slice(0, 6);
-  var BELOW_CAP = BODY.slice(6);
-  var ABOVE_LEGS = BODY.slice(0, 16);
-  var LEGS_STRIDE = ['...KBK..KBK...', '..KBK....KBK..', '..KKK....KKK..'];
+  var BODY_NO_FEET = BALL.slice(0, 15);
+  var FEET_STAND  = ['....KKK..KKK....'];
+  // Mid-stride: one foot forward, one trailing. Two pixels of travel is enough
+  // to read at 8fps — more and he waddles.
+  var FEET_STRIDE = ['..KKK.....KKK...'];
 
-  // Cyan sleeve on the upper arm, continuing the yoke out along the shoulder.
-  var ARM_DOWN = ['KCK', 'KCK', 'KSK', 'KKK'];
-  var ARM_HIGH = ['KKK', 'KSK', 'KSK', 'KLK', 'KCK', 'KCK', 'KKK'];
-  var ARM_SWING = ['KKK', 'KCK', 'KCK', 'KSK', 'KKK'];
-  // A carried toolbox rather than a raised spanner — held up, the spanner's
-  // open jaws read as a trident. Carried at the hip it also lets him keep it
-  // while walking, which a raised tool can't.
+  // Eyes sit high on the body, which is what stops him reading as a face drawn
+  // on a beachball. No ink border: outlined at this size they read as goggles,
+  // and he is not wearing glasses. White straight onto the fur, pupil centred.
+  var EYE_OPEN = [
+    '.WW.',
+    'WKKW',
+    'WKKW',
+    '.WW.'
+  ];
+  var EYE_SHUT = [
+    '....',
+    'KKKK',
+    '....',
+    '....'
+  ];
+  // Talking overlay. He has no jaw, so the mouth is the whole expression.
+  var MOUTH_OPEN  = ['KKKK', 'KKKK'];
+  var MOUTH_SMALL = ['KKKK'];
+
+  // Carried rather than raised: held up, the spanner it replaced read as a
+  // trident, and a raised tool can't be kept while walking.
   // Handle in steel, not ink — an ink handle on a dark card is invisible, which
   // left just the cyan body reading as a slab on the floor.
   var TOOLBOX = [
@@ -74,11 +92,10 @@
     'KCCCCCK',
     'KKKKKKK'
   ];
-  // Mouth open — the talking overlay for the Coach card.
-  var MOUTH_OPEN = ['KKKK'];
-  var ARM_OUT = ['KKKKK', 'KCLSK', 'KKKKK'];
 
-  var W = 22, H = 27, BX = 2, BY = 6;
+  var W = 24, H = 24, BX = 1, BY = 3;
+  var EYE_Y = 6, EYE_LX = 3, EYE_RX = 9;   // relative to the ball
+  var BOX_X = 15, BOX_Y = 13;
 
   function paint(layers) {
     var grid = [];
@@ -117,74 +134,55 @@
   }
 
   // ── poses ──
-  function armsDown(bob) {
-    return [{ sp: ARM_DOWN, x: BX, y: BY + 12 + bob }, { sp: ARM_DOWN, x: BX + 11, y: BY + 12 + bob }];
-  }
-  function stand(bob) {
-    bob = bob || 0;
-    return [{ sp: BODY, x: BX, y: BY + bob }].concat(armsDown(bob));
-  }
-  function stride(bob) {
+  // Every pose is the same ball with different feet, eyes and overlays, so he
+  // never changes shape between frames — which is what a fuzzball should do.
+  function base(bob, feet, eye) {
+    var y = BY + bob;
     return [
-      { sp: ABOVE_LEGS, x: BX, y: BY + bob },
-      { sp: LEGS_STRIDE, x: BX, y: BY + bob + 16 },
-      { sp: ARM_SWING, x: BX, y: BY + bob + 11 },
-      { sp: ARM_SWING, x: BX + 11, y: BY + bob + 13 }
+      { sp: BODY_NO_FEET, x: BX, y: y },
+      { sp: feet || FEET_STAND, x: BX, y: y + 15 },
+      { sp: eye || EYE_OPEN, x: BX + EYE_LX, y: y + EYE_Y },
+      { sp: eye || EYE_OPEN, x: BX + EYE_RX, y: y + EYE_Y }
     ];
   }
-  // The scalp: without it, lifting the cap leaves a hole between the brim and
-  // the top of his face, and the cap reads as floating rather than raised.
-  // Drawn to fill exactly the rows the cap vacates.
-  var SCALP = '.KSSSSSSSSSSK.';
-
-  // The toolbox hangs off his right hand, so the cap is tipped with the left —
-  // and the cap tilts away from the lifting arm, hence the shift right.
-  function tipCap(lift) {
-    var scalp = [];
-    for (var i = 0; i < lift; i++) scalp.push(SCALP);
-    return [
-      { sp: BELOW_CAP, x: BX, y: BY + 6 },
-      { sp: scalp, x: BX, y: BY + 6 - lift },
-      { sp: CAP, x: BX + 2, y: BY - lift },
-      { sp: ARM_HIGH, x: BX - 1, y: BY + 1 },
-      { sp: ARM_DOWN, x: BX + 11, y: BY + 12 },
-      { sp: TOOLBOX, x: 11, y: BY + 12 }
-    ];
+  function withBox(layers, bob) {
+    return layers.concat([{ sp: TOOLBOX, x: BOX_X, y: BOX_Y + bob }]);
   }
-  // Stood with the toolbox — his resting pose, since he's turned up to work.
+  // His resting pose — stood holding the toolbox.
   function carry(bob) {
     bob = bob || 0;
-    return stand(bob).concat([{ sp: TOOLBOX, x: 11, y: BY + 12 + bob }]);
+    return withBox(base(bob), bob);
   }
-  // Walking with it: the near arm swings, the far one keeps hold.
-  function strideCarry(bob) {
-    return [
-      { sp: ABOVE_LEGS, x: BX, y: BY + bob },
-      { sp: LEGS_STRIDE, x: BX, y: BY + bob + 16 },
-      { sp: ARM_SWING, x: BX, y: BY + bob + 11 },
-      { sp: ARM_DOWN, x: BX + 11, y: BY + bob + 12 },
-      { sp: TOOLBOX, x: 12, y: BY + bob + 13 }
-    ];
+  function stride(bob) {
+    return withBox(base(bob, FEET_STRIDE), bob);
   }
-  // Mid-sentence, for the Coach card — mouth open, one hand doing the talking.
-  function talking(gesture) {
-    return stand(0)
-      .concat([{ sp: MOUTH_OPEN, x: BX + 5, y: BY + 9 }])
-      .concat(gesture ? [{ sp: ARM_OUT, x: BX + 11, y: BY + 11 }] : []);
+  // Greeting is a bounce and a blink. He has no cap to tip and no arm worth
+  // waving at this size, but a ball that hops reads as pleased to see you.
+  function bounce(bob, eye) {
+    return withBox(base(bob, FEET_STAND, eye), bob);
+  }
+  // Mid-sentence, for the Coach card.
+  function talking(wide) {
+    return withBox(
+      base(0).concat([{ sp: wide ? MOUTH_OPEN : MOUTH_SMALL, x: BX + 6, y: BY + 11 }]),
+      0
+    );
   }
 
   var FRAMES = {
     // No vertical bob: combined with the horizontal step it read as hopping
-    // rather than walking. Legs alternate, height stays put.
-    walk: [compile(strideCarry(0)), compile(carry(0))],
+    // rather than walking. Feet alternate, height stays put.
+    walk: [compile(stride(0)), compile(carry(0))],
+    // The hop tops out at -2: BY is 3, so -3 would put his top tufts in row 0
+    // and the lane would shave them off at the peak of the bounce.
     greet: [
-      compile(carry(0)), compile(tipCap(2)), compile(tipCap(2)),
-      compile(tipCap(1)), compile(carry(0)), compile(carry(1))
+      compile(carry(0)), compile(bounce(-1)), compile(bounce(-2)),
+      compile(bounce(-1)), compile(bounce(0, EYE_SHUT)), compile(carry(0))
     ],
     ready: [compile(carry(0)), compile(carry(0)), compile(carry(1)), compile(carry(0))],
     talk: [
-      compile(talking(false)), compile(talking(true)), compile(stand(0)),
-      compile(talking(true)), compile(talking(false)), compile(stand(0))
+      compile(talking(false)), compile(talking(true)), compile(carry(0)),
+      compile(talking(true)), compile(talking(false)), compile(carry(0))
     ]
   };
   var FPS = { walk: 8, greet: 3, ready: 2, talk: 4 };
@@ -210,7 +208,7 @@
     _timers = [];
   }
 
-  // Walks in from the right, tips his cap, then settles holding the spanner.
+  // Rolls in from the right, bounces hello, then settles holding the toolbox.
   // `intro: false` skips straight to the resting pose — a re-render shouldn't
   // send him walking on again.
   function mount(lane, opts) {
@@ -235,12 +233,12 @@
 
     // Step size is set in sprite pixels, not by dividing the distance up — the
     // latter gave ~20px lurches that read as hopping. Three sprite pixels a
-    // frame is the usual pixel-art walk, and the legs swap every other frame so
+    // frame is the usual pixel-art walk, and the feet swap every other frame so
     // a stride covers six rather than flickering.
     var spriteW = svg.getBoundingClientRect().width || 44;
     var scale = spriteW / W;
     var step = 3 * scale;
-    var RUN_IN = 120;   // he strolls in from nearby; crossing the full width was a route march
+    var RUN_IN = 120;   // he ambles in from nearby; crossing the full width was a route march
     var travel = Math.min(RUN_IN, Math.max(0, lane.clientWidth - spriteW));
     var walkFrames = Math.max(1, Math.round(travel / step));
     var i = 0;
@@ -281,7 +279,7 @@
     mount: mount,
     stop: stop,
     palette: PALETTE,
-    body: BODY,
+    body: BALL,
     frames: FRAMES
   };
 })();
