@@ -1052,6 +1052,98 @@ function extractDurationMins(clause) {
 
 // Find a spoken day reference and resolve it against `refDateStr`.
 // Returns the matched phrase so the caller can strip it before clause parsing.
+// Every day named in the transcript, in the order spoken.
+//
+// extractVoiceDay below finds the first one and stops, which is all a
+// single-day dictation needs. Reading a whole week back — "Monday six
+// breakdowns, Tuesday three services" — needs all of them, with positions, so
+// the work said after each day name can be attached to it.
+function findVoiceDayMarkers(text, refDateStr) {
+  const ref = new Date(refDateStr + 'T00:00:00');
+  const found = [];
+
+  [['day before yesterday', 2], ['yesterday', 1], ['today', 0]].forEach(function(pair) {
+    const rx = new RegExp('\\b' + pair[0] + '\\b', 'g');
+    let m;
+    while ((m = rx.exec(text)) !== null) {
+      const d = new Date(ref);
+      d.setDate(d.getDate() - pair[1]);
+      found.push({ start: m.index, end: m.index + m[0].length, phrase: m[0], dayKey: localDateStr(d) });
+    }
+  });
+
+  VOICE_WEEKDAYS.forEach(function(name, i) {
+    const rx = new RegExp('\\b(?:last\\s+|on\\s+)?' + name + '\\b', 'g');
+    let m;
+    while ((m = rx.exec(text)) !== null) {
+      const back = (ref.getDay() - i + 7) % 7;
+      const d = new Date(ref);
+      d.setDate(d.getDate() - (back === 0 && /\blast\b/.test(m[0]) ? 7 : back));
+      found.push({ start: m.index, end: m.index + m[0].length, phrase: m[0], dayKey: localDateStr(d) });
+    }
+  });
+
+  // Earliest first; on a tie the longer phrase wins, so the overlap pass below
+  // keeps "day before yesterday" rather than the "yesterday" sitting inside it.
+  found.sort(function(a, b) {
+    return a.start - b.start || (b.end - b.start) - (a.end - a.start);
+  });
+
+  const out = [];
+  found.forEach(function(m) {
+    if (out.length && m.start < out[out.length - 1].end) return;
+    out.push(m);
+  });
+  return out;
+}
+
+// Cut the transcript into one segment per day named, each holding the work
+// that belongs to that day.
+//
+// Two ways an engineer says this, and they need opposite splits:
+//   day-leading  "Monday six breakdowns, Tuesday three services"
+//   day-trailing "six breakdowns on Monday, three services on Tuesday"
+// Jobs appearing before the first day name is the tell for the trailing form —
+// in the leading form there is nothing there but "right so" and "I did".
+//
+// Zero or one day named falls through to exactly the old behaviour: the whole
+// utterance belongs to that one day, wherever in the sentence it was mentioned.
+function splitVoiceDays(text, refDateStr) {
+  const ref = new Date(refDateStr + 'T00:00:00');
+  const markers = findVoiceDayMarkers(text, refDateStr);
+  const tidy = function(s) { return String(s || '').replace(/\s+/g, ' ').trim(); };
+
+  if (markers.length === 0) {
+    return [{ dayKey: localDateStr(ref), phrase: null, body: tidy(text) }];
+  }
+  if (markers.length === 1) {
+    const m = markers[0];
+    return [{
+      dayKey: m.dayKey, phrase: m.phrase,
+      body: tidy(text.slice(0, m.start) + ' ' + text.slice(m.end))
+    }];
+  }
+
+  const lead = text.slice(0, markers[0].start);
+  const trailing = findVoiceAliasMatches(lead).length > 0;
+
+  const segments = markers.map(function(m, i) {
+    const body = trailing
+      ? (i === 0 ? lead : text.slice(markers[i - 1].end, m.start))
+      : text.slice(m.end, i + 1 < markers.length ? markers[i + 1].start : text.length);
+    return { dayKey: m.dayKey, phrase: m.phrase, body: tidy(body) };
+  });
+
+  // "Monday two services… and Monday a breakdown" is one day, said twice.
+  const byDay = [];
+  segments.forEach(function(seg) {
+    const prior = byDay.filter(function(s) { return s.dayKey === seg.dayKey; })[0];
+    if (prior) prior.body = tidy(prior.body + ' ' + seg.body);
+    else byDay.push(seg);
+  });
+  return byDay;
+}
+
 function extractVoiceDay(text, refDateStr) {
   const ref = new Date(refDateStr + 'T00:00:00');
 
@@ -1175,16 +1267,9 @@ function findVoiceAliasMatches(text) {
 //                  (hours for wait work, minutes for NPT/trace & repair)
 //   `needsValue` — variable job with no duration spoken; the confirm sheet
 //                  must collect one before it can be logged.
-function parseVoiceLog(transcript, refDateStr) {
-  const refDay = refDateStr || getTodayKey();
-  const text = normaliseVoiceText(transcript);
-  if (!text) return { dayKey: refDay, dayPhrase: null, items: [], unmatched: [] };
-
-  const day = extractVoiceDay(text, refDay);
-  const body = day.phrase
-    ? text.replace(new RegExp('\\b' + escapeRe(day.phrase) + '\\b'), ' ').replace(/\s+/g, ' ').trim()
-    : text;
-
+// Pull the jobs out of one day's worth of speech. Knows nothing about dates —
+// splitVoiceDays has already decided which day this text belongs to.
+function parseVoiceBody(body) {
   const matches = findVoiceAliasMatches(body);
   const items = [];
   const unmatched = [];
@@ -1249,18 +1334,59 @@ function parseVoiceLog(transcript, refDateStr) {
   // Trailing text after the last job phrase (or the whole thing if nothing matched).
   noteLeftover(pendingPrefix !== null ? pendingPrefix : body.slice(cursor));
 
-  // Merge repeats of the same job ("two services ... and another service"),
-  // but keep variable entries separate — each carries its own duration.
+  return { items: items, unmatched: unmatched };
+}
+
+// Returns a draft: every job heard, each tagged with the day it belongs to.
+//
+//   { dayKey, dayPhrase, days: [dayKey…], items: [{…, dayKey}], unmatched }
+//
+// `dayKey` is the first day named and `days` lists them all. One day named (or
+// none) leaves both describing the same single day, so callers that only ever
+// handled one day keep working.
+function parseVoiceLog(transcript, refDateStr) {
+  const refDay = refDateStr || getTodayKey();
+  const text = normaliseVoiceText(transcript);
+  if (!text) return { dayKey: refDay, dayPhrase: null, days: [], items: [], unmatched: [] };
+
+  const segments = splitVoiceDays(text, refDay);
+  const items = [];
+  const unmatched = [];
+
+  segments.forEach(function(seg) {
+    const parsed = parseVoiceBody(seg.body);
+    parsed.items.forEach(function(it) {
+      it.dayKey = seg.dayKey;
+      items.push(it);
+    });
+    parsed.unmatched.forEach(function(u) {
+      if (unmatched.indexOf(u) === -1) unmatched.push(u);
+    });
+  });
+
+  // Merge repeats of the same job ("two services ... and another service"), but
+  // only within a day — Monday's services and Tuesday's are different entries.
+  // Variable entries never merge; each carries its own duration.
   const merged = [];
   items.forEach(function(it) {
-    const prior = it.job.variable
-      ? null
-      : merged.find(function(m) { return m.jobId === it.jobId && !m.job.variable; });
+    const prior = it.job.variable ? null : merged.filter(function(m) {
+      return m.jobId === it.jobId && m.dayKey === it.dayKey && !m.job.variable;
+    })[0];
     if (prior) { prior.qty += it.qty; prior.assumed = prior.assumed || it.assumed; }
     else merged.push(it);
   });
 
-  return { dayKey: day.dayKey, dayPhrase: day.phrase, items: merged, unmatched: unmatched };
+  const days = [];
+  merged.forEach(function(it) { if (days.indexOf(it.dayKey) === -1) days.push(it.dayKey); });
+  days.sort();
+
+  return {
+    dayKey: segments[0].dayKey,
+    dayPhrase: segments[0].phrase,
+    days: days,
+    items: merged,
+    unmatched: unmatched
+  };
 }
 
 // Credit minutes one entry is worth. Mirrors the arithmetic in logJob() —
@@ -1626,6 +1752,9 @@ if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     normaliseVoiceText: normaliseVoiceText,
     extractDurationMins: extractDurationMins,
     extractVoiceDay: extractVoiceDay,
+    findVoiceDayMarkers: findVoiceDayMarkers,
+    splitVoiceDays: splitVoiceDays,
+    parseVoiceBody: parseVoiceBody,
     parseVoiceLog: parseVoiceLog,
     voiceEntryCreditMins: voiceEntryCreditMins,
     voiceBatchCreditHours: voiceBatchCreditHours,

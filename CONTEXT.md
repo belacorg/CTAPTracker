@@ -146,8 +146,12 @@ table deliberately has no column for.
 _Avoid_: "job note" (that's the **Shift** note, a different thing entirely)
 
 **Voice draft**:
-The parsed, editable result of speaking a day's work into the Log Job page — a resolved day plus a list of proposed entries (job, count, and a value for variable jobs), alongside any spoken fragments the parser could not match. A **Voice draft** is a proposal, not a record: it holds no place in state until the engineer confirms it, at which point it is written through the same shapes the job tiles produce. See ADR-0007.
+The parsed, editable result of speaking work into the Log Job page — a list of proposed entries (job, count, and a value for variable jobs), **each tagged with the day it belongs to**, alongside any spoken fragments the parser could not match. A **Voice draft** is a proposal, not a record: it holds no place in state until the engineer confirms it, at which point it is written through the same shapes the job tiles produce. See ADR-0007.
 _Avoid_: "voice entry", "voice log" (for the draft itself — the draft is what exists before confirmation)
+
+**Day segment**:
+One day's slice of a spoken transcript, produced by cutting the utterance at each day named. An engineer catching up on a Friday says the week as one sentence — *"Monday six breakdowns, Tuesday three services"* — and each segment is parsed independently, so the jobs land on the day they were said against. Both orders are understood: the day leading its work, or trailing it (*"six breakdowns on Monday"*). Naming no day, or one, produces a single segment and the original single-day behaviour. See ADR-0014.
+_Avoid_: "clause" (the parser scans, it does not split on grammar)
 
 ## Relationships
 

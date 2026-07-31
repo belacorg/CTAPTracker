@@ -860,7 +860,7 @@ function buildLogJobs() {
       <span class="lj-voice-ico">${iconMic()}</span>
       <span class="lj-voice-txt">
         <strong>Say what you’ve done</strong>
-        <small>“six breakdowns, two boiler leads”</small>
+        <small>“six breakdowns” — or a whole week at once</small>
       </span>
     </button>`;
 
@@ -1687,7 +1687,8 @@ const VOICE_TIPS = [
   { say: 'a cooker service and two fires', why: '“a” counts as one' },
   { say: 'trace and repair forty five minutes', why: 'Give a time for min-for-min jobs' },
   { say: 'two hours wait work', why: 'Wait work and NPT take a time too' },
-  { say: 'yesterday I did four services', why: 'Backdate by saying the day' }
+  { say: 'yesterday I did four services', why: 'Backdate by saying the day' },
+  { say: 'Monday six breakdowns, Tuesday three services', why: 'Do a whole week in one go' }
 ];
 
 function buildVoiceTipsHTML(open) {
@@ -1825,17 +1826,56 @@ function buildVoiceBody() {
     }, 0);
     const blocked = items.some(function(it) { return it.needsValue; });
 
-    return `
-      <div class="voice-review">
-        ${voiceTranscript ? `<div class="voice-heard">“${voiceTranscript}”</div>` : ''}
+    // A whole week read back in one go arrives as several days. Grouping them
+    // under their own headers is what makes the draft checkable — a flat list
+    // of nineteen jobs with no day showing is not something anyone can confirm.
+    // The row index stays a flat index into voiceDraft.items, so every existing
+    // per-row control keeps working untouched.
+    const days = voiceDraftDays();
+    const multiDay = days.length > 1;
 
+    const dayHeader = (dk) => {
+      const dd = new Date(dk + 'T00:00:00');
+      const isTodayGroup = dk === getTodayKey();
+      const label = isTodayGroup
+        ? 'Today · ' + dd.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+        : dd.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
+      return `
+        <div class="voice-day-row voice-day-row-group">
+          <button class="voice-day-btn" data-voice-day-shift="-1" data-day="${dk}"
+            ${dk <= bounds.min ? 'disabled' : ''} aria-label="Previous day">&#8249;</button>
+          <span class="voice-day-label${isTodayGroup ? ' today' : ''}">${label}</span>
+          <button class="voice-day-btn" data-voice-day-shift="1" data-day="${dk}"
+            ${dk >= bounds.max ? 'disabled' : ''} aria-label="Next day">&#8250;</button>
+        </div>`;
+    };
+
+    const itemsHTML = multiDay
+      ? days.map(dk => {
+          const rows = items
+            .map((it, idx) => ({ it, idx }))
+            .filter(r => (r.it.dayKey || voiceDraft.dayKey) === dk);
+          const dayHours = voiceBatchCreditHours(rows.map(r => r.it));
+          return `
+            <div class="voice-day-group">
+              ${dayHeader(dk)}
+              <div class="voice-items">${rows.map(r => buildVoiceItemRow(r.it, r.idx)).join('')}</div>
+              <div class="voice-day-subtotal">+${dayHours.toFixed(2)}h</div>
+            </div>`;
+        }).join('')
+      : `
         <div class="voice-day-row">
           <button class="voice-day-btn" id="voice-day-prev" ${voiceDraft.dayKey <= bounds.min ? 'disabled' : ''} aria-label="Previous day">&#8249;</button>
           <span class="voice-day-label${isToday ? ' today' : ''}">${dayLabelText}</span>
           <button class="voice-day-btn" id="voice-day-next" ${voiceDraft.dayKey >= bounds.max ? 'disabled' : ''} aria-label="Next day">&#8250;</button>
         </div>
+        <div class="voice-items">${items.map(buildVoiceItemRow).join('')}</div>`;
 
-        <div class="voice-items">${items.map(buildVoiceItemRow).join('')}</div>
+    return `
+      <div class="voice-review">
+        ${voiceTranscript ? `<div class="voice-heard">“${voiceTranscript}”</div>` : ''}
+
+        ${itemsHTML}
 
         ${voiceDraft.unmatched.length > 0 ? `
           <div class="voice-unmatched">
@@ -1844,7 +1884,7 @@ function buildVoiceBody() {
           </div>` : ''}
 
         <div class="voice-total-row">
-          <span class="voice-total-label">${totalCount} entr${totalCount === 1 ? 'y' : 'ies'}</span>
+          <span class="voice-total-label">${totalCount} entr${totalCount === 1 ? 'y' : 'ies'}${multiDay ? ` · ${days.length} days` : ''}</span>
           <span class="voice-total-val">+${totalHours.toFixed(2)}h</span>
         </div>
 
@@ -2119,38 +2159,69 @@ function parseVoiceInput(text) {
   refreshVoiceSheet();
 }
 
-function shiftVoiceDay(delta) {
+// Move one day's worth of entries. With a single day in the draft this is the
+// old whole-draft stepper; with several it moves just that group, so a misheard
+// "Tuesday" can be corrected without disturbing the rest of the week.
+function shiftVoiceDay(delta, fromDay) {
   if (!voiceDraft) return;
   const bounds = voiceDayBounds();
-  const d = new Date(voiceDraft.dayKey + 'T00:00:00');
+  const source = fromDay || voiceDraft.dayKey;
+  const d = new Date(source + 'T00:00:00');
   d.setDate(d.getDate() + delta);
   const next = localDateStr(d);
   if (next < bounds.min || next > bounds.max) return;
-  voiceDraft.dayKey = next;
+  // Landing on a day already in the draft would silently merge two groups.
+  if (voiceDraftDays().indexOf(next) !== -1) return;
+
+  voiceDraft.items.forEach(function(it) {
+    if ((it.dayKey || voiceDraft.dayKey) === source) it.dayKey = next;
+  });
+  if (voiceDraft.dayKey === source) voiceDraft.dayKey = next;
   refreshVoiceSheet();
 }
 
-// Write a confirmed batch in one go: one saveState and one week sync, rather
-// than one of each per entry as the tile flow does.
+// Every distinct day in the draft, earliest first. One entry for a single-day
+// dictation, several when a whole week was read back in one go.
+function voiceDraftDays() {
+  if (!voiceDraft) return [];
+  const days = [];
+  voiceDraft.items.forEach(function(it) {
+    const dk = it.dayKey || voiceDraft.dayKey;
+    if (days.indexOf(dk) === -1) days.push(dk);
+  });
+  return days.sort();
+}
+
+// Write a confirmed batch in one go: one saveState, and one sync per week
+// touched, rather than one of each per entry as the tile flow does. A week
+// read back on a Monday can straddle two weeks, so the syncs are collected.
 function commitVoiceBatch() {
   if (!voiceDraft || voiceDraft.items.length === 0) return;
   if (_isOffline) { showToast("You're offline — logging unavailable"); return; }
 
-  const targetDay = voiceDraft.dayKey;
-  if (targetDay > getTodayKey()) { showToast('Cannot log to a future date'); return; }
+  const days = voiceDraftDays();
+  const todayKey = getTodayKey();
+  if (days.some(function(dk) { return dk > todayKey; })) {
+    showToast('Cannot log to a future date');
+    return;
+  }
   if (voiceDraft.items.some(function(it) { return it.needsValue; })) {
     showToast('Add a time to the highlighted rows');
     return;
   }
 
-  const targetWeekKey = getWeekKey(new Date(targetDay + 'T00:00:00'));
-  const week = getOrCreateWeek(state, targetWeekKey);
+  const weeksTouched = [];
   let logged = 0;
   let creditMinsTotal = 0;
 
   voiceDraft.items.forEach(function(it) {
     const job = it.job || findJob(it.jobId);
     if (!job) return;
+
+    const targetDay = it.dayKey || voiceDraft.dayKey;
+    const targetWeekKey = getWeekKey(new Date(targetDay + 'T00:00:00'));
+    const week = getOrCreateWeek(state, targetWeekKey);
+    if (weeksTouched.indexOf(targetWeekKey) === -1) weeksTouched.push(targetWeekKey);
 
     if (job.isMentorFull || job.isMentorPartial) {
       if (!week.mentorDays) week.mentorDays = {};
@@ -2190,13 +2261,16 @@ function commitVoiceBatch() {
   });
 
   saveState(state);
-  if (window.__ctapSyncWeek) window.__ctapSyncWeek(targetWeekKey);
+  if (window.__ctapSyncWeek) weeksTouched.forEach(function(wk) { window.__ctapSyncWeek(wk); });
 
-  const backfillNote = targetDay !== getTodayKey() ? ' (backdated)' : '';
-  showToast(`${logged} entr${logged === 1 ? 'y' : 'ies'} added · +${(creditMinsTotal / 60).toFixed(2)}h${backfillNote}`);
+  const lastDay = days[days.length - 1];
+  const spread = days.length > 1
+    ? ` across ${days.length} days`
+    : (lastDay !== todayKey ? ' (backdated)' : '');
+  showToast(`${logged} entr${logged === 1 ? 'y' : 'ies'} added · +${(creditMinsTotal / 60).toFixed(2)}h${spread}`);
 
-  // Land the engineer on the day they just logged to.
-  activeLogDay = targetDay;
+  // Land the engineer on the last day they logged to.
+  activeLogDay = lastDay;
   closeVoiceSheet();
 }
 
@@ -2233,6 +2307,13 @@ function attachVoiceSheetListeners() {
   on('voice-commit', commitVoiceBatch);
   on('voice-day-prev', function() { shiftVoiceDay(-1); });
   on('voice-day-next', function() { shiftVoiceDay(1); });
+
+  // Per-day steppers, when a whole week was read back at once.
+  body.querySelectorAll('[data-voice-day-shift]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      shiftVoiceDay(Number(btn.dataset.voiceDayShift), btn.dataset.day);
+    });
+  });
 
   if (!voiceDraft) return;
 
