@@ -600,6 +600,24 @@ body {
 }
 .st-num-input::-webkit-inner-spin-button,
 .st-num-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+/* Free-text sibling of .st-num-input — right-aligned so the value sits under
+   the numbers in the rows below it, but wider, since a name is not 3 digits. */
+.st-text-input {
+  background: none;
+  border: none;
+  color: var(--fg);
+  font-size: 16px;
+  font-weight: 600;
+  font-family: inherit;
+  width: 150px;
+  max-width: 45%;
+  text-align: right;
+  outline: none;
+  flex-shrink: 0;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.st-text-input::placeholder { color: var(--muted2); font-weight: 400; }
 .st-num-unit {
   font-size: 0.78rem;
   font-weight: 600;

@@ -12,16 +12,22 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=167">
+  <link rel="stylesheet" href="style.css?v=168">
   <script>if(localStorage.getItem('jcpd_theme')==='light')document.documentElement.style.background='#f2f2f7';</script>
 </head>
 <body>
   <div id="app"></div>
-  <!-- Supabase gate: prevents app.js from auto-rendering before auth/data load -->
-  <script>window.__ctapSupabaseActive = true;</script>
-  <script src="data.cjs?v=167"></script>
-  <script src="pixel-engineer.js?v=167"></script>
-  <script src="app.js?v=167"></script>
-  <script type="module" src="src/main.js"></script>
+  <!--
+    Local-only build. The cloud layer (src/main.js, src/db.js, src/auth.js) is
+    intact but deliberately not loaded — see ADR-0015. Everything the engineer
+    enters stays in localStorage on this device and no account exists to sync it
+    to. Restoring sync is this script tag plus the flag below, nothing more:
+    every __ctapSync* call site in app.js is already guarded on the bridge
+    existing, so with main.js absent they are all no-ops.
+  -->
+  <script>window.__ctapSupabaseActive = false;</script>
+  <script src="data.cjs?v=168"></script>
+  <script src="pixel-engineer.js?v=168"></script>
+  <script src="app.js?v=168"></script>
 </body>
 </html>

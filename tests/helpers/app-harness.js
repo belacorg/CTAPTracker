@@ -64,23 +64,34 @@ function freezeDate(window, iso) {
   window.Date = FakeDate;
 }
 
-export function bootApp({ speechRecognition = null, online = true, now = null } = {}) {
+export function bootApp({ speechRecognition = null, online = true, now = null, storage = null } = {}) {
   const dom = new JSDOM('<!DOCTYPE html><html><body><div id="app"></div></body></html>', {
     runScripts: 'dangerously',
     url: 'http://localhost:3737/',
     pretendToBeVisual: true
   });
   const { window } = dom;
-  window.__ctapSupabaseActive = true;
+  // Mirrors index.html: local-only, so app.js renders itself off DOMContentLoaded
+  // rather than waiting for a cloud bridge to hand it state. See ADR-0015.
+  window.__ctapSupabaseActive = false;
   const advance = installClock(window);
   if (speechRecognition) window.SpeechRecognition = speechRecognition;
   if (!online) Object.defineProperty(window.navigator, 'onLine', { value: false, configurable: true });
   // Before the scripts run — app.js resolves the current week at load time.
   if (now) freezeDate(window, now);
+  // Seed preferences the way a returning engineer's phone already has them:
+  // app.js reads jcpd_* at first render, so setting them after boot is too late.
+  if (storage) for (const [k, v] of Object.entries(storage)) window.localStorage.setItem(k, v);
 
   runScript(window, dataSrc);
   runScript(window, appSrc);
-  window.__ctapInit(null, null, null);
+  // JSDOM has already fired DOMContentLoaded by the time these scripts are
+  // appended, so app.js's own listener never runs — refire it on `document`,
+  // which is where app.js listens, so tests boot through the shipped path.
+  window.document.dispatchEvent(new window.Event('DOMContentLoaded'));
+  if (!window.document.querySelector('.bottom-nav')) {
+    throw new Error('app did not render on DOMContentLoaded — boot path broken');
+  }
 
   const $ = (s) => window.document.querySelector(s);
   const $$ = (s) => [...window.document.querySelectorAll(s)];
