@@ -126,10 +126,46 @@ category so the muscle memory builds fast.
 
 ---
 
+## Saying what you've done
+
+![Say what you've done](screenshots/voice-prompt.png)
+
+The blue bar at the top of Log Job is the fastest way in. Tap it and talk:
+
+> *"Six breakdowns and two services."*
+
+You can also catch up on a whole week in one go, naming the days as you speak:
+
+> *"Monday six breakdowns, Tuesday three services and an inhibitor,
+> Wednesday a long duration."*
+
+Each day is parsed separately and the jobs land on the day you said them
+against. Both orders work — *"Monday six breakdowns"* or *"six breakdowns on
+Monday"*.
+
+It also copes with what speech recognition does to trade numbers: *"too high
+installs"* becomes 2 × Hive install, not a job called "too high".
+
+### Nothing is written until you say so
+
+What comes back is a **draft** — a list of proposed entries you can edit,
+correct or throw away. Anything it couldn't match is shown to you rather than
+silently dropped, so you always know what it didn't hear. Nothing reaches your
+week until you confirm it.
+
+**Why a draft and not a straight write?** Because the one thing worse than
+typing jobs in by hand is finding out a fortnight later that your figures are
+wrong and not knowing which ones.
+
+---
+
 ## The Dashboard
 
+![Dashboard](screenshots/dashboard.png)
+
 The dashboard is where you live day-to-day. It has four pieces stacked:
-**JOB CREDITS** hero, **CTAP** balance tile, **Week** tile, **Today's Jobs**.
+**JOB CREDITS** hero, **CTAP** balance tile, **Week** tile, **Today's Jobs** —
+plus the Coach card and the day's check-in, both of which you can turn off.
 
 ### JOB CREDITS tile
 
@@ -244,6 +280,62 @@ common next action is always one tap away.
 
 ---
 
+## Coach
+
+![Coach card](screenshots/coach-card.png)
+
+A bordered card on the Dashboard that reads your own figures back to you —
+where your balance is going, how many weeks in a row you've hit target, what's
+left to close this week.
+
+Two things it deliberately won't do:
+
+- **It never appears on Log Job.** That screen is for recording what you've
+  done, usually one-handed between calls. Advice belongs on the tab you went
+  to *because* you wanted to know where you stand.
+- **It never tells you to do a job you weren't given.** Coach can only ever
+  name work you genuinely choose — an inhibitor, a Hive product, a CO alarm,
+  on a visit you're already making. It will not point you at services,
+  repairs, first visits or Long Durations, because those are dispatched and
+  suggesting them is suggesting you raise work that wasn't done.
+
+Off in Settings if you'd rather just have the numbers.
+
+---
+
+## The daily check-in
+
+![Daily check-in](screenshots/checkin-card.png)
+
+A short prompt on the Dashboard, once a day, that has nothing to do with CTAP.
+
+On **Monday** you pick one thing you want to work on that week — *"do my
+safety checks before I start, every job"* — from five suggestions or written
+yourself. Then each day asks you one question about how it's going, and how
+the day actually went against that one thing. Three answers: *not really /
+so-so / yes*. Under a minute, and skippable.
+
+The week walks through **Goal → Reality → Options → Will**, so five days read
+as one conversation rather than five unrelated questions. Reality lands
+mid-week, while there's still week left to change it.
+
+### It is not a performance tool
+
+**Your CTAP target is not your goal.** The target is the employer's number,
+and the check-in presents it as **Reality** — what's true, stated plainly. The
+goal is the one thing *you* chose. That distinction is the entire point: a
+goal you were handed doesn't produce ownership.
+
+**Nobody else ever sees it.** No team view, no aggregate, no export, no
+comparison between engineers, and nothing in the app reads it back to score
+you. That's a property of how it's built, not a setting that could be changed
+later. It records how the day *felt*, not what you produced — there isn't
+even a column for customer or job detail.
+
+Turn it off entirely in Settings if it isn't for you.
+
+---
+
 ## The History tab
 
 ![History tab](screenshots/history.png)
@@ -273,9 +365,11 @@ toggle lets you flag those weeks as anomalies without deleting the data.
 ### Appearance
 
 - **Theme**: Dark or Light. Saved per-device.
-- **Coach Mode (BETA)**: opt-in personalised tips, surfaced in a bordered
-  card on the dashboard. Off by default — some people find tips helpful,
-  others find them noisy.
+- **Coach Mode (BETA)**: personalised tips in a bordered card on the
+  dashboard. **On by default** — turn it off if you find them noisy. It only
+  affects what's shown; it never changes a figure.
+- **Daily check-in**: the private end-of-day prompt. On by default, and off
+  is a single tap.
 
 ### Targets
 
