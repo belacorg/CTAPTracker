@@ -89,7 +89,7 @@ A job type the engineer genuinely chooses to do, on a visit they are already mak
 _Avoid_: "best job", "highest value job" (the framing ADR-0009 removes)
 
 **Coach mode**:
-A per-engineer toggle that controls whether **Coach Insight** surfaces are shown. Off by default. Does not affect calculation — only display.
+A per-engineer toggle that controls whether **Coach Insight** surfaces are shown. **On by default** — the stored preference is only ever read as "off when explicitly set to off", so a fresh install sees Coach. This entry previously said off by default, which the code has never done; the behaviour is the intended one and the doc was wrong. Does not affect calculation — only display.
 
 **Rolling average target**:
 Once an engineer has 4+ completed weeks of credited work, the **CTAP target** stops using the static **CTAP percentage** and instead uses a rolling average of recent weeks (scaled by current roster).
@@ -145,6 +145,10 @@ events — event framing invites exactly the customer and job detail the `checki
 table deliberately has no column for.
 _Avoid_: "job note" (that's the **Shift** note, a different thing entirely)
 
+**Setup card**:
+The list of outstanding first-run steps shown at the top of the Dashboard — **Starting balance**, this week's **Shift**s, and the how-it-works help. Steps tick themselves off when the underlying thing is done rather than being marked complete, so an engineer who set up before ever seeing the card never sees it. It exists because the app arrives *looking* finished: the defaults (40h, 0.8) render a complete dashboard, so the settings that make the figures the engineer's own are exactly the ones with nothing drawing attention to them. Deliberately not a launch modal — a modal is dismissed to reach the app, which teaches the engineer to dismiss it. Disappears for good once every step is done, or on dismissal.
+_Avoid_: "onboarding" (implies a flow the engineer is walked through), "wizard", "checklist" (it removes itself; a checklist persists)
+
 **Voice draft**:
 The parsed, editable result of speaking work into the Log Job page — a list of proposed entries (job, count, and a value for variable jobs), **each tagged with the day it belongs to**, alongside any spoken fragments the parser could not match. A **Voice draft** is a proposal, not a record: it holds no place in state until the engineer confirms it, at which point it is written through the same shapes the job tiles produce. See ADR-0007.
 _Avoid_: "voice entry", "voice log" (for the draft itself — the draft is what exists before confirmation)
@@ -164,6 +168,8 @@ _Avoid_: "clause" (the parser scans, it does not split on grammar)
 - A week's **Goal rating**s average into the single dot shown beneath the weekly credits chart
 - **CTAP target** is presented to the engineer as **Reality**, never as their goal — the **Week goal** is the only thing in the app the engineer chooses for themselves
 - **Coach Insight** reports figures; the **Check-in** asks questions. Neither reads the other: no **Coach Insight** touches **Check-in** data, and nothing in the app compares it between engineers
+- A **CTAP balance** of exactly zero is **Level** — neither credit nor deficit, and shown as neither. It is the state every engineer starts in, so it is the one the app must not dress up
+- The **Setup card** reads the state of **Starting balance** and **Shift**s rather than recording its own progress, so it cannot disagree with them
 
 ## Flagged ambiguities
 

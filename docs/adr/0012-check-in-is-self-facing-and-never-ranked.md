@@ -80,10 +80,13 @@ by a CHECK constraint, short enough that an incident report won't fit.
   a save button that refuses to save would kill a sub-minute daily habit.
 - The engineer can turn the whole feature off in Settings, which removes both the
   daily card and the trend dots. A diary you cannot decline is not a diary.
-- Check-ins are unavailable offline, for the same reason job logging is: they
+- ~~Check-ins are unavailable offline, for the same reason job logging is: they
   sync per-day to their own table, so an offline write would be discarded by the
   next successful load. Rather than open a second silent data-loss path, the card
-  is hidden while offline.
+  is hidden while offline.~~ **Superseded by ADR-0015**: there is no longer a
+  cloud load to discard the write, so the check-in card is available whatever the
+  signal. Constraint 1 above is now enforced by the absence of a server rather
+  than by the RLS policy.
 - The trend dots sit under the existing WEEKLY TREND bar chart in History rather
   than in a second chart of the same credits. One set of columns, two rows of
   marks — the juxtaposition is the feature.

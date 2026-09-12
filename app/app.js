@@ -26,7 +26,7 @@ let openSettingsInfo = null;
 let startBalSignNeg = null;
 let legalInfoExpanded = false;
 let scheduleNoteOpenDay = null;
-let deleteAccountStep = 'idle';
+let eraseDataStep = 'idle';
 let howToExpanded = false;
 let graphWeekKey = getWeekKey(new Date());
 let graphSelectedDay = null;
@@ -50,7 +50,6 @@ let _voiceInterim = '';     // the phrase currently being spoken
 let _voiceRestarts = 0;
 let _ctapUser = null;          // populated by __ctapInit
 let _ctapDisplayName = '';     // populated by __ctapInit
-let _isOffline = false;
 
 // ── Job tile display metadata ───────────────────────────────────────────────
 const JOB_META = {
@@ -111,6 +110,28 @@ const JOB_META = {
   npt_quick:         { short: 'Non-Productive',      sub: 'Variable · minutes' },
 };
 
+// Free text going into an HTML *attribute* — the `.replace(/</g, '&lt;')` used
+// for textarea bodies is not enough here, since a quote would close the
+// attribute and escape into markup.
+function escAttr(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// The engineer's first name, for the Dashboard greeting. Local-only: there is
+// no account to take it from, so it is theirs to set and lives beside the other
+// jcpd_* preferences. See ADR-0015.
+function localDisplayName() {
+  try {
+    return localStorage.getItem('jcpd_name') || '';
+  } catch {
+    return '';
+  }
+}
+
 // A job as a list row. The code (GS-CHB) is deliberately absent — it was the
 // noise; the subtitle is the disambiguator, since short names alone give five
 // identical "Gas Service" rows. See ADR-0008.
@@ -167,14 +188,10 @@ window.__ctapInit = function(loadedState, profile, user) {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(function() {});
   }
-  // Log is the landing tab, but logging is unavailable offline (writes would
-  // sit in localStorage and be overwritten by the next successful load).
-  // Start on the dashboard instead of on a dead tab.
-  if (activeTab === 'log' && !navigator.onLine) activeTab = 'dashboard';
   render();
 };
 
-// Called after sign-out — stay in app as guest, re-render Settings
+// Called after sign-out — stay in app, re-render Settings
 window.__ctapOnSignOut = function() {
   _ctapUser = null;
   _ctapDisplayName = '';
@@ -183,22 +200,6 @@ window.__ctapOnSignOut = function() {
 
 // Expose current state for sync layer
 window.__ctapGetState = function() { return state; };
-
-// Called by src/main.js when online/offline status changes
-window.__ctapSetOffline = function(offline) {
-  const wasOffline = _isOffline;
-  _isOffline = offline;
-  // Signal can drop while the engineer is sat on the Log tab — now the default
-  // landing tab, so this is common. Move them off it rather than let them log
-  // entries that the next successful load would discard.
-  if (offline && !wasOffline && checkinSheetOpen) closeCheckinSheet();
-  if (offline && !wasOffline && activeTab === 'log') {
-    if (voiceSheetOpen) closeVoiceSheet();
-    activeTab = 'dashboard';
-    showToast("You're offline — logging paused");
-  }
-  render();
-};
 
 document.addEventListener('DOMContentLoaded', function() {
   if (localStorage.getItem('jcpd_theme') === 'light') document.body.classList.add('light');
@@ -277,7 +278,7 @@ function buildMain() {
 
 function buildBottomNav() {
   const tabs = [
-    { id: 'log',       label: 'Log Job',   icon: iconPlus(), disabled: _isOffline },
+    { id: 'log',       label: 'Log Job',   icon: iconPlus() },
     { id: 'dashboard', label: 'Dashboard', icon: iconChart() },
     { id: 'schedule',  label: 'Schedule',  icon: iconCalendar() },
     { id: 'history',   label: 'History',   icon: iconClock() },
@@ -340,9 +341,16 @@ function buildDashboard() {
     ? bal + weekCreditHours(week) - adjustedTargetHours(state, week)
     : bal;
   const displayBal = isCurrentWeek && ctapProjectedMode ? projectedBal : bal;
-  const balColour = displayBal >= 0 ? 'green' : 'red';
+  // Zero is its own state, not the bottom of "in credit". Every engineer starts
+  // the trial at 0.00 with nothing logged, and an app that opens by congratulating
+  // them on a balance they have not earned reads as decoration rather than a
+  // ledger. The threshold matches the two decimals the tile prints: anything that
+  // displays as 0.00 is level.
+  const balLevel = Math.abs(displayBal) < 0.005;
+  const balColour = balLevel ? 'neutral' : displayBal > 0 ? 'green' : 'red';
+  const balLabel = balLevel ? 'Level' : displayBal > 0 ? 'In credit' : 'Deficit';
   const balAbs = Math.abs(displayBal);
-  const balSign = displayBal < 0 ? '-' : '+';
+  const balSign = balLevel ? '' : displayBal < 0 ? '-' : '+';
   const balSignColour = displayBal < 0 ? 'red' : 'green';
   const balIntNum = Math.floor(balAbs);
   const balDecStr = (balAbs % 1).toFixed(2).slice(1);
@@ -388,7 +396,8 @@ function buildDashboard() {
   };
 
   const greetHour = new Date().getHours();
-  const greetName = _ctapDisplayName ? (', ' + _ctapDisplayName.split(' ')[0]) : '';
+  const _name = localDisplayName();
+  const greetName = _name ? (', ' + _name.split(' ')[0]) : '';
   const greeting = (greetHour >= 5 && greetHour < 12 ? 'Good morning'
     : greetHour >= 12 && greetHour < 17 ? 'Good afternoon'
     : greetHour >= 17 && greetHour < 22 ? 'Good evening'
@@ -461,6 +470,7 @@ function buildDashboard() {
       ${contextLine ? `<div class="hero-context-line">${contextLine}</div>` : ''}
     </div>
 
+    ${isCurrentWeek ? buildSetupCard() : ''}
     ${isCurrentWeek ? buildCheckinCard() : ''}
     ${isCurrentWeek ? buildDeficitClearedCard() : ''}
     ${isCurrentWeek ? buildCoachCard() : ''}
@@ -469,9 +479,9 @@ function buildDashboard() {
       <div class="split-card" id="ctap-tile" style="cursor:pointer">
         <div class="split-card-top">
           <span class="split-card-label">CTAP</span>
-          <span class="status-badge ${balColour}" style="font-size:0.55rem;padding:2px 7px">${displayBal >= 0 ? 'In credit' : 'Deficit'}</span>
+          <span class="status-badge ${balColour}" style="font-size:0.55rem;padding:2px 7px">${balLabel}</span>
         </div>
-        <div class="split-hours" style="color:var(--${balColour})">${balSign}${balIntNum}${balDecStr}<span class="split-unit">h</span></div>
+        <div class="split-hours" style="color:var(--${balLevel ? 'muted' : balColour})">${balSign}${balIntNum}${balDecStr}<span class="split-unit">h</span></div>
         <div class="split-sub">balance</div>
         ${isCurrentWeek ? `<div class="split-pace pace-muted">Starting: ${(state.startingBalance || 0) >= 0 ? '+' : ''}${(state.startingBalance || 0).toFixed(2)}h</div>` : ''}
       </div>
@@ -1016,6 +1026,18 @@ function buildSettings() {
   const infoPopover = text => `<div class="st-info-popover">${text}</div>`;
 
   return `
+    ${sectionLabel('YOU')}
+    <div class="st-card">
+      <div class="st-row">
+        <div style="flex:1;min-width:0">
+          <span class="st-row-label">Your name</span>
+          <div class="st-row-sub">Only used to greet you on the Dashboard</div>
+        </div>
+        <input type="text" id="display-name-input" class="st-text-input" value="${escAttr(localDisplayName())}"
+          placeholder="Optional" maxlength="40" autocomplete="off" spellcheck="false">
+      </div>
+    </div>
+
     ${sectionLabel('APPEARANCE')}
     <div class="st-card">
       <div class="st-row">
@@ -1094,7 +1116,7 @@ function buildSettings() {
           <li><div><span class="info-step-title">Track on the Dashboard</span>See today's credit hours, the week's progress and a day-by-day chart. Tap the <b>CTAP</b> tile to open the cash-out sheet (what your balance is worth after tax). Tap the <b>Week</b> tile for the full weekly forecast with per-day detail.</div></li>
           <li><div><span class="info-step-title">Understand your CTAP balance</span>CTAP is your running credit or deficit. It starts from your starting balance, then each completed week's surplus or shortfall is added. Green = in credit. You can only cash out when in credit.</div></li>
           <li><div><span class="info-step-title">History tab</span>View past weeks with a colour-coded dot. Tap any week to jump to it. Tap <b>✓ In CTAP</b> to exclude a week from your balance calculation.</div></li>
-          <li><div><span class="info-step-title">Sync across devices</span>Create an account in Settings to save your data to the cloud and access it on any device. Stays on the device only if you don't sign in.</div></li>
+          <li><div><span class="info-step-title">Your data stays on this phone</span>There's no account and no sign-in — everything you log is stored on this device only, and works with no signal. It isn't backed up anywhere, so if you delete the app or erase the data in Settings, it's gone.</div></li>
         </ol>
       </div>` : ''}
     </div>
@@ -1103,7 +1125,7 @@ function buildSettings() {
     <div class="st-card">
       <div class="st-row">
         <span class="st-row-label">Version</span>
-        <span class="st-row-value">v0.6.1 · ${_ctapUser ? 'synced' : 'local'}</span>
+        <span class="st-row-value">v0.8.0 · on-device</span>
       </div>
       ${rowDiv()}
       <button class="st-nav-row" id="toggle-legal-info">
@@ -1113,7 +1135,7 @@ function buildSettings() {
       ${legalInfoExpanded ? `<div class="st-credits-body">
         <p class="st-legal-p">Numbers shown here are personal estimates and may not match official Centrica or British Gas systems. Always check your CTAP balance and pay against your payslip and company tools before acting on them.</p>
         <p class="st-legal-p">This app isn't affiliated with, endorsed by, or representative of Centrica plc, British Gas, or any employer. It's a personal tool, provided as-is with no warranty.</p>
-        <p class="st-legal-p">Anything you enter is kept on your device${_ctapUser ? ' and synced to your personal account on Supabase (EU)' : ' — sign in to also sync to your personal account on Supabase (EU)'}. Nothing is shared with third parties.</p>
+        <p class="st-legal-p">Anything you enter is kept on this device and nowhere else. There is no account, no server, and no upload — your figures are never transmitted, so no one but you can read them. Nothing is shared with third parties, your employer included.</p>
       </div>` : ''}
       ${rowDiv()}
       <div class="st-row">
@@ -1130,34 +1152,23 @@ function buildSettings() {
       </div>
     </div>
 
-    ${_ctapUser ? `
     <div class="dashboard-card settings-account-card">
-      <div class="settings-account-name">${_ctapDisplayName || _ctapUser.email}</div>
-      <div class="settings-account-email">${_ctapUser.email}</div>
-      <button id="sign-out-btn" class="settings-signout-btn">Sign out</button>
-      ${deleteAccountStep === 'idle' ? `
-        <button id="delete-account-btn" class="settings-delete-btn">Delete account &amp; data</button>
+      <div class="settings-sync-title">This data is yours alone</div>
+      <p class="settings-sync-sub">Everything you log lives on this phone and nowhere else. There's no account, no sign-in, and nothing is uploaded — so no one else can see your figures. Erasing here is the only way it goes, and deleting the app takes it with you.</p>
+      ${eraseDataStep === 'idle' ? `
+        <button id="erase-data-btn" class="settings-delete-btn">Erase all data</button>
       ` : `
         <div class="settings-delete-confirm">
-          <div class="settings-delete-warn">This wipes every job, week, shift and setting from your account on our servers and signs you out. It can't be undone.</div>
-          <label class="settings-delete-label">Type <b>DELETE</b> to confirm</label>
+          <div class="settings-delete-warn">This wipes every job, week, shift, check-in and setting from this phone. There's no copy anywhere else, so it can't be undone.</div>
+          <label class="settings-delete-label">Type <b>ERASE</b> to confirm</label>
           <input type="text" id="delete-confirm-input" class="settings-delete-input" autocapitalize="characters" autocomplete="off" spellcheck="false">
           <div class="settings-delete-btns">
             <button id="delete-cancel-btn" class="settings-delete-cancel">Cancel</button>
-            <button id="delete-confirm-btn" class="settings-delete-confirm-btn" disabled>Permanently delete</button>
+            <button id="delete-confirm-btn" class="settings-delete-confirm-btn" disabled>Permanently erase</button>
           </div>
-          <div class="settings-delete-note">Your sign-in record is removed within 24h once we deploy our cleanup function — message Jake on Teams if you need it sooner.</div>
         </div>
       `}
-    </div>` : `
-    <div class="dashboard-card settings-account-card">
-      <div class="settings-sync-title">Sync across devices</div>
-      <p class="settings-sync-sub">Sign in to save your data to the cloud and access it on any device.</p>
-      <div class="settings-sync-btns">
-        <button id="settings-login-btn" class="settings-sync-btn settings-sync-btn-primary">Log In</button>
-        <button id="settings-signup-btn" class="settings-sync-btn">Create Account</button>
-      </div>
-    </div>`}
+    </div>
 
     <div class="st-footer">Personal estimates only — verify against official systems.</div>
   `;
@@ -1930,7 +1941,6 @@ function refreshVoiceSheet() {
 }
 
 function openVoiceSheet() {
-  if (_isOffline) { showToast("You're offline — logging unavailable"); return; }
   voiceSheetOpen = true;
   voiceTranscript = '';
   voiceDraft = null;
@@ -2195,12 +2205,10 @@ function voiceDraftDays() {
   return days.sort();
 }
 
-// Write a confirmed batch in one go: one saveState, and one sync per week
-// touched, rather than one of each per entry as the tile flow does. A week
-// read back on a Monday can straddle two weeks, so the syncs are collected.
+// Write a confirmed batch in one go, rather than one write per entry as the
+// tile flow does. A week read back on a Monday can straddle two weeks.
 function commitVoiceBatch() {
   if (!voiceDraft || voiceDraft.items.length === 0) return;
-  if (_isOffline) { showToast("You're offline — logging unavailable"); return; }
 
   const days = voiceDraftDays();
   const todayKey = getTodayKey();
@@ -2377,12 +2385,75 @@ function attachVoiceSheetListeners() {
 // here compares them to another engineer, and no surface draws a conclusion on
 // their behalf. See ADR-0012 before adding anything that says "because".
 
+// ── First run ──────────────────────────────────────────────────────────────
+// Ten engineers install this on the same Monday, and each of them arrives with a
+// CTAP balance they have been carrying for months. The app defaults that balance
+// to zero and looks completely finished while it does — sane 40h/80% defaults,
+// every figure rendered, nothing obviously blank. So the one setting that makes
+// the headline number theirs rather than fictional is also the one with no
+// prompt to set it, and the explanation of all this sits collapsed at the bottom
+// of Settings under HELP, below the thing it explains.
+//
+// Hence a card that says what is left to do and goes away when it's done. Not a
+// launch modal: a modal is dismissed to get at the app, which teaches the
+// engineer to dismiss it, and it interrupts the one engineer who set everything
+// up on Friday. This waits on the dashboard and disappears on its own.
+const SETUP_DISMISSED_KEY = 'jcpd_setup_dismissed';
+const HOWTO_SEEN_KEY = 'jcpd_howto_seen';
+
+function setupSteps() {
+  const wk = state.weeks[getWeekKey(new Date())] || {};
+  const shifts = wk.shifts || {};
+  return [
+    {
+      id: 'balance',
+      // Touched at all, including deliberately to zero — an engineer who is
+      // genuinely level has still answered the question.
+      done: Object.prototype.hasOwnProperty.call(state, 'startingBalance'),
+      label: 'Set your starting CTAP balance',
+      hint: 'The hours you are already up or down, so the balance is yours',
+    },
+    {
+      id: 'shifts',
+      done: Object.keys(shifts).some(dk => shifts[dk] && (shifts[dk].start || shifts[dk].leave)),
+      label: 'Put in this week\'s shifts',
+      hint: 'Tap Standard week if it is a normal Mon–Fri',
+    },
+    {
+      id: 'howto',
+      done: localStorage.getItem(HOWTO_SEEN_KEY) === 'true',
+      label: 'Read how the app works',
+      hint: 'Two minutes, and it covers where your data lives',
+    },
+  ];
+}
+
+function buildSetupCard() {
+  if (localStorage.getItem(SETUP_DISMISSED_KEY) === 'true') return '';
+  const steps = setupSteps();
+  const left = steps.filter(st => !st.done).length;
+  if (!left) return '';
+
+  return `<div class="setup-card">
+    <div class="setup-card-top">
+      <span class="setup-card-label">Set up</span>
+      <span class="setup-card-count">${left} left</span>
+      <button class="setup-card-close" id="setup-dismiss" aria-label="Hide setup">×</button>
+    </div>
+    ${steps.map(st => `
+      <button class="setup-step${st.done ? ' is-done' : ''}" data-setup-step="${st.id}"${st.done ? ' disabled' : ''}>
+        <span class="setup-step-mark" aria-hidden="true">${st.done ? '✓' : ''}</span>
+        <span class="setup-step-txt">
+          <strong>${st.label}</strong>
+          <small>${st.hint}</small>
+        </span>
+        ${st.done ? '' : '<span class="setup-step-go">›</span>'}
+      </button>`).join('')}
+  </div>`;
+}
+
 function buildCheckinCard() {
   if (!isCheckinOn()) return '';
-  // Check-ins live in their own table and sync per-day, so an offline write
-  // would be discarded by the next successful load — exactly the reason the Log
-  // tab goes dead offline. Same call here rather than a second data-loss path.
-  if (_isOffline) return '';
   const todayKey = getTodayKey();
   const entry = getCheckin(state, todayKey);
   const done = !checkinIsEmpty(entry);
@@ -2554,7 +2625,6 @@ function refreshCheckinSheet() {
 }
 
 function openCheckinSheet() {
-  if (_isOffline) { showToast("You're offline — check-in unavailable"); return; }
   checkinDayKey = getTodayKey();
   const existing = getCheckin(state, checkinDayKey);
   const goal = getWeekGoal(state, getWeekKey(new Date()));
@@ -2863,14 +2933,35 @@ function attachListeners() {
     }
   }
 
+  // First-run setup card
+  const setupDismiss = document.getElementById('setup-dismiss');
+  if (setupDismiss) setupDismiss.addEventListener('click', () => {
+    localStorage.setItem(SETUP_DISMISSED_KEY, 'true');
+    render();
+  });
+  document.querySelectorAll('[data-setup-step]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const step = btn.dataset.setupStep;
+      if (step === 'balance') {
+        activeTab = 'settings';
+        startBalSignNeg = null;
+      } else if (step === 'shifts') {
+        activeTab = 'schedule';
+      } else if (step === 'howto') {
+        // Opened and marked read in one tap, so the step completes on the
+        // action the engineer actually took rather than on a second one.
+        activeTab = 'settings';
+        howToExpanded = true;
+        localStorage.setItem(HOWTO_SEEN_KEY, 'true');
+      }
+      render();
+    });
+  });
+
   // Bottom nav
   document.querySelectorAll('[data-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
       const tab = btn.dataset.tab;
-      if (_isOffline && tab === 'log') {
-        showToast("You're offline — logging unavailable");
-        return;
-      }
       weekSummaryKey = null;
       activeTab = tab;
       if (activeTab === 'dashboard') { currentWeekKey = getWeekKey(new Date()); ctapProjectedMode = false; }
@@ -3171,64 +3262,45 @@ function attachListeners() {
     render();
   });
 
-  // Sign out (logged-in view)
-  const signOutBtn = document.getElementById('sign-out-btn');
-  if (signOutBtn) signOutBtn.addEventListener('click', async () => {
-    signOutBtn.textContent = 'Signing out…';
-    signOutBtn.disabled = true;
-    if (window.__ctapSignOut) {
-      await window.__ctapSignOut();
-    } else {
-      showToast('Sign out unavailable');
-      signOutBtn.textContent = 'Sign out';
-      signOutBtn.disabled = false;
-    }
+  // Your name — saved as you type, no re-render (that would steal focus).
+  const nameInput = document.getElementById('display-name-input');
+  if (nameInput) nameInput.addEventListener('input', () => {
+    try { localStorage.setItem('jcpd_name', nameInput.value.trim()); } catch {}
   });
 
-  // Delete account & data — two-step confirm
-  const deleteBtn = document.getElementById('delete-account-btn');
-  if (deleteBtn) deleteBtn.addEventListener('click', () => {
-    deleteAccountStep = 'confirm';
+  // Erase all data — two-step confirm. There is no cloud copy, so this is the
+  // whole of it: clear the state key and every jcpd_* preference, then reload
+  // onto a fresh default state.
+  const eraseBtn = document.getElementById('erase-data-btn');
+  if (eraseBtn) eraseBtn.addEventListener('click', () => {
+    eraseDataStep = 'confirm';
     render();
     const inp = document.getElementById('delete-confirm-input');
     if (inp) inp.focus();
   });
   const deleteCancelBtn = document.getElementById('delete-cancel-btn');
   if (deleteCancelBtn) deleteCancelBtn.addEventListener('click', () => {
-    deleteAccountStep = 'idle';
+    eraseDataStep = 'idle';
     render();
   });
   const deleteInput = document.getElementById('delete-confirm-input');
   const deleteConfirmBtn = document.getElementById('delete-confirm-btn');
   if (deleteInput && deleteConfirmBtn) {
     deleteInput.addEventListener('input', () => {
-      deleteConfirmBtn.disabled = deleteInput.value.trim().toUpperCase() !== 'DELETE';
+      deleteConfirmBtn.disabled = deleteInput.value.trim().toUpperCase() !== 'ERASE';
     });
   }
-  if (deleteConfirmBtn) deleteConfirmBtn.addEventListener('click', async () => {
-    if (deleteInput && deleteInput.value.trim().toUpperCase() !== 'DELETE') return;
-    deleteConfirmBtn.textContent = 'Deleting…';
+  if (deleteConfirmBtn) deleteConfirmBtn.addEventListener('click', () => {
+    if (deleteInput && deleteInput.value.trim().toUpperCase() !== 'ERASE') return;
+    deleteConfirmBtn.textContent = 'Erasing…';
     deleteConfirmBtn.disabled = true;
     try {
-      if (!window.__ctapDeleteAccountData) throw new Error('Delete unavailable — not signed in');
-      await window.__ctapDeleteAccountData();
-      deleteAccountStep = 'idle';
-      showToast('Account data deleted');
-    } catch (e) {
-      showToast('Delete failed: ' + (e.message || 'unknown error'));
-      deleteConfirmBtn.textContent = 'Permanently delete';
-      deleteConfirmBtn.disabled = false;
-    }
-  });
-
-  // Log in / Create Account (guest view)
-  const loginBtn = document.getElementById('settings-login-btn');
-  if (loginBtn) loginBtn.addEventListener('click', () => {
-    if (window.__ctapShowAuth) window.__ctapShowAuth('login');
-  });
-  const signupBtn = document.getElementById('settings-signup-btn');
-  if (signupBtn) signupBtn.addEventListener('click', () => {
-    if (window.__ctapShowAuth) window.__ctapShowAuth('signup');
+      localStorage.removeItem('jct_state');
+      Object.keys(localStorage)
+        .filter(k => k.startsWith('jcpd_'))
+        .forEach(k => localStorage.removeItem(k));
+    } catch {}
+    location.reload();
   });
 
   const addJobBtn = document.getElementById('go-log-tab-empty');
@@ -3412,7 +3484,11 @@ function attachListeners() {
 
   // How to use — expand/collapse
   const howToBtn = document.getElementById('toggle-how-to');
-  if (howToBtn) howToBtn.addEventListener('click', () => { howToExpanded = !howToExpanded; render(); });
+  if (howToBtn) howToBtn.addEventListener('click', () => {
+    howToExpanded = !howToExpanded;
+    if (howToExpanded) localStorage.setItem(HOWTO_SEEN_KEY, 'true');
+    render();
+  });
 
   // How credits work — expand/collapse
   const legalBtn = document.getElementById('toggle-legal-info');
@@ -3773,7 +3849,23 @@ function buildCoachCard() {
       msgs.push(sgoNudge());
     }
   } else if (!bonus && targetHours > 0.05) {
-    msgs.push(`You're in credit — staying consistent this week protects your balance.`);
+    // Three different engineers reach this branch: one genuinely in credit, one
+    // sitting at zero with weeks behind them, and one who installed the app this
+    // morning. Telling the last of those that consistency "protects your balance"
+    // points at a balance that does not exist yet, and is the first thing the app
+    // ever says to them.
+    if (bal > 0.05) {
+      msgs.push(`You're in credit — staying consistent this week protects your balance.`);
+    } else if (!pastWks.length && earnedHours < 0.05) {
+      msgs.push(`Nothing logged yet, so the balance below is still zero. It starts moving the first time you log a job.`);
+    } else if (!pastWks.length) {
+      // The balance only moves when a week completes, so an engineer in their
+      // first week is looking at a zero that their logging has not failed to
+      // change — it has not had the chance yet.
+      msgs.push(`First week in. The balance below moves when this week closes, not as you log.`);
+    } else {
+      msgs.push(`You're level — neither in credit nor in deficit. A week above target puts you in front.`);
+    }
     const todayKey = getTodayKey();
     const wkDays5 = weekDays(todayWk).slice(0, 5);
     const remainDays = wkDays5.filter(dk => dk >= todayKey && !dayIsLeave(week, dk)).length;

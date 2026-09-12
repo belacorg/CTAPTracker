@@ -8,7 +8,7 @@ once committed.
 
 | File                       | What to capture                                                              |
 |----------------------------|------------------------------------------------------------------------------|
-| `onboarding.png`           | Sign-in or Create Account screen                                             |
+| `setup-card.png`           | Dashboard on a *fresh* install — the "Set up · 3 left" card, nothing logged  |
 | `schedule.png`             | Schedule tab with a few days filled in, ideally one with a daily note dot   |
 | `log-job.png`              | Log Job tab showing the tile grid (Core or Hive category is fine)            |
 | `job-credits-hero.png`     | Dashboard hero — JOB CREDITS card with the today progress bar visible       |
@@ -19,6 +19,15 @@ once committed.
 | `todays-jobs.png`          | Today's Jobs section expanded with at least one job + the Add a job button |
 | `history.png`              | History tab with a mix of weeks (green/amber/red dots if possible)         |
 | `settings.png`             | Settings tab — scroll so the About card is visible                          |
+
+## Getting a clean first-run shot
+
+`setup-card.png` is the one that needs setting up rather than just capturing:
+it only exists before the app has been used. To get it back on a phone that
+already has data — **and only on a phone whose data you don't need** —
+Settings → Erase all data, then open the Dashboard. On a phone you do care
+about, take it in Safari private browsing at the same URL instead, which
+leaves the installed app untouched.
 
 ## Tips
 

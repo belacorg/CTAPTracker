@@ -32,15 +32,32 @@ describe('Log Job is the landing page', () => {
     }
   });
 
-  it('starts on the dashboard when offline, since logging is unavailable', () => {
+  // The app is local-only (ADR-0015): a write goes to localStorage and stays
+  // there, so there is no longer a cloud load that could discard it. Signal is
+  // therefore irrelevant to logging — which matters, because the plant rooms
+  // and cupboards an engineer works in are exactly where signal is worst.
+  it('opens on Log Job with no signal', () => {
     const h = bootApp({ online: false });
-    expect(h.$('.bottom-nav button.active').textContent.trim()).toBe('Dashboard');
+    expect(h.$('.bottom-nav button.active').textContent.trim()).toBe('Log Job');
   });
 
-  it('moves off Log Job if signal drops while sat on it', () => {
-    const h = bootApp();
-    h.window.__ctapSetOffline(true);
-    expect(h.$('.bottom-nav button.active').textContent.trim()).toBe('Dashboard');
+  it('logs a job with no signal, and keeps it', () => {
+    const h = bootApp({ online: false });
+    openTyped(h, 'two gas repairs');
+    h.click('#voice-commit');
+    const today = h.window.getTodayKey();
+    const wk = h.window.getWeekKey(new Date(today + 'T00:00:00'));
+    expect(h.state().weeks[wk].days[today]).toHaveLength(2);
+    // And it survived the write — localStorage is the only copy there is.
+    expect(JSON.parse(h.window.localStorage.getItem('jct_state'))
+      .weeks[wk].days[today]).toHaveLength(2);
+  });
+
+  it('leaves the Log tab enabled whatever the connection', () => {
+    const h = bootApp({ online: false });
+    const logBtn = h.$$('.bottom-nav button').find(b => b.dataset.tab === 'log');
+    expect(logBtn.classList.contains('nav-disabled')).toBe(false);
+    expect(logBtn.getAttribute('aria-disabled')).toBeNull();
   });
 });
 
