@@ -3856,8 +3856,13 @@ function buildCoachCard() {
     // ever says to them.
     if (bal > 0.05) {
       msgs.push(`You're in credit — staying consistent this week protects your balance.`);
-    } else if (!pastWks.length) {
+    } else if (!pastWks.length && earnedHours < 0.05) {
       msgs.push(`Nothing logged yet, so the balance below is still zero. It starts moving the first time you log a job.`);
+    } else if (!pastWks.length) {
+      // The balance only moves when a week completes, so an engineer in their
+      // first week is looking at a zero that their logging has not failed to
+      // change — it has not had the chance yet.
+      msgs.push(`First week in. The balance below moves when this week closes, not as you log.`);
     } else {
       msgs.push(`You're level — neither in credit nor in deficit. A week above target puts you in front.`);
     }

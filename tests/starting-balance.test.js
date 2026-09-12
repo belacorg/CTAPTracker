@@ -142,6 +142,19 @@ describe('a balance of exactly zero', () => {
     expect(tile.textContent).toMatch(/-8\.00/);
   });
 
+  it('stops saying nothing is logged once something is', () => {
+    // "Nothing logged yet" keyed off having no completed weeks, which is not the
+    // same question — so it kept saying it all through the engineer's first week,
+    // with jobs on the screen above it.
+    const h = bootApp();
+    h.click(h.$$('.bottom-nav button').find(b => b.dataset.tab === 'log'));
+    h.click(h.$$('.lj-chip')[0]);
+    h.click(h.$$('.bottom-nav button').find(b => b.dataset.tab === 'dashboard'));
+    const coach = h.$('.coach-card');
+    expect(coach.textContent).not.toMatch(/nothing logged yet/i);
+    expect(coach.textContent).toMatch(/first week in/i);
+  });
+
   it('does not tell a brand-new engineer they have a balance to protect', () => {
     const h = dashboard();
     const coach = h.$('.coach-card');
