@@ -1,4 +1,4 @@
-const CACHE = 'jct-v91';
+const CACHE = 'jct-v92';
 const BASE  = '/CTAPTracker';
 
 // The app holds no server-side anything (ADR-0015), so a cached copy is a
@@ -13,6 +13,14 @@ self.addEventListener('install', e => {
       BASE + '/data.cjs',
       BASE + '/pixel-engineer.js',
       BASE + '/style.css',
+      BASE + '/fonts.css',
+      // Self-hosted fonts (ADR-0016). Both families are variable fonts, so one
+      // file per subset carries every weight the app uses.
+      BASE + '/fonts/DMSans-latin.woff2',
+      BASE + '/fonts/JetBrainsMono-latin.woff2',
+      BASE + '/manifest.json',
+      BASE + '/icons/icon-192.png',
+      BASE + '/icons/icon-512.png',
     ])).catch(() => {})   // one 404 must not fail the whole install
   );
   self.skipWaiting();

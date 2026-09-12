@@ -32,19 +32,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Test
+        run: npm test
+
       # No Supabase credentials: the app is local-only (ADR-0015) and index.html
       # does not load src/main.js, so nothing in the built bundle reads them.
       # They are omitted rather than left dead — a deploy config carrying a
       # database URL is the first thing that contradicts "nothing leaves the
       # device", whether or not the code uses it. Restore them alongside the
       # module script tag if sync is ever switched back on.
+
+      # build.mjs copies app/ to dist/ verbatim — no bundler, so what the trial
+      # engineers load is byte-identical to what runs in dev and under test.
       - name: Build
         run: npm run build
-
-      - name: Copy static assets to dist
-        run: |
-          cp app/app.js app/data.cjs app/sw.js app/manifest.json app/pixel-engineer.js dist/
-          cp -r app/icons dist/
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
