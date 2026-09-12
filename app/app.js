@@ -341,9 +341,16 @@ function buildDashboard() {
     ? bal + weekCreditHours(week) - adjustedTargetHours(state, week)
     : bal;
   const displayBal = isCurrentWeek && ctapProjectedMode ? projectedBal : bal;
-  const balColour = displayBal >= 0 ? 'green' : 'red';
+  // Zero is its own state, not the bottom of "in credit". Every engineer starts
+  // the trial at 0.00 with nothing logged, and an app that opens by congratulating
+  // them on a balance they have not earned reads as decoration rather than a
+  // ledger. The threshold matches the two decimals the tile prints: anything that
+  // displays as 0.00 is level.
+  const balLevel = Math.abs(displayBal) < 0.005;
+  const balColour = balLevel ? 'neutral' : displayBal > 0 ? 'green' : 'red';
+  const balLabel = balLevel ? 'Level' : displayBal > 0 ? 'In credit' : 'Deficit';
   const balAbs = Math.abs(displayBal);
-  const balSign = displayBal < 0 ? '-' : '+';
+  const balSign = balLevel ? '' : displayBal < 0 ? '-' : '+';
   const balSignColour = displayBal < 0 ? 'red' : 'green';
   const balIntNum = Math.floor(balAbs);
   const balDecStr = (balAbs % 1).toFixed(2).slice(1);
@@ -463,6 +470,7 @@ function buildDashboard() {
       ${contextLine ? `<div class="hero-context-line">${contextLine}</div>` : ''}
     </div>
 
+    ${isCurrentWeek ? buildSetupCard() : ''}
     ${isCurrentWeek ? buildCheckinCard() : ''}
     ${isCurrentWeek ? buildDeficitClearedCard() : ''}
     ${isCurrentWeek ? buildCoachCard() : ''}
@@ -471,9 +479,9 @@ function buildDashboard() {
       <div class="split-card" id="ctap-tile" style="cursor:pointer">
         <div class="split-card-top">
           <span class="split-card-label">CTAP</span>
-          <span class="status-badge ${balColour}" style="font-size:0.55rem;padding:2px 7px">${displayBal >= 0 ? 'In credit' : 'Deficit'}</span>
+          <span class="status-badge ${balColour}" style="font-size:0.55rem;padding:2px 7px">${balLabel}</span>
         </div>
-        <div class="split-hours" style="color:var(--${balColour})">${balSign}${balIntNum}${balDecStr}<span class="split-unit">h</span></div>
+        <div class="split-hours" style="color:var(--${balLevel ? 'muted' : balColour})">${balSign}${balIntNum}${balDecStr}<span class="split-unit">h</span></div>
         <div class="split-sub">balance</div>
         ${isCurrentWeek ? `<div class="split-pace pace-muted">Starting: ${(state.startingBalance || 0) >= 0 ? '+' : ''}${(state.startingBalance || 0).toFixed(2)}h</div>` : ''}
       </div>
@@ -2377,6 +2385,73 @@ function attachVoiceSheetListeners() {
 // here compares them to another engineer, and no surface draws a conclusion on
 // their behalf. See ADR-0012 before adding anything that says "because".
 
+// ── First run ──────────────────────────────────────────────────────────────
+// Ten engineers install this on the same Monday, and each of them arrives with a
+// CTAP balance they have been carrying for months. The app defaults that balance
+// to zero and looks completely finished while it does — sane 40h/80% defaults,
+// every figure rendered, nothing obviously blank. So the one setting that makes
+// the headline number theirs rather than fictional is also the one with no
+// prompt to set it, and the explanation of all this sits collapsed at the bottom
+// of Settings under HELP, below the thing it explains.
+//
+// Hence a card that says what is left to do and goes away when it's done. Not a
+// launch modal: a modal is dismissed to get at the app, which teaches the
+// engineer to dismiss it, and it interrupts the one engineer who set everything
+// up on Friday. This waits on the dashboard and disappears on its own.
+const SETUP_DISMISSED_KEY = 'jcpd_setup_dismissed';
+const HOWTO_SEEN_KEY = 'jcpd_howto_seen';
+
+function setupSteps() {
+  const wk = state.weeks[getWeekKey(new Date())] || {};
+  const shifts = wk.shifts || {};
+  return [
+    {
+      id: 'balance',
+      // Touched at all, including deliberately to zero — an engineer who is
+      // genuinely level has still answered the question.
+      done: Object.prototype.hasOwnProperty.call(state, 'startingBalance'),
+      label: 'Set your starting CTAP balance',
+      hint: 'The hours you are already up or down, so the balance is yours',
+    },
+    {
+      id: 'shifts',
+      done: Object.keys(shifts).some(dk => shifts[dk] && (shifts[dk].start || shifts[dk].leave)),
+      label: 'Put in this week\'s shifts',
+      hint: 'Tap Standard week if it is a normal Mon–Fri',
+    },
+    {
+      id: 'howto',
+      done: localStorage.getItem(HOWTO_SEEN_KEY) === 'true',
+      label: 'Read how the app works',
+      hint: 'Two minutes, and it covers where your data lives',
+    },
+  ];
+}
+
+function buildSetupCard() {
+  if (localStorage.getItem(SETUP_DISMISSED_KEY) === 'true') return '';
+  const steps = setupSteps();
+  const left = steps.filter(st => !st.done).length;
+  if (!left) return '';
+
+  return `<div class="setup-card">
+    <div class="setup-card-top">
+      <span class="setup-card-label">Set up</span>
+      <span class="setup-card-count">${left} left</span>
+      <button class="setup-card-close" id="setup-dismiss" aria-label="Hide setup">×</button>
+    </div>
+    ${steps.map(st => `
+      <button class="setup-step${st.done ? ' is-done' : ''}" data-setup-step="${st.id}"${st.done ? ' disabled' : ''}>
+        <span class="setup-step-mark" aria-hidden="true">${st.done ? '✓' : ''}</span>
+        <span class="setup-step-txt">
+          <strong>${st.label}</strong>
+          <small>${st.hint}</small>
+        </span>
+        ${st.done ? '' : '<span class="setup-step-go">›</span>'}
+      </button>`).join('')}
+  </div>`;
+}
+
 function buildCheckinCard() {
   if (!isCheckinOn()) return '';
   const todayKey = getTodayKey();
@@ -2857,6 +2932,31 @@ function attachListeners() {
       }, 52);
     }
   }
+
+  // First-run setup card
+  const setupDismiss = document.getElementById('setup-dismiss');
+  if (setupDismiss) setupDismiss.addEventListener('click', () => {
+    localStorage.setItem(SETUP_DISMISSED_KEY, 'true');
+    render();
+  });
+  document.querySelectorAll('[data-setup-step]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const step = btn.dataset.setupStep;
+      if (step === 'balance') {
+        activeTab = 'settings';
+        startBalSignNeg = null;
+      } else if (step === 'shifts') {
+        activeTab = 'schedule';
+      } else if (step === 'howto') {
+        // Opened and marked read in one tap, so the step completes on the
+        // action the engineer actually took rather than on a second one.
+        activeTab = 'settings';
+        howToExpanded = true;
+        localStorage.setItem(HOWTO_SEEN_KEY, 'true');
+      }
+      render();
+    });
+  });
 
   // Bottom nav
   document.querySelectorAll('[data-tab]').forEach(btn => {
@@ -3384,7 +3484,11 @@ function attachListeners() {
 
   // How to use — expand/collapse
   const howToBtn = document.getElementById('toggle-how-to');
-  if (howToBtn) howToBtn.addEventListener('click', () => { howToExpanded = !howToExpanded; render(); });
+  if (howToBtn) howToBtn.addEventListener('click', () => {
+    howToExpanded = !howToExpanded;
+    if (howToExpanded) localStorage.setItem(HOWTO_SEEN_KEY, 'true');
+    render();
+  });
 
   // How credits work — expand/collapse
   const legalBtn = document.getElementById('toggle-legal-info');
@@ -3745,7 +3849,18 @@ function buildCoachCard() {
       msgs.push(sgoNudge());
     }
   } else if (!bonus && targetHours > 0.05) {
-    msgs.push(`You're in credit — staying consistent this week protects your balance.`);
+    // Three different engineers reach this branch: one genuinely in credit, one
+    // sitting at zero with weeks behind them, and one who installed the app this
+    // morning. Telling the last of those that consistency "protects your balance"
+    // points at a balance that does not exist yet, and is the first thing the app
+    // ever says to them.
+    if (bal > 0.05) {
+      msgs.push(`You're in credit — staying consistent this week protects your balance.`);
+    } else if (!pastWks.length) {
+      msgs.push(`Nothing logged yet, so the balance below is still zero. It starts moving the first time you log a job.`);
+    } else {
+      msgs.push(`You're level — neither in credit nor in deficit. A week above target puts you in front.`);
+    }
     const todayKey = getTodayKey();
     const wkDays5 = weekDays(todayWk).slice(0, 5);
     const remainDays = wkDays5.filter(dk => dk >= todayKey && !dayIsLeave(week, dk)).length;

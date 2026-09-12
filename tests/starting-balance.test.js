@@ -87,3 +87,67 @@ describe('entering a starting balance', () => {
     expect(tile).toContain('22');
   });
 });
+
+// What the app says on the very first open.
+//
+// Every trial engineer starts at 0.00 with nothing logged, so the day-one screen
+// is the one screen guaranteed to be seen by all ten of them. It used to read
+// "In credit" over +0.00h and tell them consistency was protecting a balance
+// they had not started building — congratulating them for having done nothing,
+// which is how an app teaches you not to read it.
+describe('a balance of exactly zero', () => {
+  const dashboard = () => {
+    const h = bootApp();
+    h.click(h.$$('.bottom-nav button').find(b => b.dataset.tab === 'dashboard'));
+    return h;
+  };
+
+  it('is called level, not credit', () => {
+    const h = dashboard();
+    const tile = h.$('#ctap-tile');
+    expect(tile.textContent).toMatch(/level/i);
+    expect(tile.textContent).not.toMatch(/in credit/i);
+  });
+
+  it('wears neither the win colour nor the warning colour', () => {
+    const h = dashboard();
+    const badge = h.$('#ctap-tile .status-badge');
+    expect(badge.className).toContain('neutral');
+    expect(badge.className).not.toMatch(/\b(green|red)\b/);
+  });
+
+  it('prints no sign in front of nothing', () => {
+    const h = dashboard();
+    expect(h.$('#ctap-tile .split-hours').textContent.trim()).toMatch(/^0\.00/);
+  });
+
+  it('still calls a real credit a credit', () => {
+    const h = bootApp();
+    h.click(h.$$('.bottom-nav button').find(b => b.dataset.tab === 'settings'));
+    h.setValue('#start-bal-input', '12', 'blur');
+    h.click(h.$$('.bottom-nav button').find(b => b.dataset.tab === 'dashboard'));
+    const tile = h.$('#ctap-tile');
+    expect(tile.textContent).toMatch(/in credit/i);
+    expect(tile.textContent).toMatch(/\+12\.00/);
+  });
+
+  it('still calls a real deficit a deficit', () => {
+    const h = bootApp();
+    h.click(h.$$('.bottom-nav button').find(b => b.dataset.tab === 'settings'));
+    h.click('#start-bal-sign');
+    h.setValue('#start-bal-input', '8', 'blur');
+    h.click(h.$$('.bottom-nav button').find(b => b.dataset.tab === 'dashboard'));
+    const tile = h.$('#ctap-tile');
+    expect(tile.textContent).toMatch(/deficit/i);
+    expect(tile.textContent).toMatch(/-8\.00/);
+  });
+
+  it('does not tell a brand-new engineer they have a balance to protect', () => {
+    const h = dashboard();
+    const coach = h.$('.coach-card');
+    expect(coach).toBeTruthy();
+    expect(coach.textContent).not.toMatch(/in credit/i);
+    expect(coach.textContent).not.toMatch(/protects your balance/i);
+    expect(coach.textContent).toMatch(/nothing logged yet/i);
+  });
+});

@@ -314,6 +314,9 @@ body {
 .status-badge.green { background: rgba(95, 210, 138, 0.15); color: var(--green); }
 .status-badge.amber { background: rgba(255, 200, 87, 0.15); color: var(--amber); }
 .status-badge.red   { background: rgba(255, 112, 96, 0.15); color: var(--red); }
+/* A balance of exactly zero — the state every engineer starts the trial in.
+   Neither a win nor a warning, and it should not borrow the colour of either. */
+.status-badge.neutral { background: rgba(127, 127, 127, 0.15); color: var(--muted); }
 
 .stats-row { display: flex; gap: 8px; margin-bottom: 10px; }
 .stat-pill {
@@ -3790,6 +3793,62 @@ body.light .lj-sec-sticky { background: var(--bg); }
    Quieter than .lj-voice on purpose. The check-in is an invitation, not the
    app's main action — if it shouts as loud as logging a job it starts reading
    as something asked of the engineer rather than offered to them. */
+/* First-run setup (see buildSetupCard). Deliberately quieter than the check-in
+   card next to it: this is scaffolding that removes itself, not a feature. */
+.setup-card {
+  background: var(--surface);
+  border: 1px solid var(--tile-border);
+  border-radius: var(--radius);
+  padding: 12px 6px 6px;
+  margin-bottom: 12px;
+}
+.setup-card-top {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 10px 8px;
+}
+.setup-card-label {
+  font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--muted);
+}
+.setup-card-count {
+  flex: 1;
+  font-size: 0.62rem; font-weight: 600; color: var(--accent);
+}
+.setup-card-close {
+  flex: 0 0 auto;
+  width: 24px; height: 24px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none; cursor: pointer;
+  color: var(--muted2); font-size: 1.05rem; line-height: 1;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.setup-card-close:active { background: var(--surface2); }
+.setup-step {
+  width: 100%;
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px;
+  background: none; border: none; border-radius: var(--jcpd-r-sm);
+  text-align: left; cursor: pointer; font-family: inherit; color: var(--fg);
+  -webkit-tap-highlight-color: transparent;
+}
+.setup-step:active { background: var(--surface2); }
+.setup-step-mark {
+  flex: 0 0 auto;
+  width: 18px; height: 18px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 1.5px solid var(--muted2);
+  font-size: 0.62rem; font-weight: 700; color: var(--green);
+}
+.setup-step-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.setup-step-txt strong { font-size: 0.85rem; font-weight: 600; }
+.setup-step-txt small { font-size: 0.72rem; color: var(--muted); line-height: 1.35; }
+.setup-step-go { flex: 0 0 auto; color: var(--muted2); font-size: 1rem; }
+.setup-step.is-done { cursor: default; }
+.setup-step.is-done .setup-step-mark { border-color: var(--green); background: rgba(95, 210, 138, 0.16); }
+.setup-step.is-done .setup-step-txt strong { color: var(--muted); text-decoration: line-through; }
+.setup-step.is-done .setup-step-txt small { display: none; }
+
 .checkin-card {
   width: 100%;
   display: flex; align-items: center; gap: 12px;
