@@ -24,10 +24,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Pinned to match the version the suite is developed against. jsdom 30
+      # bundles undici 8, which calls webidl.util.markAsUncloneable — absent on
+      # Node 20, where every jsdom suite then fails to load rather than fails a
+      # test. Ten of fifteen files went down that way the first time the deploy
+      # ran the tests.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Install dependencies
         run: npm ci
