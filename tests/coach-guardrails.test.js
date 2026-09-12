@@ -68,9 +68,11 @@ describe('matching a job to a gap', () => {
 });
 
 describe('what Coach actually renders', () => {
-  // Drive the real surfaces with a deficit and read only the Coach surfaces —
-  // the catalogue list on the Log tab legitimately contains every job name, so
-  // scoping matters. The guardrail is only worth anything at point of output.
+  // Drive the real surfaces with a deficit and read only the Coach surfaces.
+  // Coach lives on the Dashboard alone — see the Log Job test below — so that
+  // is the only tab to read. Scoping still matters: the catalogue list on the
+  // Log tab legitimately contains every job name, and the guardrail is only
+  // worth anything at point of output.
   function coachText() {
     const h = bootApp();
     h.window.localStorage.setItem('jcpd_coach_mode', 'true');
@@ -79,8 +81,6 @@ describe('what Coach actually renders', () => {
     let text = '';
     nav('dashboard');
     text += [...h.doc.querySelectorAll('.coach-card')].map(e => e.textContent).join(' ');
-    nav('log');
-    text += ' ' + [...h.doc.querySelectorAll('.coach-log-banner')].map(e => e.textContent).join(' ');
     return text;
   }
 
@@ -104,5 +104,37 @@ describe('what Coach actually renders', () => {
 
   it('never claims a "highest value single job"', () => {
     expect(coachText()).not.toContain('highest value');
+  });
+});
+
+
+// Coach belongs to the Dashboard.
+//
+// Log Job is the screen an engineer opens mid-round, often one-handed, to record
+// something they have just done — a place to write, not to be advised. The
+// banner that sat there also pushed the job tiles down far enough to be felt.
+describe('Log Job carries no Coach surface', () => {
+  const logTab = (coach) => {
+    const h = bootApp({ storage: { jcpd_coach_mode: coach } });
+    h.state().startingBalance = -12;   // deep in deficit: the advice would fire
+    h.click(h.$$('.bottom-nav button').find(b => b.dataset.tab === 'log'));
+    return h;
+  };
+
+  it('renders no Coach banner even with Coach Mode on and a gap to close', () => {
+    const h = logTab('true');
+    expect(h.$('.coach-log-banner')).toBeNull();
+    expect(h.$('.coach-card')).toBeNull();
+  });
+
+  it('offers no tip or target advice anywhere on the page', () => {
+    const h = logTab('true');
+    expect(h.$('#app').textContent).not.toMatch(/to hit today's target/i);
+  });
+
+  it('still puts Coach on the Dashboard, so this removed a surface not a feature', () => {
+    const h = logTab('true');
+    h.click(h.$$('.bottom-nav button').find(b => b.dataset.tab === 'dashboard'));
+    expect(h.$('.coach-card')).toBeTruthy();
   });
 });

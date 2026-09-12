@@ -2497,19 +2497,6 @@ details[open] .info-chevron { transform: rotate(90deg); }
 }
 .coach-card-dismiss:active { color: var(--text); }
 
-/* ── Coach Log Banner ── */
-.coach-log-banner {
-  background: var(--jcpd-accent-dim);
-  border: 1px solid rgba(74,134,216,0.18);
-  border-radius: 8px;
-  padding: 7px 12px;
-  font-size: 0.74rem;
-  font-weight: 500;
-  color: var(--accent);
-  margin-bottom: 8px;
-  line-height: 1.4;
-}
-
 /* ── Coach Mode toggle (Settings) ── */
 .coach-toggle-row {
   display: flex;

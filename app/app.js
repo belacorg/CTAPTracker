@@ -890,7 +890,6 @@ function buildLogJobs() {
     ${headerHTML}
     ${searching ? '' : voiceHTML}
     ${searching ? '' : recentHTML}
-    ${searching ? '' : buildCoachLogBanner()}
     ${sectionsHTML}
     ${sessionBarHTML}
   `;
@@ -3932,35 +3931,6 @@ function buildDeficitClearedCard() {
     <div class="coach-celebrate-check">✓</div>
     <div class="coach-msg">You're back in credit. ${pastWks.length} week${pastWks.length === 1 ? '' : 's'} of consistent work got you here — well done.</div>
   </div>`;
-}
-
-function buildCoachLogBanner() {
-  if (!isCoachModeOn()) return '';
-  if (activeLogDay !== getTodayKey()) return '';
-  const todayWk = getWeekKey(new Date());
-  const week = state.weeks[todayWk] || { days: {} };
-  const todayKey = getTodayKey();
-  const dedMins = (week.deductionLog || []).filter(d => d.date === todayKey).reduce((s,d) => s+d.mins, 0);
-  const dailyTarget = Math.max(0, getDailyTarget(state, week, todayKey) - dedMins / 60);
-  if (dailyTarget <= 0) return '';
-  const todayHours = ((week.days || {})[todayKey] || []).reduce((s,j) => s+j.creditMins, 0) / 60;
-  if (todayHours >= dailyTarget) return '';
-  const gap = dailyTarget - todayHours;
-  // Only ever name a job the engineer can actually elect to do — see ADR-0009.
-  // Where no elective job fits the gap, say so plainly rather than reaching for
-  // the biggest number in the catalogue.
-  const closing = getElectiveJobForGap(gap);
-  let text = '';
-  if (closing) {
-    const n = closing.name.replace(/\s*\(.*$/, '').trim();
-    text = `${gap.toFixed(2)}h to hit today's target — a ${n} (${(closing.minutes/60).toFixed(2)}h) would get you there.`;
-  } else if (gap > 1.0) {
-    text = `${gap.toFixed(2)}h to hit today's target — that's more than one job will close. Worth looking at the week rather than today.`;
-  } else {
-    text = `${gap.toFixed(2)}h to hit today's target.`;
-  }
-  if (!text) return '';
-  return `<div class="coach-log-banner">${text}</div>`;
 }
 
 function buildBestAdviceStrip(stillNeeded, todayJobs, week, todayKey) {
