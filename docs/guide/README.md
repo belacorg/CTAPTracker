@@ -31,18 +31,44 @@ Built by an engineer who got tired of finding out the bonus too late.
 
 ## Getting started
 
-![Sign-in / onboarding](screenshots/onboarding.png)
+There is no account. There is no sign-in. You open it and it works.
 
-The app works **locally first** — open it, start logging jobs, no signup
-required. Sign in (Settings → Create Account) only if you want your data
-synced across devices (phone + tablet, or replacing a phone).
+### Install it
 
-**Why local-first?** Most engineers will use this on one phone. Forcing a
-signup before the app does anything useful is friction nobody needs. Sync is
-opt-in for the people who want it.
+1. Open **https://belacorg.github.io/CTAPTracker/** in **Safari** on your
+   iPhone (it has to be Safari — Chrome on iOS can't install web apps).
+2. Tap the **Share** button, then **Add to Home Screen**.
+3. Open it from the home-screen icon from now on, not from Safari. It runs
+   full-screen and works with no signal.
 
-When signed in, data lives in a personal Supabase account hosted in the EU.
-Nothing is shared with anyone.
+### Set it up
+
+![First run — the setup card](screenshots/setup-card.png)
+
+The Dashboard shows a short **Set up** card listing what's left to do. Three
+things, each one tap away, and the card ticks them off and disappears once
+they're done:
+
+- **Your starting CTAP balance** — the hours you're already up or down. This
+  is the one that matters. Without it every balance the app shows you starts
+  from zero, which is almost certainly not where you are.
+- **This week's shifts** — tap **Standard week** if yours is a normal
+  Mon–Fri.
+- **How the app works** — two minutes, and it covers where your data lives.
+
+If you're genuinely level, still tap into the balance and enter 0 — that
+counts as an answer and stops the card asking.
+
+### Where your figures go
+
+**Nowhere.** Everything you log stays in this app on this phone. There's no
+account to create, no server behind it, and nothing is uploaded — not to me,
+not to your employer, not to anyone. The app makes no network requests at
+all once it's installed; it doesn't even fetch its own fonts.
+
+The flip side is the part worth knowing before you start: **there's no backup**.
+Delete the app, erase the data in Settings, or lose the phone, and it's gone.
+Nobody can recover it for you, because nobody else ever had it.
 
 ---
 
@@ -265,31 +291,34 @@ toggle lets you flag those weeks as anomalies without deleting the data.
 
 ### About
 
-- **Version** + sync status.
+- **Version** — and "on-device", which is the whole architecture in a word.
 - **Legal & data** — disclaimer, employer separation, data storage and
   retention.
 - **Built by** — Jake Rainford, Service & Repair Engineer.
 - **Questions or feedback?** — reach out on Teams.
 
-### Account (signed in only)
+### This data is yours alone
 
-- **Sign out** — keeps your data on the server but logs you out locally.
-- **Delete account & data** — wipes every row of your data (jobs, weeks,
-  shifts, profile) from the server and signs you out. Two-step: tap
-  Delete → type DELETE → confirm. The sign-in record itself is removed
-  manually within 24h until an automated cleanup function is deployed.
+The card at the bottom of Settings, where an account would be in most apps.
+
+- **Erase all data** — wipes every job, week, shift, check-in and setting
+  from this phone. Two-step: tap Erase → type ERASE → confirm.
+- There is nothing to sign out of, and no copy anywhere else, so erasing
+  really is permanent. Deleting the app does the same thing.
 
 ---
 
 ## Data & privacy
 
-- **Local-first**: the app works fully without an account. Data lives in
-  your browser's local storage.
-- **Sync (optional)**: signing in syncs to a personal account on Supabase
-  (EU region).
-- **No third parties**: nothing is shared with analytics, ads, employer
-  systems, or anyone else.
-- **Right to delete**: built into Settings (see above). No emails required.
+- **On-device, full stop**: every figure you enter lives in this app's
+  storage on this phone. There is no account, no server, and no upload.
+- **No transmission**: the app doesn't send your data anywhere, because
+  there is nowhere for it to go. Once installed it makes no network
+  requests at all — even the fonts are served from the app itself.
+- **No third parties**: no analytics, no ads, no employer systems, nobody.
+- **No backup**: the honest consequence of the above. Nothing is recoverable
+  if the phone or the app goes.
+- **Right to delete**: Settings → Erase all data. No emails, no waiting.
 
 ---
 
@@ -304,9 +333,9 @@ toggle lets you flag those weeks as anomalies without deleting the data.
 
 ## Tech stack (one-liner)
 
-Vanilla JS PWA, Vite build, deployed to GitHub Pages, Supabase for auth and
-sync. ~220KB JS, ~60KB CSS, offline-capable via service worker. Tests run
-on Vitest.
+Vanilla JS PWA served as plain static files from GitHub Pages — no bundler,
+no backend, no dependencies at runtime. Fonts self-hosted. Offline via a
+service worker that precaches the whole shell. Tests run on Vitest.
 
 ---
 

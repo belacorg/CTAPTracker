@@ -1125,7 +1125,7 @@ function buildSettings() {
     <div class="st-card">
       <div class="st-row">
         <span class="st-row-label">Version</span>
-        <span class="st-row-value">v0.7.0 · on-device</span>
+        <span class="st-row-value">v0.8.0 · on-device</span>
       </div>
       ${rowDiv()}
       <button class="st-nav-row" id="toggle-legal-info">
