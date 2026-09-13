@@ -45,9 +45,8 @@ let _voiceStartGuard = null;
 let _voiceSilenceGuard = null;
 let _voiceRestartTimer = null;
 let _voiceMaxTimer = null;
-let _voiceCommitted = '';   // finalised phrases across bursts
+let _voiceCommitted = '';   // finalised phrases so far this dictation
 let _voiceInterim = '';     // the phrase currently being spoken
-let _voiceRestarts = 0;
 let _ctapUser = null;          // populated by __ctapInit
 let _ctapDisplayName = '';     // populated by __ctapInit
 
@@ -1968,20 +1967,31 @@ function speechRecognitionCtor() {
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
 }
 
-// Listening must always end by itself.
+// One recogniser per dictation, and we always end it — never the engine.
 //
-// While iOS holds the microphone it takes over touch input, so the page stops
-// receiving taps — a "Listening…" state that only a button can exit is a trap
-// with no way out. Two rules keep that from happening:
-//   1. continuous = false, so the recogniser stops on a natural pause. (iOS
-//      largely ignores continuous = true and then never fires onend at all.)
-//   2. Timers we own, not the engine's, are the real backstop — if the engine
-//      never starts, never speaks, or never ends, we abort it ourselves.
+// Measured on an iPhone with voice-lab.html (iOS 18.7): a recogniser that ends
+// on its own never fires audioend. iOS keeps hold of the microphone, the mic
+// indicator stays on, and every start for the next ~45 seconds reports
+// "listening" but gets no audio, then fails with audio-capture "Source is
+// stopped". The old design — short bursts, restarted after each natural pause —
+// was therefore deaf after the first phrase, and so was tapping the mic to try
+// again. abort() does release the microphone.
+//
+// So:
+//   1. continuous = true. One session carries the pauses an engineer takes
+//      between jobs (it held three phrases with pauses on the phone), so
+//      nothing is restarted mid-dictation.
+//   2. It ends by our abort() — Done, or a timer we own. If the engine ends on
+//      its own anyway we wrap up rather than restart, since that restart is
+//      the deaf one.
+//   3. Timers we own stay the backstop: an engine that never starts, goes
+//      quiet or runs on is aborted by us. continuous = true once stranded the
+//      sheet on iOS because nothing but the engine could end it; with these
+//      timers it can't.
 const VOICE_START_TIMEOUT = 4000;    // engine never got going
 const VOICE_SILENCE_TIMEOUT = 7000;  // no NEW speech for this long → wrap up
 const VOICE_MAX_SESSION = 120000;    // hard cap on one dictation
-const VOICE_MAX_RESTARTS = 40;       // backstop against a restart loop
-const VOICE_RESTART_GAP = 180;       // let a finished recogniser release the mic
+const VOICE_RESTART_GAP = 180;       // after abort(), before starting again
 
 function clearVoiceTimers() {
   if (_voiceStartGuard) { clearTimeout(_voiceStartGuard); _voiceStartGuard = null; }
@@ -2011,27 +2021,6 @@ function armVoiceSilenceGuard() {
   }, VOICE_SILENCE_TIMEOUT);
 }
 
-// The recogniser is run in short, self-terminating bursts (continuous = true
-// is what locked iOS up), and it ends itself on any natural pause. Engineers
-// pause constantly — reading the next job off a phone, thinking. So a burst
-// ending is not the engineer finishing: restart and keep accumulating, and let
-// our own silence guard decide when they're actually done.
-function restartVoiceBurst() {
-  if (voiceStatus !== 'listening') return;
-  if (_voiceRestarts >= VOICE_MAX_RESTARTS) { finishVoiceCapture(); return; }
-  _voiceRestarts++;
-  _voiceRestartTimer = setTimeout(function() {
-    _voiceRestartTimer = null;
-    if (voiceStatus !== 'listening') return;
-    try {
-      _recognition = buildRecognition();
-      _recognition.start();
-    } catch (e) {
-      finishVoiceCapture();
-    }
-  }, VOICE_RESTART_GAP);
-}
-
 // Single exit from listening, whether the engine ended it, a timer did, or the
 // engineer tapped Done.
 function finishVoiceCapture() {
@@ -2053,7 +2042,7 @@ function buildRecognition() {
   const rec = new SR();
   rec.lang = 'en-GB';
   rec.interimResults = true;
-  rec.continuous = false;
+  rec.continuous = true;
   rec.maxAlternatives = 1;
 
   rec.onstart = function() {
@@ -2078,7 +2067,7 @@ function buildRecognition() {
 
   rec.onerror = function(e) {
     if (e.error === 'aborted') return;              // we stopped it deliberately
-    // A burst that heard nothing is just a long pause; keep waiting.
+    // Nothing heard yet is just a long pause; our silence guard decides.
     if (e.error === 'no-speech') return;
     clearVoiceTimers();
     _recognition = null;
@@ -2091,13 +2080,16 @@ function buildRecognition() {
     refreshVoiceSheet();
   };
 
-  // A burst ending is a pause, not the end of the sentence.
+  // Every session we end goes through stopVoiceCapture, which detaches this
+  // handler before abort(). Reaching here means the engine stopped on its own —
+  // and on iOS a start in the next ~45s would hear nothing. So wrap up with
+  // what was heard; never restart.
   rec.onend = function() {
     _recognition = null;
     _voiceCommitted = (_voiceCommitted + ' ' + _voiceInterim).replace(/\s+/g, ' ').trim();
     _voiceInterim = '';
     if (voiceStatus !== 'listening') return;        // already moved on
-    restartVoiceBurst();
+    finishVoiceCapture();
   };
 
   return rec;
@@ -2123,16 +2115,14 @@ function startVoiceCapture() {
   };
 
   try {
-    // Starting again mid-capture means a recogniser is still live. Give it the
-    // same gap the pause restarts leave before starting another — those run on
-    // iOS in the field, while a second start() straight after abort() risks a
-    // session that never hears anything.
+    // Starting again mid-capture means a recogniser is still live. abort()
+    // releases the microphone within a few milliseconds on the phone; leave a
+    // short gap after it rather than calling start() in the same tick.
     const hadLive = !!_recognition;
     stopVoiceCapture();
     voiceTranscript = '';
     _voiceCommitted = '';
     _voiceInterim = '';
-    _voiceRestarts = 0;
 
     voiceStatus = 'listening';
     refreshVoiceSheet();

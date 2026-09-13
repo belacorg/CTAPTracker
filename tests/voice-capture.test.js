@@ -1,11 +1,18 @@
-// Voice capture: the listening state must always be escapable.
+// Voice capture: listening must always be escapable, and a dictation must hear
+// past its first phrase.
 //
-// The bug these cover: continuous = true made iOS hold the microphone and
-// never fire onend. While iOS holds the mic it takes over touch input, so no
-// button — not Done, not ✕, not the backdrop — could exit the sheet. Anything
-// here that relies on the *engine* behaving is a trap; the timers we own are
-// what actually guarantee an exit.
-import { describe, it, expect, beforeEach } from 'vitest';
+// Two iPhone bugs shaped this. First, continuous = true with no timers of our
+// own stranded the sheet in "Listening…": the engine never ended and no tap
+// got the page out. Timers we own now guarantee an exit. Second, measured with
+// voice-lab.html on iOS 18.7: a recogniser that ends on its own keeps the
+// microphone for ~45 seconds, and anything started in that window hears
+// nothing. The short, self-restarting bursts that replaced continuous heard the
+// first phrase and then went deaf. One continuous session, always ended by our
+// abort(), fixes it.
+//
+// Anything here that relies on the *engine* behaving is a trap; the timers we
+// own and abort() are what actually guarantee an exit and a released mic.
+import { describe, it, expect } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -51,6 +58,7 @@ function makeRecognitionClass(log) {
       this.interimResults = null;
       this.lang = '';
       this.aborted = false;
+      this.results = [];
       log.instances.push(this);
     }
     start() {
@@ -62,14 +70,20 @@ function makeRecognitionClass(log) {
     abort() { log.aborted++; this.aborted = true; }
 
     // ── helpers the tests drive ──
+    // Results accumulate the way a continuous session reports them: a phrase
+    // in progress replaces the interim at the end of the list, and a final one
+    // fixes it there.
     say(text, isFinal) {
       if (!this.onresult) return;
+      const last = this.results[this.results.length - 1];
+      const index = last && !last.isFinal ? this.results.length - 1 : this.results.length;
       const result = [{ transcript: text }];
       result.isFinal = !!isFinal;
-      this.onresult({ resultIndex: 0, results: [result] });
+      this.results[index] = result;
+      this.onresult({ resultIndex: index, results: this.results.slice() });
     }
     fail(error) { if (this.onerror) this.onerror({ error }); }
-    end() { if (this.onend) this.onend(); }
+    end() { if (this.onend) this.onend(); }    // the engine stopping on its own
   };
 }
 
@@ -110,11 +124,13 @@ function boot({ neverStarts = false, noRecognition = false } = {}) {
 }
 
 describe('voice capture — configuration', () => {
-  it('never asks for continuous recognition', () => {
-    // continuous = true is what stopped iOS ever firing onend.
+  it('asks for one continuous session rather than short bursts', () => {
+    // Bursts ended themselves on every pause, and on iPhone each self-ended
+    // session keeps the microphone for ~45s — so every restart after the first
+    // phrase heard nothing. See voice-lab.html.
     const h = boot();
     h.openMic();
-    expect(h.rec().continuous).toBe(false);
+    expect(h.rec().continuous).toBe(true);
   });
 
   it('starts the engine and shows the listening state', () => {
@@ -145,7 +161,8 @@ describe('voice capture — always escapable', () => {
 
   it('escapes the iOS trap: engine holds the mic and never ends', () => {
     // Engine starts, takes speech, but never fires onend or a final result —
-    // exactly the state that stranded the sheet on Jake's phone.
+    // the state that once stranded the sheet on Jake's phone. A continuous
+    // session is exactly this shape, so our own timer must end it.
     const h = boot();
     h.openMic();
     h.rec().say('six breakdowns', false);
@@ -157,7 +174,8 @@ describe('voice capture — always escapable', () => {
   });
 
   it('aborts the engine rather than waiting on stop()', () => {
-    // stop() waits for a final result and can hang on iOS; abort() drops it.
+    // stop() waits for a final result and can hang on iOS; abort() drops it,
+    // and it is what releases the microphone.
     const h = boot();
     h.openMic();
     h.advance(7000);
@@ -175,12 +193,20 @@ describe('voice capture — always escapable', () => {
     h.advance(2000);
     expect(h.$('.voice-listening')).toBeNull();
   });
+
+  it('caps one dictation, however long the engine keeps talking', () => {
+    const h = boot();
+    h.openMic();
+    for (let t = 0; t < 130000; t += 5000) { if (h.$('.voice-listening')) h.rec().say('and another', true); h.advance(5000); }
+    expect(h.$('.voice-listening')).toBeNull();
+    expect(h.log.aborted).toBeGreaterThan(0);
+  });
 });
 
 describe('voice capture — listening through pauses', () => {
   // Engineers pause constantly: reading the next job off a phone, thinking.
-  // The recogniser ends itself on every one of those pauses, so a burst ending
-  // must not be treated as the engineer having finished.
+  // One continuous session carries those pauses, so nothing is restarted
+  // mid-dictation.
   it('keeps listening after the engine commits a phrase', () => {
     const h = boot();
     h.openMic();
@@ -189,26 +215,17 @@ describe('voice capture — listening through pauses', () => {
     expect(h.$('.voice-review')).toBeNull();
   });
 
-  it('restarts the engine when a burst ends mid-thought', () => {
+  it('carries phrase after phrase through pauses in the one session', () => {
     const h = boot();
     h.openMic();
     h.rec().say('six breakdowns', true);
-    h.rec().end();
-    h.advance(200);                       // restart is deferred slightly
-    expect(h.log.started).toBe(2);
-    expect(h.$('.voice-listening')).toBeTruthy();
-  });
-
-  it('accumulates what was said across several bursts', () => {
-    const h = boot();
-    h.openMic();
-    h.rec().say('six breakdowns', true);
-    h.rec().end(); h.advance(200);
+    h.advance(3000);
     h.rec().say('and two boiler leads', true);
-    h.rec().end(); h.advance(200);
+    h.advance(3000);
     h.rec().say('and three fires', true);
     h.click('#voice-stop');
 
+    expect(h.log.started).toBe(1);
     expect(h.$('.voice-heard').textContent).toContain('six breakdowns');
     expect(h.$('.voice-heard').textContent).toContain('two boiler leads');
     expect(h.$('#voice-commit').textContent.trim()).toBe('Log 11');
@@ -218,7 +235,6 @@ describe('voice capture — listening through pauses', () => {
     const h = boot();
     h.openMic();
     h.rec().say('four services', true);
-    h.rec().end(); h.advance(200);
     h.rec().say('and a quote', false);
     expect(h.$('#voice-live').textContent).toContain('four services');
     expect(h.$('#voice-live').textContent).toContain('quote');
@@ -228,7 +244,6 @@ describe('voice capture — listening through pauses', () => {
     const h = boot();
     h.openMic();
     h.rec().say('two services', true);
-    h.rec().end();
     h.advance(5000);                      // a good think, under the guard
     expect(h.$('.voice-listening')).toBeTruthy();
     h.rec().say('and one fire', true);
@@ -246,12 +261,34 @@ describe('voice capture — listening through pauses', () => {
     expect(h.$('.voice-review')).toBeTruthy();
   });
 
-  it('stops restarting eventually rather than looping forever', () => {
+  it('never restarts after the engine ends on its own — on iPhone that start is deaf', () => {
     const h = boot();
     h.openMic();
-    for (let i = 0; i < 60; i++) { if (h.rec()) { h.rec().end(); h.advance(200); } }
-    expect(h.log.started).toBeLessThanOrEqual(41);
-    expect(h.$('.voice-listening')).toBeNull();
+    h.rec().say('six breakdowns', true);
+    h.rec().end();
+    h.advance(1000);
+    expect(h.log.started).toBe(1);
+    expect(h.$('.voice-review')).toBeTruthy();
+    expect(h.$('.voice-heard').textContent).toContain('six breakdowns');
+  });
+
+  it('says so when the engine ends on its own having heard nothing', () => {
+    const h = boot();
+    h.openMic();
+    h.rec().end();
+    h.advance(1000);
+    expect(h.log.started).toBe(1);
+    expect(h.$('.voice-message').textContent).toMatch(/didn’t catch/i);
+  });
+
+  it('ends a dictation with abort(), so the microphone is released', () => {
+    const h = boot();
+    h.openMic();
+    const rec = h.rec();
+    rec.say('three fires', true);
+    h.click('#voice-stop');
+    expect(rec.aborted).toBe(true);
+    expect(h.log.stopped).toBe(0);
   });
 
   it('still honours the Done button', () => {
@@ -261,7 +298,6 @@ describe('voice capture — listening through pauses', () => {
     h.click('#voice-stop');
     expect(h.$('.voice-review')).toBeTruthy();
   });
-
 });
 
 // Tapping the mic means "listen again".
@@ -269,9 +305,7 @@ describe('voice capture — listening through pauses', () => {
 // The mic circle used to be a second Done button, added as one more way out
 // when iOS held the microphone. But the exit is guaranteed by the timers we
 // own, not by how many buttons stop capture — and on a phone, tapping the mic
-// because it didn't catch you is the natural thing to do. It ended the session
-// with nothing heard and dropped straight to "Didn't catch anything", which in
-// the field read as voice only working once.
+// because it didn't catch you is the natural thing to do.
 describe('voice capture — trying again', () => {
   it('starts listening again when the mic is tapped mid-capture, rather than giving up', () => {
     const h = boot();
@@ -296,10 +330,7 @@ describe('voice capture — trying again', () => {
     expect(h.$('.voice-heard').textContent).not.toContain('three fires');
   });
 
-  it('lets the old recogniser go before starting a new one', () => {
-    // Starting a second engine while the first is still releasing the mic is
-    // what an immediate restart risks on iOS. The pause restarts already leave
-    // a gap and work in the field, so starting again leaves the same gap.
+  it('aborts the old recogniser, releasing the mic, before starting a new one', () => {
     const h = boot();
     h.openMic();
     const first = h.rec();
