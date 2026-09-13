@@ -54,6 +54,69 @@ describe('parseVoiceLog — quantities', () => {
   });
 });
 
+// "A service on fire" was counted as a gas service AND a fire: the parser met
+// "service", then "fire", and took each as a job. Said in the field as part of
+// "six services, two breakdowns, and a service on fire" — which logged seven
+// services and a fire.
+describe('parseVoiceLog — a job said before its appliance', () => {
+  const countsOf = r => Object.fromEntries(r.items.map(i => [i.jobId, i.qty]));
+
+  it('reads the field sentence as six services, two breakdowns and one fire service', () => {
+    const r = parseVoiceLog('six services, two breakdowns, and a service on fire', REF);
+    expect(countsOf(r)).toEqual({ asv_chb_cir_wh_swh: 6, gas_repair: 2, asv_fre: 1 });
+  });
+
+  it('counts "a service on fire" once, as a fire service, not as a guess', () => {
+    const r = parseVoiceLog('a service on fire', REF);
+    expect(countsOf(r)).toEqual({ asv_fre: 1 });
+    expect(r.items[0].assumed).toBe(false);
+  });
+
+  it('keeps the count and copes with plurals and "the"/"a"', () => {
+    expect(countsOf(parseVoiceLog('two services on the fires', REF))).toEqual({ asv_fre: 2 });
+    expect(countsOf(parseVoiceLog('serviced a gas fire', REF))).toEqual({ asv_fre: 1 });
+  });
+
+  it('lands each appliance on its own service', () => {
+    expect(countsOf(parseVoiceLog('a service on the cooker', REF))).toEqual({ asv_hob_ckr_ovn: 1 });
+    expect(countsOf(parseVoiceLog('a service on the back boiler', REF))).toEqual({ asv_bbf_wau_waw_aga: 1 });
+    expect(countsOf(parseVoiceLog('two services on multipoints', REF))).toEqual({ asv_mwh_wal: 2 });
+    const boiler = parseVoiceLog('serviced the boiler', REF);
+    expect(countsOf(boiler)).toEqual({ asv_chb_cir_wh_swh: 1 });
+    expect(boiler.items[0].assumed).toBe(false);
+  });
+
+  it('counts a repair on an appliance once, as a gas repair', () => {
+    // Every contract gas repair is 56 minutes whatever the appliance, so the
+    // appliance changes nothing but whether it gets counted twice.
+    expect(countsOf(parseVoiceLog('a repair on the fire', REF))).toEqual({ gas_repair: 1 });
+    expect(countsOf(parseVoiceLog('two breakdowns on cookers', REF))).toEqual({ gas_repair: 2 });
+  });
+
+  // The cases that must NOT merge. An over-eager rule here quietly deletes a
+  // job an engineer did, which is worse than the double count it replaces.
+  it('leaves "and" between them as two jobs', () => {
+    expect(countsOf(parseVoiceLog('six services and a fire', REF)))
+      .toEqual({ asv_chb_cir_wh_swh: 6, asv_fre: 1 });
+  });
+
+  it('leaves a new number between them as two jobs', () => {
+    expect(countsOf(parseVoiceLog('three services two fires', REF)))
+      .toEqual({ asv_chb_cir_wh_swh: 3, asv_fre: 2 });
+  });
+
+  it('does not mistake a day for an appliance', () => {
+    const r = parseVoiceLog('a service on monday', REF);
+    expect(countsOf(r)).toEqual({ asv_chb_cir_wh_swh: 1 });
+    expect(r.dayKey).toBe('2026-07-27');
+  });
+
+  it('still reads the appliance-first wording it always did', () => {
+    expect(countsOf(parseVoiceLog('a fire service', REF))).toEqual({ asv_fre: 1 });
+    expect(countsOf(parseVoiceLog('one fire repair', REF))).toEqual({ linked_ib: 1 });
+  });
+});
+
 describe('parseVoiceLog — alias matching', () => {
   it('prefers the longest matching phrase', () => {
     expect(idsOf(parseVoiceLog('one fire repair', REF))).toEqual(['linked_ib']);

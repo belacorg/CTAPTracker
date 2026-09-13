@@ -959,7 +959,7 @@ const VOICE_ALIASES = {
   asv_fre: ['gas fire service', 'fire service', 'gas fire', 'gas fires', 'fire', 'fires'],
   asv_hob_ckr_ovn: ['cooker service', 'hob service', 'oven service', 'cooker', 'cookers', 'hob', 'hobs', 'oven', 'ovens'],
   asv_bbf_wau_waw_aga: ['back boiler service', 'warm air service', 'warm air', 'back boiler', 'back boilers', 'aga'],
-  asv_mwh_wal: ['multipoint water heater', 'multipoint', 'water heater', 'water heaters', 'wall heater'],
+  asv_mwh_wal: ['multipoint water heater', 'multipoint service', 'water heater service', 'multipoint', 'water heater', 'water heaters', 'wall heater'],
   // ── Core: repairs ──
   gas_repair: ['gas repair', 'gas repairs', 'breakdown', 'breakdowns', 'call out', 'callout', 'call outs', 'callouts', 'repair', 'repairs'],
   linked_ib: ['linked fire repair', 'fire repair', 'linked repair', 'linked ib'],
@@ -1083,6 +1083,29 @@ const VOICE_HOMOPHONES = [
   [/\bate\b/g, 'eight'],
 ];
 
+// A job said before the appliance it was on.
+//
+// "A service on fire" is one fire service. But the parser meets "service" and
+// then "fire" and counts both — a gas service that never happened, plus a fire.
+// So when a service or repair is followed straight away by its appliance, with
+// nothing between but "on/of/to/for/at" and "the/a", the phrase is put back in
+// the order the aliases know:
+//   service → "<appliance> service", since each appliance's service is its own job
+//   repair  → "gas repair", since every contract GR-* is 56 minutes whatever the
+//             appliance, so naming it changes nothing but the count
+// "Six services and a fire" is two jobs and is left alone: "and" joins jobs,
+// and a number between them ("services two fires") starts a new one.
+const VOICE_APPLIANCE = '(gas fires?|fires?|back boilers?|warm air|water heaters?|multipoints?|cookers?|hobs?|ovens?|boilers?|combis?)';
+const VOICE_JOB_ON = '(?:\\s+(?:on|of|to|for|at))?(?:\\s+(?:the|a|an|their|his|her|my))?\\s+';
+const VOICE_APPLIANCE_REWRITES = [
+  [new RegExp('\\b(?:service|services|serviced|servicing)' + VOICE_JOB_ON + VOICE_APPLIANCE + '\\b', 'g'),
+    function(match, appliance) {
+      return (appliance === 'warm air' ? appliance : appliance.replace(/s$/, '')) + ' service';
+    }],
+  [new RegExp('\\b(?:repair|repairs|repaired|breakdown|breakdowns)' + VOICE_JOB_ON + VOICE_APPLIANCE + '\\b', 'g'),
+    function() { return 'gas repair'; }],
+];
+
 // Normalise speech-to-text output: lowercase, strip punctuation, fold the
 // spoken forms that would otherwise break clause splitting or alias matching.
 function normaliseVoiceText(text) {
@@ -1101,6 +1124,7 @@ function normaliseVoiceText(text) {
   // Homophone repair runs last, on already-tidied text, so the word-boundary
   // rules above don't have to cope with punctuation.
   VOICE_HOMOPHONES.forEach(function(pair) { out = out.replace(pair[0], pair[1]); });
+  VOICE_APPLIANCE_REWRITES.forEach(function(pair) { out = out.replace(pair[0], pair[1]); });
   return out;
 }
 
