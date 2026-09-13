@@ -76,6 +76,11 @@ fonts, so one file per subset carries every weight — four files, 104KB, precac
 with the rest of the shell. The app now makes zero third-party requests, and its
 typography is correct on first open with no signal.
 
+*Update 2026-09-13:* JetBrains Mono is no longer shipped. Log Job's figures were
+its only use, and its dotted zero read as a different app beside DM Sans. Those
+figures now use DM Sans with `tabular-nums`, so DM Sans is the one vendored face:
+two files, one precached. `tests/brand.test.js` keeps a monospace face out.
+
 ## Consequences
 
 Cache-busting stays manual: a change to `style.css` or `fonts.css` needs the

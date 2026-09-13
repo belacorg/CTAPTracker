@@ -16,6 +16,13 @@ the `SHIP` allowlist in `build.mjs`, so none of it reaches an engineer's phone.
 It needs a Chrome on disk — set `CHROME_PATH`, or put the binary's path in
 `tools/chrome-path.txt`.
 
+**The phone's clock is pinned** to Saturday 12 September 2026, 20:30 — the
+moment the published set was first shot. A run on any other day would move
+"today" on every screen and pull the figures quoted in this guide, the demo
+page and the deck out of step with the images. Set `SHOOT_AT` (a local ISO
+time, e.g. `SHOOT_AT=2026-09-10T11:00:00`) only when the whole set, and the
+prose that quotes it, is being moved on together.
+
 ## What gets shot
 
 Everything runs against `tools/demo-state.json`: six completed weeks, a week in

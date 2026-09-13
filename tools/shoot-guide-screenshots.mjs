@@ -37,6 +37,26 @@ const browser = await puppeteer.launch({
 const page = await browser.newPage();
 await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
 
+// Pin the phone's clock to the moment the published set was shot. Without it a
+// run takes today's date and moves "today" on every screen, pulling the guide's
+// figures out of step with the demo page and the deck that reuse these images.
+// The clock still ticks forward from that moment, so the greeting types itself
+// in and the sprite animates as normal. Override with SHOOT_AT.
+const SHOOT_AT = process.env.SHOOT_AT || '2026-09-12T20:30:00';
+await page.evaluateOnNewDocument((iso) => {
+  const RealDate = Date;
+  const offset = new RealDate(iso).getTime() - RealDate.now();
+  function PinnedDate(...args) {
+    return args.length === 0 ? new RealDate(RealDate.now() + offset) : new RealDate(...args);
+  }
+  PinnedDate.prototype = RealDate.prototype;
+  PinnedDate.now = () => RealDate.now() + offset;
+  PinnedDate.parse = RealDate.parse;
+  PinnedDate.UTC = RealDate.UTC;
+  globalThis.Date = PinnedDate;
+}, SHOOT_AT);
+console.log('clock pinned to', SHOOT_AT);
+
 const seed = async (raw) => {
   await page.goto(URL_BASE, { waitUntil: 'networkidle0' });
   await page.evaluate((s) => {
