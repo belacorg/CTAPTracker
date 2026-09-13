@@ -725,6 +725,8 @@ function buildCreditGraph() {
 }
 
 function buildInsightsCard(dailyTarget, todayHours, weekTarget, weekEarned, todayPFMins) {
+  // Insights are Coach speaking, so the Coach Mode toggle turns them off too.
+  if (!isCoachModeOn()) return '';
   const insights = getCoachInsights(state, currentWeekKey, {
     dailyTarget: dailyTarget,
     todayHours: todayHours,
@@ -3455,13 +3457,15 @@ function attachListeners() {
     render();
   });
 
-  // Best advice strip dismiss
+  // Best advice strip — dismiss one opportunity for the day, keep the rest
   document.querySelectorAll('[data-dismiss-opp]').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
       localStorage.setItem(`jcpd_coach_opp_${btn.dataset.dismissDay}_${btn.dataset.dismissOpp}`, 'true');
+      const row = btn.closest('[data-opp-row]');
+      if (row) row.remove();
       const strip = document.getElementById('coach-opp-strip');
-      if (strip) strip.remove();
+      if (strip && !strip.querySelector('[data-opp-row]')) strip.remove();
     });
   });
 
@@ -3933,7 +3937,8 @@ function buildDeficitClearedCard() {
 
 function buildBestAdviceStrip(stillNeeded, todayJobs, week, todayKey) {
   if (!isCoachModeOn()) return '';
-  if (stillNeeded <= 0) return '';
+  // Deliberately NOT hidden once today's target is hit: best advice on the next
+  // visit is extra credit, and extra credit builds the CTAP balance.
 
   // Check shift status: not complete and > 30 min remaining
   const now = new Date();
@@ -3947,54 +3952,29 @@ function buildBestAdviceStrip(stillNeeded, todayJobs, week, todayKey) {
   if (cur >= endM) return '';
   if (endM - cur < 30) return '';
 
-  const todayIds = new Set(todayJobs.map(j => j.id));
+  // Every opportunity that applies, each dismissible for the day on its own.
+  const opps = getBestAdviceOpportunities(todayJobs.map(j => j.id))
+    .filter(o => localStorage.getItem(`jcpd_coach_opp_${todayKey}_${o.id}`) !== 'true');
+  if (!opps.length) return '';
 
-  // Credit values from JOB_TYPES.sales — single source of truth
-  const findSales = id => JOB_TYPES.sales.find(j => j.id === id);
-  const hiveFitJ   = findSales('hive_sale_fit');
-  const hiveSgoJ   = findSales('hive_sale_sgo');
-  const inhibitorJ = findSales('inhibitor');
-  const boilerJ    = findSales('hi_lead');
-
-  const serviceBreakdownIds = new Set(['ib_ff','gas_repair','linked_ib','od_chb','oow_chb','ods_chb','asv_chb_cir_wh_swh','asv_fre','asv_bbf_wau_waw_aga','asv_mwh_wal','asv_hob_ckr_ovn','oca','as_inst','fv_chb','fv_bbf_wau_waw']);
-  const boilerTriggerIds    = new Set(['asv_chb_cir_wh_swh','asv_fre','asv_bbf_wau_waw_aga','asv_mwh_wal','asv_hob_ckr_ovn','oca','ods_chb','as_inst','fv_chb','fv_bbf_wau_waw','ib_ff','gas_repair','od_chb','oow_chb','linked_ib']);
-
-  let opp = null;
-
-  // P1: Hive fit and sale
-  if (hiveFitJ && hiveSgoJ && !todayIds.has('hive_sale_fit') && !todayIds.has('hive_sale_sgo')) {
-    opp = { id: 'hive_fit_sale', name: 'Hive fit and sale', credits: hiveFitJ.credits + hiveSgoJ.credits };
-  }
-
-  // P2: Inhibitor
-  if (!opp && inhibitorJ && !todayIds.has('inhibitor')) {
-    const hasServiceBreakdown = [...todayIds].some(id => serviceBreakdownIds.has(id));
-    if (hasServiceBreakdown) {
-      opp = { id: 'inhibitor', name: 'Inhibitor', credits: inhibitorJ.credits };
-    }
-  }
-
-  // P3: Boiler lead
-  if (!opp && boilerJ && !todayIds.has('hi_lead')) {
-    const hasBoilerTrigger = [...todayIds].some(id => boilerTriggerIds.has(id));
-    if (hasBoilerTrigger) {
-      opp = { id: 'boiler_lead', name: 'Boiler lead', credits: boilerJ.credits };
-    }
-  }
-
-  if (!opp) return '';
-
-  const dismissKey = `jcpd_coach_opp_${todayKey}_${opp.id}`;
-  if (localStorage.getItem(dismissKey) === 'true') return '';
-
-  const pct = Math.round((opp.credits / stillNeeded) * 100);
+  // Credit in hours (catalogue minutes / 60), the unit every other figure on the
+  // Dashboard uses — not the sheet's 83.58-minute "credits".
+  const rows = opps.map(o => {
+    const hrs = o.minutes ? o.minutes / 60 : null;
+    const credit = hrs === null ? ''
+      : `+${hrs.toFixed(2)}h${stillNeeded > 0 ? ` · ${Math.round((hrs / stillNeeded) * 100)}% of today's gap` : ''}`;
+    return `<li class="coach-opp-row" data-opp-row="${o.id}">
+      <div class="coach-opp-body">
+        <span class="coach-opp-line">${o.name}${credit ? ` <span class="coach-opp-credit">${credit}</span>` : ''}</span>
+        <span class="coach-opp-why">${o.why}</span>
+      </div>
+      <button class="coach-opp-dismiss" data-dismiss-opp="${o.id}" data-dismiss-day="${todayKey}" aria-label="Dismiss ${o.name} for today">✕</button>
+    </li>`;
+  }).join('');
 
   return `<div class="coach-opp-strip" id="coach-opp-strip">
-    <div class="coach-opp-body">
-      <span class="coach-opp-label">Best advice opportunity</span>
-      <span class="coach-opp-line">${opp.name} = ${pct}% of today's remaining gap</span>
-    </div>
-    <button class="coach-opp-dismiss" data-dismiss-opp="${opp.id}" data-dismiss-day="${todayKey}">✕</button>
+    <span class="coach-opp-label">Best advice</span>
+    <ul class="coach-opp-list">${rows}</ul>
   </div>`;
 }
 

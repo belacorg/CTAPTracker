@@ -33,20 +33,25 @@ const JOB_TYPES = {
     { id: 'as_inst',             code: 'LI-INS',          name: 'Landlords Gas Inspection (LGSC)',        minutes: 21, credits: 0.25, variable: false },
     { id: 'trace_repair',        code: 'TR-CHB',          name: 'Trace & Repair (min-for-min)',          minutes: 1, credits: 0.01, variable: true, variableType: 'minutes', variablePrompt: 'Minutes on completion' }
   ],
+  // bestAdvice — Hive work an engineer offers on a visit they are already on
+  // (a Hive install, Hive Mini, Hive TRVs, faulty controls, an OpenTherm
+  // upgrade). Repairs, recalls and uninstalls are not offered: dispatch sends
+  // them or a fault raises them. The extra zone is left out too — a customer
+  // with Hive would have had it fitted with the original install. See ADR-0009.
   hive: [
-    { id: 'hvi_hub',     code: 'HVI-HUB',           name: 'Hive OpenTherm Upgrade (prepaid)',        minutes: 40, credits: 0.48, variable: false },
-    { id: 'hvi_min',     code: 'HVI-MIN',           name: 'Hive Install – Mini Thermostat',          minutes: 90, credits: 1.08, variable: false },
-    { id: 'hvi_wls',     code: 'HVI-WLS',           name: 'Hive Install – Wireless Thermostat',      minutes: 90, credits: 1.08, variable: false },
-    { id: 'hvi_wrd',     code: 'HVI-WRD',           name: 'Hive Install – Wired Thermostat',         minutes: 60, credits: 0.72, variable: false },
+    { id: 'hvi_hub',     code: 'HVI-HUB',           name: 'Hive OpenTherm Upgrade (prepaid)',        minutes: 40, credits: 0.48, variable: false, bestAdvice: true },
+    { id: 'hvi_min',     code: 'HVI-MIN',           name: 'Hive Install – Mini Thermostat',          minutes: 90, credits: 1.08, variable: false, bestAdvice: true },
+    { id: 'hvi_wls',     code: 'HVI-WLS',           name: 'Hive Install – Wireless Thermostat',      minutes: 90, credits: 1.08, variable: false, bestAdvice: true },
+    { id: 'hvi_wrd',     code: 'HVI-WRD',           name: 'Hive Install – Wired Thermostat',         minutes: 60, credits: 0.72, variable: false, bestAdvice: true },
     { id: 'hvi_imz',     code: 'HVI-IMZ',           name: 'Hive Additional Zone (per extra zone)',   minutes: 30, credits: 0.36, variable: false },
-    { id: 'hvi_trv',     code: 'HVI-TRV',           name: 'Hive Install – TRV (1 action / 2 TRVs)',  minutes: 30, credits: 0.36, variable: false },
-    { id: 'hvi_iio',     code: 'HVI-IIO',           name: 'Hive Faulty-Controls Install (van stock)', minutes: 34, credits: 0.41, variable: false },
+    { id: 'hvi_trv',     code: 'HVI-TRV',           name: 'Hive Install – TRV (1 action / 2 TRVs)',  minutes: 30, credits: 0.36, variable: false, bestAdvice: true },
+    { id: 'hvi_iio',     code: 'HVI-IIO',           name: 'Hive Faulty-Controls Install (van stock)', minutes: 34, credits: 0.41, variable: false, bestAdvice: true },
     { id: 'hvu_the',     code: 'HVU-THE',           name: 'Hive Uninstall – Thermostat',             minutes: 90, credits: 1.08, variable: false },
     { id: 'hive_repair', code: 'HVR-THE / HVR-TRV', name: 'Hive Repair – Thermostat / TRV',          minutes: 56, credits: 0.67, variable: false },
     { id: 'recall_hive', code: 'RCHV-THR / RCHV-TRV', name: 'Recall Hive – Thermostat / TRV',        minutes: 56, credits: 0.67, variable: false },
-    { id: 'inshv_min',   code: 'INSHV-MIN',         name: 'Install Hive Mini (sold via Services)',   minutes: 90, credits: 1.08, variable: false },
-    { id: 'inshv_thr',   code: 'INSHV-THR',         name: 'Install Hive Thermostat (sold via Services)', minutes: 90, credits: 1.08, variable: false },
-    { id: 'inshv_trv',   code: 'INSHV-TRV',         name: 'Install Hive TRVs (sold via Services)',   minutes: 1, credits: 0.01, variable: true, variableType: 'minutes', variablePrompt: 'Chargeable minutes' }
+    { id: 'inshv_min',   code: 'INSHV-MIN',         name: 'Install Hive Mini (sold via Services)',   minutes: 90, credits: 1.08, variable: false, bestAdvice: true },
+    { id: 'inshv_thr',   code: 'INSHV-THR',         name: 'Install Hive Thermostat (sold via Services)', minutes: 90, credits: 1.08, variable: false, bestAdvice: true },
+    { id: 'inshv_trv',   code: 'INSHV-TRV',         name: 'Install Hive TRVs (sold via Services)',   minutes: 1, credits: 0.01, variable: true, variableType: 'minutes', variablePrompt: 'Chargeable minutes', bestAdvice: true }
   ],
   sales: [
     // ── Quotes / HIM / in-day actions (verified from sheet) ──
@@ -423,19 +428,77 @@ function getTopJobs(state, n) {
 // find a 330-minute job, and the only way to find one that isn't there is to
 // raise it. That's a mis-raise, and it lands on the engineer, not the app.
 //
-// SGO is the exception, and it's the whole point of SGO: on a visit you are
-// already on, you choose whether to offer the inhibitor, the Hive, the CO
-// alarm, the quote. That is genuine discretion, and the scheme is designed to
-// reward it. So the elective set is the sales section and nothing else.
+// Best advice is the exception, and it's the whole point of best advice: on a
+// visit you are already on, you choose whether to recommend the inhibitor, the
+// Hive, the filter, the CO alarm, the quote. That is genuine discretion, and the
+// scheme is designed to reward it. So the elective set is the sales section plus
+// the Hive rows flagged `bestAdvice` — never a Hive repair, recall or uninstall.
 //
 // Operational credits (Wait Work, EV charging, Bybox) are deliberately NOT
 // elective: they're circumstances you record, and nudging someone toward
 // logging more wait time is the same failure in a different coat.
 // See ADR-0009.
+function isFixedCredit(j) {
+  return !j.variable && !j.isNpt && j.minutes > 0;
+}
+
 function getElectiveJobs() {
-  return JOB_TYPES.sales.filter(function(j) {
-    return !j.variable && !j.isNpt && j.minutes > 0;
-  });
+  return JOB_TYPES.sales.filter(isFixedCredit)
+    .concat(JOB_TYPES.hive.filter(function(j) { return j.bestAdvice && isFixedCredit(j); }));
+}
+
+// Every job that counts as a Hive install the engineer offered — the flagged
+// Hive rows and the sale-job fit. For counting, not for gap-matching, so the
+// variable-minute rows count too.
+function getOfferedHiveIds() {
+  const ids = JOB_TYPES.hive.filter(function(j) { return j.bestAdvice; })
+    .map(function(j) { return j.id; });
+  ids.push('hive_sale_fit');
+  return new Set(ids);
+}
+
+// ── Best advice opportunities ──────────────────────────────────────────────
+// What is worth recommending once the engineer has been in a customer's
+// property today for a service or a repair. All of them can apply on the same
+// visit, so they are listed together rather than ranked down to one.
+//
+// Fixed credits come from the catalogue. Filters, water quality and upgrade
+// work are quoted and credited as a HIM upgrade, whose minutes depend on the
+// quote — so they carry no figure rather than an invented one.
+const BEST_ADVICE_VISIT_IDS = new Set([
+  'asv_chb_cir_wh_swh', 'asv_fre', 'asv_bbf_wau_waw_aga', 'asv_mwh_wal', 'asv_hob_ckr_ovn',
+  'ods_chb', 'gas_repair', 'linked_ib', 'od_chb', 'oow_chb',
+  'fv_chb', 'fv_bbf_wau_waw', 'ib_ff', 'oca', 'as_inst',
+]);
+
+function getBestAdviceOpportunities(todayJobIds) {
+  const today = new Set(todayJobIds || []);
+  const onVisit = Array.from(today).some(function(id) { return BEST_ADVICE_VISIT_IDS.has(id); });
+  if (!onVisit) return [];
+
+  const sale = function(id) { return JOB_TYPES.sales.filter(function(j) { return j.id === id; })[0]; };
+  const loggedAny = function(ids) { return ids.some(function(id) { return today.has(id); }); };
+  const hiveFit = sale('hive_sale_fit'), hiveSgo = sale('hive_sale_sgo');
+  const inhibitor = sale('inhibitor'), lead = sale('hi_lead');
+  const opps = [];
+
+  if (hiveFit && hiveSgo && !loggedAny(Array.from(getOfferedHiveIds()).concat('hive_sale_sgo'))) {
+    opps.push({ id: 'hive', name: 'Hive', minutes: hiveFit.minutes + hiveSgo.minutes,
+      why: 'No smart controls, or faulty ones? Hive install, Hive Mini, TRVs or an OpenTherm upgrade' });
+  }
+  if (inhibitor && !loggedAny(['inhibitor', 'add_inhibitor'])) {
+    opps.push({ id: 'inhibitor', name: 'Inhibitor', minutes: inhibitor.minutes,
+      why: 'Protect the system you have just worked on' });
+  }
+  opps.push({ id: 'filter_water', name: 'System filter & water quality', minutes: null,
+    why: 'Poor water, or a plate heat exchanger going on? Recommend the filter — quote it as a HIM upgrade' });
+  opps.push({ id: 'upgrade', name: 'Upgrade work', minutes: null,
+    why: 'Quote it as a HIM upgrade' });
+  if (lead && !loggedAny(['hi_lead'])) {
+    opps.push({ id: 'boiler_lead', name: 'Boiler lead', minutes: lead.minutes,
+      why: 'Older boiler? Raise an HI lead' });
+  }
+  return opps;
 }
 
 // The elective job whose credit best closes `gapHours`, or null when no single
@@ -508,7 +571,7 @@ function getCoachInsights(state, weekKey, ctx) {
   const pastWks = Object.keys(state.weeks).filter(function(w) { return w < todayWk; }).sort();
   const nPast   = pastWks.length;
 
-  const hiveIds = new Set(JOB_TYPES.hive.map(function(j) { return j.id; }));
+  const hiveIds = getOfferedHiveIds();
 
   let weekHiveCount = 0, weekLeadCount = 0;
   Object.values(week.days || {}).forEach(function(dayJobs) {
@@ -564,6 +627,9 @@ function getCoachInsights(state, weekKey, ctx) {
       }
     }
 
+    // Hive is best advice: offered where a customer has no smart controls or
+    // faulty ones. Counts only Hive work an engineer offers — never repairs,
+    // recalls or uninstalls. See ADR-0009.
     if (nPast >= 3) {
       const avgHive = pastWks.reduce(function(s, wk) {
         let c = 0;
@@ -574,14 +640,14 @@ function getCoachInsights(state, weekKey, ctx) {
       }, 0) / nPast;
       if (avgHive >= 1 && weekHiveCount === 0) {
         insights.push({ kind: 'hive_pattern', priority: 2, severity: 'amber',
-          text: `You average ${avgHive.toFixed(1)} Hive install${avgHive >= 2 ? 's' : ''} per week but haven't logged any yet this week` });
+          text: `You average ${avgHive.toFixed(1)} Hive install${avgHive >= 2 ? 's' : ''} per week but haven't logged any yet this week — worth offering where there are no smart controls` });
       } else if (weekHiveCount > 0) {
         insights.push({ kind: 'hive_pattern', priority: 3, severity: 'green',
           text: `${weekHiveCount} Hive install${weekHiveCount === 1 ? '' : 's'} logged this week` });
       }
     } else if (weekHiveCount === 0) {
       insights.push({ kind: 'hive_pattern', priority: 3, severity: 'amber',
-        text: 'No Hive installs logged this week — each adds up to 1.08h credit' });
+        text: 'No Hive installs logged this week — worth offering where there are no smart controls, up to 1.50h each' });
     }
 
     if (nPast >= 3) {
@@ -1801,6 +1867,8 @@ if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     TOP_JOBS_SEED: TOP_JOBS_SEED,
     getElectiveJobs: getElectiveJobs,
     getElectiveJobForGap: getElectiveJobForGap,
+    getOfferedHiveIds: getOfferedHiveIds,
+    getBestAdviceOpportunities: getBestAdviceOpportunities,
     getHistoricallyStrongDay: getHistoricallyStrongDay,
     isCoachModeOn: isCoachModeOn,
     getCoachInsights: getCoachInsights,

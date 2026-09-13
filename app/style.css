@@ -3262,11 +3262,34 @@ details[open] .info-chevron { transform: rotate(90deg); }
   background: rgba(74, 134, 216, 0.07);
   border: 1px solid rgba(74, 134, 216, 0.2);
   border-radius: var(--jcpd-r-md);
-  padding: 10px 12px;
+  padding: 10px 12px 4px;
   margin-bottom: 10px;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 2px;
+}
+.coach-opp-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.coach-opp-row {
+  display: flex;
+  align-items: flex-start;
   gap: 8px;
+  padding: 7px 0;
+}
+.coach-opp-row + .coach-opp-row { border-top: 1px solid rgba(74, 134, 216, 0.15); }
+.coach-opp-credit {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.coach-opp-why {
+  font-size: 0.74rem;
+  color: var(--muted);
+  line-height: 1.35;
 }
 .coach-opp-body {
   flex: 1;

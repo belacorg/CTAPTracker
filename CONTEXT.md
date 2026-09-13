@@ -85,8 +85,11 @@ A single observation derived from the engineer's current state — e.g. "you're 
 _Avoid_: "tip", "advice" (used informally in the UI; the domain term is **Coach Insight**)
 
 **Elective job**:
-A job type the engineer genuinely chooses to do, on a visit they are already making — the **SGO** and in-day sales items. Contrasted with a *dispatched* job (services, repairs, first visits, Long Durations, Hive installs), which is allocated by the employer and is not the engineer's to decide. Only **Elective jobs** may be named by a **Coach Insight** as an opportunity: pointing an engineer at a dispatched code invites raising work that was not done. **Operational credits** are not elective — they record a circumstance, not a choice. See ADR-0009.
-_Avoid_: "best job", "highest value job" (the framing ADR-0009 removes)
+A job type the engineer genuinely chooses to recommend, on a visit they are already making — **best advice**: the **SGO** and in-day sales items, plus the Hive work an engineer offers (a Hive install, Hive Mini, Hive TRVs, faulty-controls installs, the OpenTherm upgrade — not the extra zone, which goes in with the original install). Contrasted with a *dispatched* job (services, repairs, first visits, Long Durations, Hive repairs, recalls and uninstalls), which is allocated by the employer or raised on a fault and is not the engineer's to decide. Only **Elective jobs** may be named by a **Coach Insight** as an opportunity: pointing an engineer at a dispatched code invites raising work that was not done. **Operational credits** are not elective — they record a circumstance, not a choice. See ADR-0009.
+_Avoid_: "best job", "highest value job" (the framing ADR-0009 removes); "sales" for the engineer's side of it (it is best advice)
+
+**Best advice opportunity**:
+One thing worth recommending after a service or repair today — Hive, inhibitor, system filter & water quality, upgrade work, boiler lead. Listed together on the Best advice strip, each dismissible for the day. Filters, water quality and upgrade work are credited through a **HIM upgrade** (quoted minutes), so they carry no fixed credit figure.
 
 **Coach mode**:
 A per-engineer toggle that controls whether **Coach Insight** surfaces are shown. **On by default** — the stored preference is only ever read as "off when explicitly set to off", so a fresh install sees Coach. This entry previously said off by default, which the code has never done; the behaviour is the intended one and the doc was wrong. Does not affect calculation — only display.

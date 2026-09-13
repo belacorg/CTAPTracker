@@ -20,3 +20,16 @@ Three consequences:
 - **The catalogue stays the single source of truth for what exists** (ADR-0006); electability is a property of the section, derived rather than hand-listed, so a new sales row is elective automatically and a new core row is not.
 
 `tests/coach-guardrails.test.js` asserts the policy at the point of output: it renders the real Coach surfaces with a deficit and fails if any dispatched job name appears in them.
+
+## Revised 2026-09-13: Hive is best advice, and best advice is more than one job
+
+This ADR originally called Hive installs dispatched and made electability a property of the sales section alone. Jake corrected that from the van: a Hive install, Hive Mini, Hive TRVs, faulty-controls installs and the OpenTherm upgrade are things an engineer **recommends** on a service or breakdown where the customer has no smart controls or faulty ones. That is best advice — the same discretion as the inhibitor — not dispatch. A Hive **repair**, **recall** or **uninstall** is not offered: dispatch sends it, or a fault raises it. The principle above is unchanged; the set it applies to was wrong.
+
+- **The elective set is the sales section plus Hive rows flagged `bestAdvice`.** The Hive section mixes offered and non-offered work, so a per-row flag replaces "derived from the section" there. Sales rows stay elective by section. `HVI-HUB` (OpenTherm upgrade) is flagged. `HVI-IMZ` (extra zone) is not: a customer who has Hive would have had the extra zone fitted with the original install, so it is not a separate recommendation.
+- **The Hive-install insight stays**, counting only offered Hive work.
+- **The Best advice strip lists every opportunity that applies after a service or repair**, not the single top one: Hive, inhibitor, system filter & water quality (including a plate heat exchanger going on poor water), upgrade work, boiler lead. Each is dismissible for the day on its own.
+- **Filters, water quality and upgrade work are credited through a HIM upgrade**, whose minutes come from the quote. They are shown with no credit figure rather than an invented one.
+- **The strip no longer disappears once today's target is hit.** Extra credit from best advice builds the CTAP balance.
+- **Credit is shown in hours** (catalogue minutes / 60). The old strip divided 83.58-minute "credits" by an hours gap.
+
+Two fixes from the same pass: the guardrail test read only the Coach card, so the Insights panel and the strip went unchecked — it now reads all three. And the Coach Mode toggle did not switch off the Insights panel; it now does.
