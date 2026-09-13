@@ -127,8 +127,18 @@ body {
   will-change: transform;
 }
 .top-title { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-start; }
-.top-title-main { font-size: 0.75rem; font-weight: 700; line-height: 1; letter-spacing: -0.5px; }
+.top-title-main { font-size: 0.8125rem; font-weight: 700; line-height: 1; letter-spacing: -0.5px; }
 .top-title-sub  { font-size: 0.58rem; color: var(--muted); letter-spacing: 0.02em; margin-top: 2px; }
+
+/* The brand mark: a C for CTAP drawn as a clock. Coloured from the theme tokens
+   rather than in the markup — the old mark carried a blue of its own, a shade
+   off the accent sitting right beside it, and two blues side by side read as a
+   mistake. The C takes the accent; the hands take the text colour, so they are
+   white on dark and ink on light without a separate light-mode rule. At 30px it
+   sits level with the 13px title instead of outweighing it. */
+.brand-mark { flex-shrink: 0; display: block; }
+.brand-mark-c { stroke: var(--accent); }
+.brand-mark-hands { stroke: var(--text); }
 .top-greeting {
   font-size: 0.66rem;
   font-weight: 700;

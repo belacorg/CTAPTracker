@@ -240,17 +240,15 @@ function buildTopBar() {
   const todayWk = getWeekKey(new Date());
   const isCurrentWeek = currentWeekKey === todayWk;
   const isFutureWeek = currentWeekKey > todayWk;
+  // The mark is a C for CTAP drawn as a clock face, because the scheme pays in
+  // time. Its colours come from the stylesheet, not the markup, so it cannot
+  // carry a blue of its own again and light mode gets dark hands for free.
   return `
     <header class="top-bar">
       <div style="display: flex; align-items: center; gap: 10px;">
-        <svg width="36" height="36" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect x="1" y="26" width="10" height="12" rx="2" fill="#4169E1" fill-opacity="0.2"/>
-          <rect x="15" y="17" width="10" height="21" rx="2" fill="#4169E1" fill-opacity="0.2"/>
-          <rect x="29" y="7" width="10" height="31" rx="2" fill="#4169E1" fill-opacity="0.2"/>
-          <path d="M6 26 C15 20 25 14 34 7" stroke="#4169E1" stroke-width="2.2" stroke-linecap="round" fill="none"/>
-          <circle cx="6" cy="26" r="2.8" fill="#4169E1"/>
-          <circle cx="20" cy="17" r="2.8" fill="#4169E1"/>
-          <circle cx="34" cy="7" r="2.8" fill="#4169E1"/>
+        <svg class="brand-mark" width="30" height="30" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path class="brand-mark-c" d="M29.9 10.1 A14 14 0 1 0 29.9 29.9" stroke-width="4.2" stroke-linecap="round"/>
+          <path class="brand-mark-hands" d="M20 20 V12.4 M20 20 H26.6" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
         <div class="top-title">
           <div class="top-title-main">CTAP Tracker</div>
