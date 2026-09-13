@@ -68,7 +68,10 @@ const shot = async (name, opts = {}) => {
   console.log('  ✓', name);
 };
 
-const shotEl = async (name, selector, pad = 14) => {
+// Clip to the element's own box, no padding. Dashboard cards stack 12px apart,
+// so any padding wider than that pulls slivers of the neighbouring cards into
+// the crop — which is exactly what the first set shipped with at pad = 14.
+const shotEl = async (name, selector, pad = 0) => {
   const box = await page.evaluate((sel, pad) => {
     const el = document.querySelector(sel);
     if (!el) return null;
