@@ -7,11 +7,17 @@
 <!--
   Voice lab: a diagnostic page, not part of the app, and linked from nowhere.
 
-  Voice capture on iPhone hears the first phrase and then nothing: not after a
-  pause, and not when the mic is tapped to try again. jsdom can't say why, and
-  the app's own flow changes several things at once (a timer-started restart, a
-  new recogniser each time, abort() before starting again). Each test here
-  changes one of those, and the log records exactly what iOS does in return.
+  Round 1 (iPhone, iOS 18.7, Safari) found the fault. When the recogniser
+  hears a phrase and ends on its own, it never fires audioend: iOS keeps the
+  capture source, and every start for the next ~45s gets "listening" but no
+  audio, then fails with audio-capture "Source is stopped". Tap vs timer and
+  new vs reused made no difference. A deaf start takes ~1.25s to fire onstart
+  where a healthy one takes ~20ms. Sessions ended with abort() did fire
+  audioend.
+
+  Round 2 tests the ways out: ending each phrase with abort() ourselves; one
+  continuous session ended by our own quiet timer; and, as the control,
+  aborting a session only after it has already ended on its own.
 
   Remove once voice capture is settled.
 -->
@@ -24,7 +30,9 @@
     background: #0b0d12; color: #eef2f8;
   }
   h1 { font-size: 1.25rem; margin: 0 0 6px; }
-  p { color: #a4aec0; margin: 6px 0; line-height: 1.45; }
+  p, li { color: #a4aec0; line-height: 1.45; }
+  p { margin: 6px 0; }
+  ol { margin: 6px 0; padding-left: 20px; }
   .env { font: 11.5px ui-monospace, Menlo, monospace; color: #7b8698; white-space: pre-wrap; margin: 10px 0; }
   .bar { display: flex; gap: 8px; position: sticky; top: 0; background: #0b0d12; padding: 8px 0; z-index: 1; }
   .bar button { flex: 1; text-align: center; font-weight: 700; background: #5b93e0; color: #0b0d12; }
@@ -39,9 +47,14 @@
 </style>
 </head>
 <body>
-<h1>Voice lab</h1>
-<p>Each test starts the phone's speech recogniser a different way. Tap a test, say the words shown, and wait until the status says <b>ended</b> before the next one.</p>
-<p>When you've done them all, tap <b>Copy log</b> and paste it back to Claude.</p>
+<h1>Voice lab · round 2</h1>
+<p>Do these in this order. Wait until the status says <b>ended</b> before the next one. If one hears nothing, just wait: it can take up to about 45 seconds to give up.</p>
+<ol>
+  <li><b>I</b>, the three phrases with pauses.</li>
+  <li><b>J</b>, the three phrases, stop talking, and when it says ended tap <b>J</b> again straight away.</li>
+  <li><b>K</b>, then as soon as it says ended tap <b>K</b> again.</li>
+</ol>
+<p>Then tap <b>Copy log</b> and paste it back to Claude. Start from a fresh page: reload it first if you've just used voice anywhere else.</p>
 <div class="env" id="env"></div>
 <div class="bar"><button id="abort" class="alt">Abort</button><button id="copy">Copy log</button></div>
 <div id="status">Idle</div>
@@ -69,19 +82,22 @@
   log('page loaded');
 
   let seq = 0;
-  let current = null;   // the recogniser listening right now, if any
-  let shared = null;    // test D reuses one recogniser across taps
-  let run = null;       // { name, restart?: (rec) => void, stopAt?: number }
+  let current = null;     // the recogniser listening right now, if any
+  let lastEnded = null;   // the recogniser that most recently ended
+  let run = null;         // { name, onResult?, restart?, stopAt? }
   let heard = '';
 
   function wire(rec) {
     const id = rec.__id;
-    ['start', 'audiostart', 'soundstart', 'speechstart', 'speechend', 'soundend', 'audioend'].forEach((ev) => {
-      rec['on' + ev] = () => {
-        log(`#${id} ${ev}`);
-        if (ev === 'start') status(`#${id} listening (test ${run ? run.name : '?'})`);
-      };
+    ['audiostart', 'soundstart', 'speechstart', 'speechend', 'soundend'].forEach((ev) => {
+      rec['on' + ev] = () => log(`#${id} ${ev}`);
     });
+    rec.onstart = () => {
+      const lag = Math.round(performance.now() - rec.__startedAt);
+      log(`#${id} start (+${lag}ms)${lag > 800 ? '  ⚠ slow start: the deaf pattern' : ''}`);
+      status(`#${id} listening (test ${run ? run.name : '?'})`);
+    };
+    rec.onaudioend = () => { rec.__audioEnded = true; log(`#${id} audioend`); };
     rec.onresult = (e) => {
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
@@ -89,12 +105,14 @@
         if (r.isFinal) heard = (heard + ' ' + r[0].transcript).trim();
       }
       $('heard').textContent = heard;
+      if (run && run.onResult) run.onResult(rec, e);
     };
     rec.onnomatch = () => log(`#${id} nomatch`);
     rec.onerror = (e) => log(`#${id} ERROR ${e.error}${e.message ? ' — ' + e.message : ''}`);
     rec.onend = () => {
-      log(`#${id} end`);
+      log(`#${id} end (mic released: ${rec.__audioEnded ? 'yes' : 'NO'})`);
       if (current === rec) current = null;
+      lastEnded = rec;
       if (run && run.restart && performance.now() < run.stopAt) run.restart(rec);
       else { status(`#${id} ended`); run = null; }
     };
@@ -107,12 +125,14 @@
     rec.continuous = !!(opts && opts.continuous);
     rec.maxAlternatives = 1;
     rec.__id = ++seq;
+    rec.__kind = opts && opts.kind;
     wire(rec);
     log(`#${rec.__id} created (continuous=${rec.continuous})`);
     return rec;
   }
 
   function begin(rec, how) {
+    rec.__startedAt = performance.now();
     try {
       rec.start();
       current = rec;
@@ -123,53 +143,49 @@
   }
 
   const TESTS = [
-    { key: 'A', title: 'New recogniser, started inside the tap',
-      say: 'six breakdowns. When it ends, tap A again: two services',
-      go() { run = { name: 'A' }; begin(make(), 'in tap'); } },
-
-    { key: 'B', title: 'New recogniser, started 180ms after the tap',
-      say: 'two services',
-      go() { run = { name: 'B' }; const rec = make(); setTimeout(() => begin(rec, 'timer 180ms'), 180); } },
-
-    { key: 'C', title: 'New recogniser, started 1.5s after the tap',
-      say: 'three fires (start talking once it says listening)',
-      go() { run = { name: 'C' }; const rec = make(); setTimeout(() => begin(rec, 'timer 1500ms'), 1500); } },
-
-    { key: 'D', title: 'The same recogniser every time, started inside the tap',
-      say: 'one service. When it ends, tap D again: two services',
-      go() { run = { name: 'D' }; if (!shared) shared = make(); begin(shared, 'in tap, reused'); } },
-
-    { key: 'E', title: 'Keeps going: a new recogniser after each pause (what the app does)',
+    { key: 'I', title: 'Listen in phrases, and end each phrase ourselves the moment it is final',
       say: 'six breakdowns … wait 3s … two services … wait 3s … three fires',
       go() {
-        run = { name: 'E', stopAt: performance.now() + 30000,
-          restart: () => setTimeout(() => { if (run && run.name === 'E') begin(make(), 'auto-restart, new, 180ms'); }, 180) };
+        run = {
+          name: 'I',
+          stopAt: performance.now() + 40000,
+          onResult: (rec, e) => {
+            const last = e.results[e.results.length - 1];
+            if (last.isFinal && current === rec) { log(`#${rec.__id} abort() — phrase final`); rec.abort(); }
+          },
+          restart: () => setTimeout(() => {
+            if (run && run.name === 'I') begin(make(), 'auto-restart after abort, 250ms');
+          }, 250),
+        };
         begin(make(), 'in tap');
       } },
 
-    { key: 'F', title: 'Keeps going: the same recogniser restarted after each pause',
-      say: 'six breakdowns … wait 3s … two services … wait 3s … three fires',
+    { key: 'J', title: 'One continuous recogniser, ended by our own 5s quiet timer',
+      say: 'six breakdowns … wait 3s … two services … wait 3s … three fires, then stop. When it ends, tap J again straight away and say: four services',
       go() {
-        run = { name: 'F', stopAt: performance.now() + 30000,
-          restart: (rec) => { if (run && run.name === 'F') begin(rec, 'auto-restart, same, 0ms'); } };
-        begin(make(), 'in tap');
-      } },
-
-    { key: 'G', title: 'One recogniser, continuous = true (the lab aborts it after 25s)',
-      say: 'six breakdowns … wait 3s … two services … wait 3s … three fires',
-      go() {
-        run = { name: 'G' };
         const rec = make({ continuous: true });
+        let quiet = null;
+        const arm = (ms) => {
+          clearTimeout(quiet);
+          quiet = setTimeout(() => {
+            if (current === rec) { log(`#${rec.__id} abort() — ${ms / 1000}s quiet`); rec.abort(); }
+          }, ms);
+        };
+        run = { name: 'J', onResult: () => arm(5000) };
         begin(rec, 'in tap, continuous');
-        setTimeout(() => { if (current === rec) { log(`#${rec.__id} abort() — lab 25s cap`); rec.abort(); } }, 25000);
+        arm(8000);   // longer at the start, while you draw breath
+        setTimeout(() => { if (current === rec) { log(`#${rec.__id} abort() — 40s cap`); rec.abort(); } }, 40000);
       } },
 
-    { key: 'H', title: 'Abort while listening, then a new recogniser in the same tap',
-      say: 'tap H and say nothing; tap H again straight away and say: two services',
+    { key: 'K', title: 'Control: let it end on its own, then abort the finished one before starting again',
+      say: 'one service. As soon as it ends, tap K again and say: two services',
       go() {
-        run = { name: 'H' };
-        if (current) { log(`#${current.__id} abort() — in tap`); current.abort(); }
-        begin(make(), 'in tap, straight after abort');
+        run = { name: 'K' };
+        if (lastEnded && lastEnded.__kind === 'K') {
+          log(`#${lastEnded.__id} abort() — already ended, in tap`);
+          try { lastEnded.abort(); } catch (err) { log(`abort THREW ${err.name}: ${err.message}`); }
+        }
+        begin(make({ kind: 'K' }), 'in tap');
       } },
   ];
 
@@ -178,7 +194,7 @@
     b.innerHTML = `<b>${t.key} · ${t.title}</b><small>Say: ${t.say}</small>`;
     b.addEventListener('click', () => {
       if (!SR) { log('no SpeechRecognition in this browser'); return; }
-      if (current && t.key !== 'H') {
+      if (current) {
         log(`${t.key}: #${current.__id} still listening — wait for "ended" or tap Abort`);
         return;
       }
