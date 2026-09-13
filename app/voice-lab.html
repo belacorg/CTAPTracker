@@ -7,17 +7,15 @@
 <!--
   Voice lab: a diagnostic page, not part of the app, and linked from nowhere.
 
-  Round 1 (iPhone, iOS 18.7, Safari) found the fault. When the recogniser
-  hears a phrase and ends on its own, it never fires audioend: iOS keeps the
-  capture source, and every start for the next ~45s gets "listening" but no
-  audio, then fails with audio-capture "Source is stopped". Tap vs timer and
-  new vs reused made no difference. A deaf start takes ~1.25s to fire onstart
-  where a healthy one takes ~20ms. Sessions ended with abort() did fire
-  audioend.
+  Round 1 (iPhone, iOS 18.7, Safari): a recogniser that ends on its own keeps
+  the microphone ~45s, and every start in that window is deaf. One continuous
+  session carried phrases through pauses, and abort() released the mic.
 
-  Round 2 tests the ways out: ending each phrase with abort() ourselves; one
-  continuous session ended by our own quiet timer; and, as the control,
-  aborting a session only after it has already ended on its own.
+  The app now runs one continuous session and always ends it with abort().
+  First dictations hear well in the field, but "Try again" straight after one
+  is deaf. Round 3 copies that exact shape — listen, we end it, listen again —
+  and sweeps the gap before the next start, tries stop() in place of abort(),
+  and tries keeping one session open with "try again" only clearing the text.
 
   Remove once voice capture is settled.
 -->
@@ -37,7 +35,7 @@
   .bar { display: flex; gap: 8px; position: sticky; top: 0; background: #0b0d12; padding: 8px 0; z-index: 1; }
   .bar button { flex: 1; text-align: center; font-weight: 700; background: #5b93e0; color: #0b0d12; }
   .bar button.alt { background: #2b3342; color: #eef2f8; }
-  #status { font-weight: 700; margin: 8px 0 6px; }
+  #status { font-weight: 700; font-size: 1.05rem; margin: 10px 0 6px; color: #ffc857; }
   #heard { min-height: 2.6em; background: #141822; border-radius: 10px; padding: 10px; }
   .tests { display: grid; gap: 8px; margin: 14px 0; }
   button { font: inherit; border: 0; border-radius: 12px; padding: 12px 14px; text-align: left; background: #1b212d; color: #eef2f8; }
@@ -47,16 +45,20 @@
 </style>
 </head>
 <body>
-<h1>Voice lab · round 2</h1>
-<p>Do these in this order. Wait until the status says <b>ended</b> before the next one. If one hears nothing, just wait: it can take up to about 45 seconds to give up.</p>
+<h1>Voice lab · round 3</h1>
+<p>Each test runs by itself and tells you what to say in the <b style="color:#ffc857">yellow line</b>. Just follow it — it starts listening again on its own.</p>
 <ol>
-  <li><b>I</b>, the three phrases with pauses.</li>
-  <li><b>J</b>, the three phrases, stop talking, and when it says ended tap <b>J</b> again straight away.</li>
-  <li><b>K</b>, then as soon as it says ended tap <b>K</b> again.</li>
+  <li>Reload this page, then tap <b>R</b> and follow the yellow line to the end (about a minute).</li>
+  <li>Tap <b>T</b> and do the same.</li>
+  <li>Tap <b>U</b>: say the phrase, tap <b>Clear</b>, say the next — as the yellow line asks.</li>
 </ol>
-<p>Then tap <b>Copy log</b> and paste it back to Claude. Start from a fresh page: reload it first if you've just used voice anywhere else.</p>
+<p>If a step hears nothing, keep going — the log records it. Then tap <b>Copy log</b> and paste it back to Claude.</p>
 <div class="env" id="env"></div>
-<div class="bar"><button id="abort" class="alt">Abort</button><button id="copy">Copy log</button></div>
+<div class="bar">
+  <button id="abort" class="alt">Abort</button>
+  <button id="clear" class="alt">Clear</button>
+  <button id="copy">Copy log</button>
+</div>
 <div id="status">Idle</div>
 <div id="heard"></div>
 <div class="tests" id="tests"></div>
@@ -82,52 +84,46 @@
   log('page loaded');
 
   let seq = 0;
-  let current = null;     // the recogniser listening right now, if any
-  let lastEnded = null;   // the recogniser that most recently ended
-  let run = null;         // { name, onResult?, restart?, stopAt? }
+  let current = null;   // the recogniser listening right now, if any
+  let running = null;   // name of the test in progress, including its gaps
+  let onClear = null;   // test U's hook for the Clear button
   let heard = '';
 
-  function wire(rec) {
+  function make() {
+    const rec = new SR();
+    rec.lang = 'en-GB';
+    rec.interimResults = true;
+    rec.continuous = true;
+    rec.maxAlternatives = 1;
+    rec.__id = ++seq;
     const id = rec.__id;
     ['audiostart', 'soundstart', 'speechstart', 'speechend', 'soundend'].forEach((ev) => {
       rec['on' + ev] = () => log(`#${id} ${ev}`);
     });
     rec.onstart = () => {
-      const lag = Math.round(performance.now() - rec.__startedAt);
-      log(`#${id} start (+${lag}ms)${lag > 800 ? '  ⚠ slow start: the deaf pattern' : ''}`);
-      status(`#${id} listening (test ${run ? run.name : '?'})`);
+      rec.__lag = Math.round(performance.now() - rec.__startedAt);
+      log(`#${id} start (+${rec.__lag}ms)${rec.__lag > 800 ? '  ⚠ slow start' : ''}`);
     };
     rec.onaudioend = () => { rec.__audioEnded = true; log(`#${id} audioend`); };
     rec.onresult = (e) => {
+      let interim = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
         log(`#${id} result ${r.isFinal ? 'FINAL' : 'interim'} "${r[0].transcript}"`);
         if (r.isFinal) heard = (heard + ' ' + r[0].transcript).trim();
+        else interim += r[0].transcript + ' ';
       }
-      $('heard').textContent = heard;
-      if (run && run.onResult) run.onResult(rec, e);
+      $('heard').textContent = (heard + ' ' + interim).trim();
+      if (rec.__onResult) rec.__onResult();
     };
     rec.onnomatch = () => log(`#${id} nomatch`);
     rec.onerror = (e) => log(`#${id} ERROR ${e.error}${e.message ? ' — ' + e.message : ''}`);
     rec.onend = () => {
       log(`#${id} end (mic released: ${rec.__audioEnded ? 'yes' : 'NO'})`);
       if (current === rec) current = null;
-      lastEnded = rec;
-      if (run && run.restart && performance.now() < run.stopAt) run.restart(rec);
-      else { status(`#${id} ended`); run = null; }
+      if (rec.__onEnd) rec.__onEnd();
     };
-  }
-
-  function make(opts) {
-    const rec = new SR();
-    rec.lang = 'en-GB';
-    rec.interimResults = true;
-    rec.continuous = !!(opts && opts.continuous);
-    rec.maxAlternatives = 1;
-    rec.__id = ++seq;
-    rec.__kind = opts && opts.kind;
-    wire(rec);
-    log(`#${rec.__id} created (continuous=${rec.continuous})`);
+    log(`#${id} created (continuous)`);
     return rec;
   }
 
@@ -139,53 +135,103 @@
       log(`#${rec.__id} start() — ${how}`);
     } catch (err) {
       log(`#${rec.__id} start() THREW ${err.name}: ${err.message}`);
+      if (rec.__onEnd) rec.__onEnd();
     }
   }
 
+  // Listen → we end it once they stop talking → wait `gaps[n]` → listen again.
+  // The shape of the app's dictation followed by Try again.
+  function cycles(name, ender, gaps, phrases) {
+    const results = [];
+    let n = 0;
+
+    const summary = () => {
+      log(`── ${name} summary ──`);
+      results.forEach((r) => log(`  cycle ${r.n}: ${r.gap === null ? 'first, in tap' : 'after ' + r.gap / 1000 + 's'} → heard ${r.heard ? 'YES' : 'NO'} · start +${r.lag}ms · ended by ${r.endedBy} · released ${r.released ? 'yes' : 'NO'}`));
+      status(`${name} done — next test, or Copy log`);
+      running = null;
+    };
+
+    const one = (how) => {
+      const i = n;
+      const rec = make();
+      let heardHere = false;
+      let endedBy = 'the engine, on its own';
+      let quiet = null;
+      const arm = (ms) => {
+        clearTimeout(quiet);
+        quiet = setTimeout(() => {
+          if (current !== rec) return;
+          endedBy = `our ${ender}()`;
+          log(`#${rec.__id} ${ender}() — ${ms / 1000}s quiet`);
+          rec[ender]();
+        }, ms);
+      };
+      rec.__onResult = () => { heardHere = true; arm(2500); };
+      rec.__onEnd = () => {
+        clearTimeout(quiet);
+        results.push({ n: i + 1, gap: i === 0 ? null : gaps[i], heard: heardHere, lag: rec.__lag, endedBy, released: !!rec.__audioEnded });
+        log(`cycle ${i + 1}: heard ${heardHere ? 'YES' : 'NO'} · ended by ${endedBy}`);
+        n++;
+        if (n >= phrases.length || running !== name) { summary(); return; }
+        status(`Wait ${gaps[n] / 1000}s… then say: "${phrases[n]}"`);
+        setTimeout(() => { if (running === name) one(`timer, ${gaps[n]}ms after the last ended`); }, gaps[n]);
+      };
+      heard = '';
+      $('heard').textContent = '';
+      status(`${name} ${i + 1}/${phrases.length} — say now: "${phrases[i]}"`);
+      begin(rec, how);
+      arm(12000);   // nothing heard in 12s counts as deaf
+    };
+
+    return () => { running = name; log(`── test ${name} ──`); one('in tap'); };
+  }
+
   const TESTS = [
-    { key: 'I', title: 'Listen in phrases, and end each phrase ourselves the moment it is final',
-      say: 'six breakdowns … wait 3s … two services … wait 3s … three fires',
-      go() {
-        run = {
-          name: 'I',
-          stopAt: performance.now() + 40000,
-          onResult: (rec, e) => {
-            const last = e.results[e.results.length - 1];
-            if (last.isFinal && current === rec) { log(`#${rec.__id} abort() — phrase final`); rec.abort(); }
-          },
-          restart: () => setTimeout(() => {
-            if (run && run.name === 'I') begin(make(), 'auto-restart after abort, 250ms');
-          }, 250),
-        };
-        begin(make(), 'in tap');
-      } },
+    { key: 'R', title: 'Listen, we abort it, listen again — after 0.2s, 1s, 3s and 8s',
+      say: 'whatever the yellow line says, five times',
+      go: cycles('R', 'abort', [0, 200, 1000, 3000, 8000],
+        ['one service', 'two services', 'three services', 'four services', 'five services']) },
 
-    { key: 'J', title: 'One continuous recogniser, ended by our own 5s quiet timer',
-      say: 'six breakdowns … wait 3s … two services … wait 3s … three fires, then stop. When it ends, tap J again straight away and say: four services',
-      go() {
-        const rec = make({ continuous: true });
-        let quiet = null;
-        const arm = (ms) => {
-          clearTimeout(quiet);
-          quiet = setTimeout(() => {
-            if (current === rec) { log(`#${rec.__id} abort() — ${ms / 1000}s quiet`); rec.abort(); }
-          }, ms);
-        };
-        run = { name: 'J', onResult: () => arm(5000) };
-        begin(rec, 'in tap, continuous');
-        arm(8000);   // longer at the start, while you draw breath
-        setTimeout(() => { if (current === rec) { log(`#${rec.__id} abort() — 40s cap`); rec.abort(); } }, 40000);
-      } },
+    { key: 'T', title: 'The same, but ending with stop() instead of abort() — after 0.2s and 1s',
+      say: 'whatever the yellow line says, three times',
+      go: cycles('T', 'stop', [0, 200, 1000],
+        ['one breakdown', 'two breakdowns', 'three breakdowns']) },
 
-    { key: 'K', title: 'Control: let it end on its own, then abort the finished one before starting again',
-      say: 'one service. As soon as it ends, tap K again and say: two services',
+    { key: 'U', title: 'One session kept open; Clear throws away what was heard, like Try again',
+      say: 'a phrase, tap Clear, the next phrase — as the yellow line asks',
       go() {
-        run = { name: 'K' };
-        if (lastEnded && lastEnded.__kind === 'K') {
-          log(`#${lastEnded.__id} abort() — already ended, in tap`);
-          try { lastEnded.abort(); } catch (err) { log(`abort THREW ${err.name}: ${err.message}`); }
-        }
-        begin(make({ kind: 'K' }), 'in tap');
+        running = 'U';
+        log('── test U ──');
+        const phrases = ['one fire', 'two fires', 'three fires', 'four fires'];
+        let step = 0;
+        const counts = [0, 0, 0, 0];
+        const rec = make();
+        heard = '';
+        $('heard').textContent = '';
+        rec.__onResult = () => { counts[step]++; };
+        rec.__onEnd = () => {
+          onClear = null;
+          log('── U summary ──');
+          phrases.forEach((p, i) => log(`  "${p}": ${counts[i]} result event${counts[i] === 1 ? '' : 's'}${i > step ? ' (not reached)' : ''}`));
+          status('U done — tap Copy log');
+          running = null;
+        };
+        onClear = () => {
+          if (step >= phrases.length - 1) {
+            log(`#${rec.__id} abort() — U finished`);
+            rec.abort();
+            return;
+          }
+          step++;
+          heard = '';
+          $('heard').textContent = '';
+          log(`── cleared; now "${phrases[step]}" ──`);
+          status(`U ${step + 1}/${phrases.length} — say: "${phrases[step]}", then tap Clear`);
+        };
+        status(`U 1/${phrases.length} — say: "${phrases[0]}", then tap Clear`);
+        begin(rec, 'in tap');
+        setTimeout(() => { if (current === rec) { log(`#${rec.__id} abort() — 60s cap`); rec.abort(); } }, 60000);
       } },
   ];
 
@@ -194,23 +240,27 @@
     b.innerHTML = `<b>${t.key} · ${t.title}</b><small>Say: ${t.say}</small>`;
     b.addEventListener('click', () => {
       if (!SR) { log('no SpeechRecognition in this browser'); return; }
-      if (current) {
-        log(`${t.key}: #${current.__id} still listening — wait for "ended" or tap Abort`);
+      if (running || current) {
+        log(`${t.key}: test ${running || '?'} still running — let it finish or tap Abort`);
         return;
       }
-      heard = '';
-      $('heard').textContent = '';
-      log(`── test ${t.key} ──`);
       t.go();
     });
     $('tests').appendChild(b);
   });
 
+  $('clear').addEventListener('click', () => {
+    if (onClear) onClear();
+    else log('clear: only used in test U');
+  });
+
   $('abort').addEventListener('click', () => {
-    run = null;
-    if (!current) { log('abort: nothing listening'); return; }
+    running = null;
+    onClear = null;
+    if (!current) { log('abort: nothing listening'); status('Aborted'); return; }
     log(`#${current.__id} abort() — button`);
     current.abort();
+    status('Aborted');
   });
 
   $('copy').addEventListener('click', async () => {
