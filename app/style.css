@@ -25,8 +25,9 @@ button, input, select, textarea { font-family: inherit; }
   --jcpd-amber: #ffc857;
   --jcpd-red:   #ff7060;
 
+  /* One typeface. Figures use DM Sans with tabular-nums, which lines columns up
+     without a second, monospace face beside it. */
   --jcpd-font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
-  --jcpd-font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
 
   --jcpd-r-sm: 10px;
   --jcpd-r-md: 14px;
@@ -3442,7 +3443,7 @@ details[open] .info-chevron { transform: rotate(90deg); }
 .voice-qty-btn:active { background: var(--jcpd-accent-dim); }
 .voice-qty-val {
   min-width: 26px; text-align: center;
-  font-family: var(--jcpd-font-mono);
+  font-family: var(--jcpd-font-sans); font-variant-numeric: tabular-nums;
   font-size: 0.9rem; font-weight: 600; color: var(--text);
 }
 .voice-item-value { display: flex; align-items: center; gap: 5px; }
@@ -3451,7 +3452,7 @@ details[open] .info-chevron { transform: rotate(90deg); }
   background: var(--surface3);
   border: 1.5px solid transparent; border-radius: 8px;
   padding: 6px 8px;
-  font-size: 16px; font-family: var(--jcpd-font-mono); color: var(--fg);
+  font-size: 16px; font-family: var(--jcpd-font-sans); font-variant-numeric: tabular-nums; color: var(--fg);
   outline: none; -webkit-appearance: none; appearance: none;
 }
 .voice-value-input.needs { border-color: var(--amber); }
@@ -3459,7 +3460,7 @@ details[open] .info-chevron { transform: rotate(90deg); }
 .voice-value-unit { font-size: 0.74rem; color: var(--muted); }
 .voice-item-credit {
   margin-left: auto;
-  font-family: var(--jcpd-font-mono);
+  font-family: var(--jcpd-font-sans); font-variant-numeric: tabular-nums;
   font-size: 0.85rem; font-weight: 600; color: var(--green);
   white-space: nowrap;
 }
@@ -3485,7 +3486,7 @@ details[open] .info-chevron { transform: rotate(90deg); }
 }
 .voice-total-label { font-size: 0.85rem; color: var(--muted); }
 .voice-total-val {
-  font-family: var(--jcpd-font-mono);
+  font-family: var(--jcpd-font-sans); font-variant-numeric: tabular-nums;
   font-size: 1.05rem; font-weight: 700; color: var(--green);
 }
 .voice-blocked-note {
@@ -3658,7 +3659,7 @@ details[open] .info-chevron { transform: rotate(90deg); }
   font-size: 0.7rem; color: var(--muted2); white-space: nowrap;
   max-width: 150px; overflow: hidden; text-overflow: ellipsis;
 }
-.lj-chip-credit { font-family: var(--jcpd-font-mono); font-size: 0.76rem; font-weight: 600; color: var(--green); }
+.lj-chip-credit { font-family: var(--jcpd-font-sans); font-variant-numeric: tabular-nums; font-size: 0.76rem; font-weight: 600; color: var(--green); }
 .lj-chip.variable .lj-chip-credit { color: var(--amber); }
 
 .lj-list { background: var(--surface); border-radius: 14px; overflow: hidden; }
@@ -3677,7 +3678,7 @@ details[open] .info-chevron { transform: rotate(90deg); }
 .lj-row-name { font-size: 0.94rem; color: var(--fg); }
 .lj-row-sub { font-size: 0.74rem; color: var(--muted2); }
 .lj-row-credit {
-  font-family: var(--jcpd-font-mono); font-size: 0.84rem; font-weight: 600;
+  font-family: var(--jcpd-font-sans); font-variant-numeric: tabular-nums; font-size: 0.84rem; font-weight: 600;
   color: var(--green); white-space: nowrap;
 }
 .lj-row.variable .lj-row-credit { color: var(--amber); }
@@ -3695,7 +3696,7 @@ details[open] .info-chevron { transform: rotate(90deg); }
   border-top: 0.5px solid var(--sep);
   font-size: 0.84rem; color: var(--muted);
 }
-.lj-session-val { font-family: var(--jcpd-font-mono); font-weight: 700; color: var(--green); }
+.lj-session-val { font-family: var(--jcpd-font-sans); font-variant-numeric: tabular-nums; font-weight: 700; color: var(--green); }
 .lj-empty { padding: 26px 0; text-align: center; font-size: 0.85rem; color: var(--muted); }
 
 body.light .lj-sec-sticky { background: var(--bg); }

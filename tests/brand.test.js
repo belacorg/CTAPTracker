@@ -40,3 +40,29 @@ describe('the brand mark', () => {
     }
   });
 });
+
+// One typeface.
+//
+// Log Job's figures were set in JetBrains Mono — a coding font with a dotted
+// zero — beside DM Sans everywhere else, and it read as a different app. Figures
+// now use DM Sans with tabular-nums, which keeps columns aligned the way the
+// monospace face was there to do.
+describe('typography', () => {
+  const noComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  it('sets every figure in the app font, with no monospace face', () => {
+    expect(noComments(readFileSync('app/style.css', 'utf8'))).not.toMatch(/font-mono|monospace|JetBrains/i);
+  });
+
+  it('keeps Log Job figures on tabular numerals, so credits still line up', () => {
+    const css = readFileSync('app/style.css', 'utf8');
+    for (const sel of ['lj-row-credit', 'lj-chip-credit', 'lj-session-val', 'voice-item-credit', 'voice-total-val']) {
+      expect(css, sel).toMatch(new RegExp(`\\.${sel}\\s*\\{[^}]*tabular-nums`));
+    }
+  });
+
+  it('loads and precaches DM Sans alone', () => {
+    expect(noComments(readFileSync('app/fonts.css', 'utf8'))).not.toMatch(/JetBrains/);
+    expect(noComments(readFileSync('app/sw.js', 'utf8'))).not.toMatch(/JetBrains/);
+  });
+});
