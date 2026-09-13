@@ -1787,10 +1787,10 @@ function buildVoiceBody() {
     const heard = voiceHeard();
     return `
       <div class="voice-listening">
-        <button class="voice-mic-pulse" id="voice-stop-mic" aria-label="Stop listening">${iconMic()}</button>
+        <button class="voice-mic-pulse" id="voice-mic-again" aria-label="Start again">${iconMic()}</button>
         <div class="voice-listening-label">Listening…</div>
         <div class="voice-live-transcript${heard ? '' : ' empty'}" id="voice-live">${heard || 'Say what you’ve done today'}</div>
-        <div class="voice-listening-hint">Take your time — it waits while you think. Tap Done when you’ve finished.</div>
+        <div class="voice-listening-hint">Take your time — it waits while you think. Tap the mic to start again, or Done when you’ve finished.</div>
         <button class="voice-primary-btn" id="voice-stop">Done</button>
         <button class="voice-link-btn" id="voice-type-instead">Type it instead</button>
         ${buildVoiceTipsHTML(false)}
@@ -1801,6 +1801,9 @@ function buildVoiceBody() {
     return `
       <div class="voice-typing">
         ${voiceMessage ? `<div class="voice-message">${voiceMessage}</div>` : ''}
+        ${voiceStatus === 'typing' && speechRecognitionCtor()
+          ? `<button class="voice-mic-again" id="voice-listen-again">${iconMic()}<span>Try again</span></button>`
+          : ''}
         <label class="voice-type-label" for="voice-text">What did you do?</label>
         <textarea id="voice-text" class="voice-textarea" rows="3"
           placeholder="e.g. six breakdowns, two boiler leads and three fires">${voiceTranscript}</textarea>
@@ -1978,6 +1981,7 @@ const VOICE_START_TIMEOUT = 4000;    // engine never got going
 const VOICE_SILENCE_TIMEOUT = 7000;  // no NEW speech for this long → wrap up
 const VOICE_MAX_SESSION = 120000;    // hard cap on one dictation
 const VOICE_MAX_RESTARTS = 40;       // backstop against a restart loop
+const VOICE_RESTART_GAP = 180;       // let a finished recogniser release the mic
 
 function clearVoiceTimers() {
   if (_voiceStartGuard) { clearTimeout(_voiceStartGuard); _voiceStartGuard = null; }
@@ -2025,7 +2029,7 @@ function restartVoiceBurst() {
     } catch (e) {
       finishVoiceCapture();
     }
-  }, 180);
+  }, VOICE_RESTART_GAP);
 }
 
 // Single exit from listening, whether the engine ended it, a timer did, or the
@@ -2110,7 +2114,20 @@ function startVoiceCapture() {
     return;
   }
 
+  const voiceStartFailed = function() {
+    clearVoiceTimers();
+    _recognition = null;
+    voiceStatus = 'typing';
+    voiceMessage = 'Voice capture failed to start. You can type it instead.';
+    refreshVoiceSheet();
+  };
+
   try {
+    // Starting again mid-capture means a recogniser is still live. Give it the
+    // same gap the pause restarts leave before starting another — those run on
+    // iOS in the field, while a second start() straight after abort() risks a
+    // session that never hears anything.
+    const hadLive = !!_recognition;
     stopVoiceCapture();
     voiceTranscript = '';
     _voiceCommitted = '';
@@ -2138,14 +2155,23 @@ function startVoiceCapture() {
       if (voiceStatus === 'listening') finishVoiceCapture();
     }, VOICE_MAX_SESSION);
 
-    _recognition = buildRecognition();
-    _recognition.start();
+    if (hadLive) {
+      _voiceRestartTimer = setTimeout(function() {
+        _voiceRestartTimer = null;
+        if (voiceStatus !== 'listening') return;
+        try {
+          _recognition = buildRecognition();
+          _recognition.start();
+        } catch (e) {
+          voiceStartFailed();
+        }
+      }, VOICE_RESTART_GAP);
+    } else {
+      _recognition = buildRecognition();
+      _recognition.start();
+    }
   } catch (err) {
-    clearVoiceTimers();
-    _recognition = null;
-    voiceStatus = 'typing';
-    voiceMessage = 'Voice capture failed to start. You can type it instead.';
-    refreshVoiceSheet();
+    voiceStartFailed();
   }
 }
 
@@ -2296,7 +2322,10 @@ function attachVoiceSheetListeners() {
   };
 
   on('voice-stop', finishVoiceCapture);
-  on('voice-stop-mic', finishVoiceCapture);
+  // The mic means "listen again", wherever it appears. Done is the way to
+  // finish; the timers we own are what guarantee listening can always end.
+  on('voice-mic-again', startVoiceCapture);
+  on('voice-listen-again', startVoiceCapture);
 
   on('voice-type-instead', function() {
     stopVoiceCapture();

@@ -3368,6 +3368,19 @@ details[open] .info-chevron { transform: rotate(90deg); }
   border-radius: 8px; padding: 8px 10px; margin-bottom: 12px;
   text-align: left; line-height: 1.4;
 }
+/* Listen again from the typed fallback — the mic, so it reads as voice */
+.voice-mic-again {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin: 0 auto 14px;
+  padding: 9px 16px;
+  border: none; border-radius: 99px;
+  background: var(--jcpd-accent-dim); color: var(--accent);
+  font-size: 0.88rem; font-weight: 600; font-family: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.voice-mic-again svg { width: 18px; height: 18px; }
+.voice-mic-again:active { transform: scale(0.96); }
 .voice-type-label {
   display: block; text-align: left;
   font-size: 0.78rem; font-weight: 600; color: var(--muted);

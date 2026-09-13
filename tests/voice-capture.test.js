@@ -262,12 +262,93 @@ describe('voice capture — listening through pauses', () => {
     expect(h.$('.voice-review')).toBeTruthy();
   });
 
-  it('lets the mic circle itself stop capture', () => {
+});
+
+// Tapping the mic means "listen again".
+//
+// The mic circle used to be a second Done button, added as one more way out
+// when iOS held the microphone. But the exit is guaranteed by the timers we
+// own, not by how many buttons stop capture — and on a phone, tapping the mic
+// because it didn't catch you is the natural thing to do. It ended the session
+// with nothing heard and dropped straight to "Didn't catch anything", which in
+// the field read as voice only working once.
+describe('voice capture — trying again', () => {
+  it('starts listening again when the mic is tapped mid-capture, rather than giving up', () => {
+    const h = boot();
+    h.openMic();
+    h.click('#voice-mic-again');
+    expect(h.$('.voice-listening')).toBeTruthy();
+    expect(h.$('.voice-message')).toBeNull();
+    h.advance(200);
+    expect(h.log.started).toBe(2);
+  });
+
+  it('drops what it heard, so the second go is a clean one', () => {
     const h = boot();
     h.openMic();
     h.rec().say('three fires', false);
-    h.click('#voice-stop-mic');
-    expect(h.$('.voice-review')).toBeTruthy();
+    h.click('#voice-mic-again');
+    h.advance(200);
+    expect(h.$('#voice-live').textContent).not.toContain('three fires');
+    h.rec().say('two services', true);
+    h.click('#voice-stop');
+    expect(h.$('.voice-heard').textContent).toContain('two services');
+    expect(h.$('.voice-heard').textContent).not.toContain('three fires');
+  });
+
+  it('lets the old recogniser go before starting a new one', () => {
+    // Starting a second engine while the first is still releasing the mic is
+    // what an immediate restart risks on iOS. The pause restarts already leave
+    // a gap and work in the field, so starting again leaves the same gap.
+    const h = boot();
+    h.openMic();
+    const first = h.rec();
+    h.click('#voice-mic-again');
+    expect(first.aborted).toBe(true);
+    expect(h.log.started).toBe(1);
+    h.advance(200);
+    expect(h.log.started).toBe(2);
+  });
+
+  it('is still escapable after starting again', () => {
+    const h = boot();
+    h.openMic();
+    h.click('#voice-mic-again');
+    h.advance(200);
+    h.advance(7000);
+    expect(h.$('.voice-listening')).toBeNull();
+    expect(h.$('#voice-text')).toBeTruthy();
+  });
+
+  it('starts nothing if the sheet is closed during the gap', () => {
+    const h = boot();
+    h.openMic();
+    h.click('#voice-mic-again');
+    h.click('#voice-close');
+    h.advance(1000);
+    expect(h.log.started).toBe(1);
+    expect(h.$('#voice-sheet').classList.contains('hidden')).toBe(true);
+  });
+
+  it('offers to listen again from "Didn\'t catch anything"', () => {
+    const h = boot();
+    h.openMic();
+    h.advance(7000);
+    expect(h.$('.voice-message').textContent).toMatch(/didn’t catch/i);
+    h.click('#voice-listen-again');
+    expect(h.$('.voice-listening')).toBeTruthy();
+    expect(h.log.started).toBe(2);
+  });
+
+  it('offers no listen-again where voice cannot work', () => {
+    const none = boot({ noRecognition: true });
+    none.openMic();
+    expect(none.$('#voice-listen-again')).toBeNull();
+
+    const blocked = boot();
+    blocked.openMic();
+    blocked.rec().fail('not-allowed');
+    expect(blocked.$('#voice-listen-again')).toBeNull();
   });
 });
 
