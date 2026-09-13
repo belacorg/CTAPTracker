@@ -7,15 +7,23 @@
 <!--
   Voice lab: a diagnostic page, not part of the app, and linked from nowhere.
 
-  Round 1 (iPhone, iOS 18.7, Safari): a recogniser that ends on its own keeps
-  the microphone ~45s, and every start in that window is deaf. One continuous
-  session carried phrases through pauses, and abort() released the mic.
+  What the iPhone (iOS 18.7, Safari) has shown across three runs:
+  - Once a recognition session hears speech, the next session is deaf, however
+    the first one ended (on its own or by abort()), and whatever the gap tried
+    (0.2s–21s). A new or reused recogniser makes no difference, and neither
+    does a tap or a timer.
+  - A deaf session fails with audio-capture "Source is stopped" 39.6s after it
+    starts, every time. The session after that failure works. Aborting a deaf
+    session early does NOT clear the state.
+  - Within one continuous session, phrase after phrase is heard through pauses.
 
-  The app now runs one continuous session and always ends it with abort().
-  First dictations hear well in the field, but "Try again" straight after one
-  is deaf. Round 3 copies that exact shape — listen, we end it, listen again —
-  and sweeps the gap before the next start, tries stop() in place of abort(),
-  and tries keeping one session open with "try again" only clearing the text.
+  Round 4 tests the ways round it:
+    T  end with stop() instead of abort(), then listen again
+    V  reset the microphone with getUserMedia before listening again
+    U  never restart: one session kept open, idle 10s and 25s between phrases
+    W  does time alone clear it? listen again 60s later
+  Between tests the page lets a silent session run to its failure, so each
+  test starts clean.
 
   Remove once voice capture is settled.
 -->
@@ -28,35 +36,28 @@
     background: #0b0d12; color: #eef2f8;
   }
   h1 { font-size: 1.25rem; margin: 0 0 6px; }
-  p, li { color: #a4aec0; line-height: 1.45; }
-  p { margin: 6px 0; }
-  ol { margin: 6px 0; padding-left: 20px; }
+  p { color: #a4aec0; line-height: 1.45; margin: 6px 0; }
   .env { font: 11.5px ui-monospace, Menlo, monospace; color: #7b8698; white-space: pre-wrap; margin: 10px 0; }
   .bar { display: flex; gap: 8px; position: sticky; top: 0; background: #0b0d12; padding: 8px 0; z-index: 1; }
   .bar button { flex: 1; text-align: center; font-weight: 700; background: #5b93e0; color: #0b0d12; }
   .bar button.alt { background: #2b3342; color: #eef2f8; }
-  #status { font-weight: 700; font-size: 1.05rem; margin: 10px 0 6px; color: #ffc857; }
+  #status { font-weight: 700; font-size: 1.15rem; line-height: 1.35; margin: 12px 0 6px; color: #ffc857; min-height: 3em; }
   #heard { min-height: 2.6em; background: #141822; border-radius: 10px; padding: 10px; }
   .tests { display: grid; gap: 8px; margin: 14px 0; }
   button { font: inherit; border: 0; border-radius: 12px; padding: 12px 14px; text-align: left; background: #1b212d; color: #eef2f8; }
+  button.big { background: #5b93e0; color: #0b0d12; font-weight: 700; text-align: center; padding: 16px; }
   button b { display: block; }
   button small { color: #a4aec0; }
   #log { font: 11.5px ui-monospace, Menlo, monospace; white-space: pre-wrap; background: #141822; border-radius: 10px; padding: 10px; margin-top: 10px; }
 </style>
 </head>
 <body>
-<h1>Voice lab · round 3</h1>
-<p>Each test runs by itself and tells you what to say in the <b style="color:#ffc857">yellow line</b>. Just follow it — it starts listening again on its own.</p>
-<ol>
-  <li>Reload this page, then tap <b>R</b> and follow the yellow line to the end (about a minute).</li>
-  <li>Tap <b>T</b> and do the same.</li>
-  <li>Tap <b>U</b>: say the phrase, tap <b>Clear</b>, say the next — as the yellow line asks.</li>
-</ol>
-<p>If a step hears nothing, keep going — the log records it. Then tap <b>Copy log</b> and paste it back to Claude.</p>
+<h1>Voice lab · round 4</h1>
+<p>Tap <b>Run everything</b> and follow the <b style="color:#ffc857">yellow line</b>: it tells you when to talk and when to stay quiet. It takes about six minutes. Keep the page open and the phone unlocked.</p>
+<p>Safari may ask to use the microphone partway through (test V): tap <b>Allow</b>. When the yellow line says <b>all done</b>, tap <b>Copy log</b> and paste it back to Claude.</p>
 <div class="env" id="env"></div>
 <div class="bar">
   <button id="abort" class="alt">Abort</button>
-  <button id="clear" class="alt">Clear</button>
   <button id="copy">Copy log</button>
 </div>
 <div id="status">Idle</div>
@@ -73,21 +74,24 @@
   const stamp = () => String(Math.round(performance.now() - t0)).padStart(6, ' ');
   const log = (msg) => { lines.push(stamp() + '  ' + msg); $('log').textContent = lines.slice().reverse().join('\n'); };
   const status = (s) => { $('status').textContent = s; };
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   $('env').textContent = [
     navigator.userAgent,
     'standalone: ' + (navigator.standalone === true || matchMedia('(display-mode: standalone)').matches),
     'SpeechRecognition: ' + (window.SpeechRecognition ? 'yes' : 'no') +
       ' · webkitSpeechRecognition: ' + (window.webkitSpeechRecognition ? 'yes' : 'no'),
+    'getUserMedia: ' + !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) +
+      ' · wakeLock: ' + ('wakeLock' in navigator),
     'secure context: ' + window.isSecureContext,
   ].join('\n');
   log('page loaded');
 
   let seq = 0;
-  let current = null;   // the recogniser listening right now, if any
-  let running = null;   // name of the test in progress, including its gaps
-  let onClear = null;   // test U's hook for the Clear button
-  let heard = '';
+  let current = null;     // the recogniser listening right now, if any
+  let stopped = false;    // Abort pressed: every step bails out
+  let busy = false;
+  const results = [];
 
   function make() {
     const rec = new SR();
@@ -102,22 +106,23 @@
     });
     rec.onstart = () => {
       rec.__lag = Math.round(performance.now() - rec.__startedAt);
-      log(`#${id} start (+${rec.__lag}ms)${rec.__lag > 800 ? '  ⚠ slow start' : ''}`);
+      log(`#${id} start (+${rec.__lag}ms)`);
     };
     rec.onaudioend = () => { rec.__audioEnded = true; log(`#${id} audioend`); };
     rec.onresult = (e) => {
       let interim = '';
+      let text = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
         log(`#${id} result ${r.isFinal ? 'FINAL' : 'interim'} "${r[0].transcript}"`);
-        if (r.isFinal) heard = (heard + ' ' + r[0].transcript).trim();
+        if (r.isFinal) text = (text + ' ' + r[0].transcript).trim();
         else interim += r[0].transcript + ' ';
       }
-      $('heard').textContent = (heard + ' ' + interim).trim();
+      $('heard').textContent = (text + ' ' + interim).trim();
       if (rec.__onResult) rec.__onResult();
     };
     rec.onnomatch = () => log(`#${id} nomatch`);
-    rec.onerror = (e) => log(`#${id} ERROR ${e.error}${e.message ? ' — ' + e.message : ''}`);
+    rec.onerror = (e) => { rec.__error = e.error; log(`#${id} ERROR ${e.error}${e.message ? ' — ' + e.message : ''}`); };
     rec.onend = () => {
       log(`#${id} end (mic released: ${rec.__audioEnded ? 'yes' : 'NO'})`);
       if (current === rec) current = null;
@@ -133,134 +138,208 @@
       rec.start();
       current = rec;
       log(`#${rec.__id} start() — ${how}`);
+      return true;
     } catch (err) {
       log(`#${rec.__id} start() THREW ${err.name}: ${err.message}`);
-      if (rec.__onEnd) rec.__onEnd();
+      return false;
     }
   }
 
-  // Listen → we end it once they stop talking → wait `gaps[n]` → listen again.
-  // The shape of the app's dictation followed by Try again.
-  function cycles(name, ender, gaps, phrases) {
-    const results = [];
-    let n = 0;
-
-    const summary = () => {
-      log(`── ${name} summary ──`);
-      results.forEach((r) => log(`  cycle ${r.n}: ${r.gap === null ? 'first, in tap' : 'after ' + r.gap / 1000 + 's'} → heard ${r.heard ? 'YES' : 'NO'} · start +${r.lag}ms · ended by ${r.endedBy} · released ${r.released ? 'yes' : 'NO'}`));
-      status(`${name} done — next test, or Copy log`);
-      running = null;
-    };
-
-    const one = (how) => {
-      const i = n;
+  // One session for one phrase. Ends it with `ender` 2.5s after they stop
+  // talking. If it hears nothing it is left to run until the phone itself
+  // gives up (~40s) — stopping a deaf session early leaves the next one deaf.
+  function listen(label, phrase, ender) {
+    return new Promise((resolve) => {
       const rec = make();
-      let heardHere = false;
-      let endedBy = 'the engine, on its own';
+      let heardAny = false;
+      let endedBy = 'the phone';
       let quiet = null;
-      const arm = (ms) => {
-        clearTimeout(quiet);
-        quiet = setTimeout(() => {
-          if (current !== rec) return;
-          endedBy = `our ${ender}()`;
-          log(`#${rec.__id} ${ender}() — ${ms / 1000}s quiet`);
-          rec[ender]();
-        }, ms);
+      const endIt = (why) => {
+        if (current !== rec) return;
+        endedBy = `our ${ender}()`;
+        log(`#${rec.__id} ${ender}() — ${why}`);
+        rec[ender]();
       };
-      rec.__onResult = () => { heardHere = true; arm(2500); };
+      const nudge = setTimeout(() => {
+        if (!heardAny && current === rec) status(`${label}: not hearing you — stay quiet now while the phone gives up (up to 40s)`);
+      }, 9000);
+      const cap = setTimeout(() => endIt('50s cap'), 50000);
+      rec.__onResult = () => {
+        heardAny = true;
+        clearTimeout(quiet);
+        quiet = setTimeout(() => endIt('2.5s quiet'), 2500);
+      };
       rec.__onEnd = () => {
-        clearTimeout(quiet);
-        results.push({ n: i + 1, gap: i === 0 ? null : gaps[i], heard: heardHere, lag: rec.__lag, endedBy, released: !!rec.__audioEnded });
-        log(`cycle ${i + 1}: heard ${heardHere ? 'YES' : 'NO'} · ended by ${endedBy}`);
-        n++;
-        if (n >= phrases.length || running !== name) { summary(); return; }
-        status(`Wait ${gaps[n] / 1000}s… then say: "${phrases[n]}"`);
-        setTimeout(() => { if (running === name) one(`timer, ${gaps[n]}ms after the last ended`); }, gaps[n]);
+        clearTimeout(quiet); clearTimeout(nudge); clearTimeout(cap);
+        resolve({ id: rec.__id, heard: heardAny, lag: rec.__lag, endedBy, error: rec.__error || null });
       };
-      heard = '';
       $('heard').textContent = '';
-      status(`${name} ${i + 1}/${phrases.length} — say now: "${phrases[i]}"`);
-      begin(rec, how);
-      arm(12000);   // nothing heard in 12s counts as deaf
-    };
-
-    return () => { running = name; log(`── test ${name} ──`); one('in tap'); };
+      status(phrase ? `${label}: say now — "${phrase}"` : `${label}: say nothing`);
+      if (!begin(rec, label)) rec.__onEnd();
+    });
   }
 
-  const TESTS = [
-    { key: 'R', title: 'Listen, we abort it, listen again — after 0.2s, 1s, 3s and 8s',
-      say: 'whatever the yellow line says, five times',
-      go: cycles('R', 'abort', [0, 200, 1000, 3000, 8000],
-        ['one service', 'two services', 'three services', 'four services', 'five services']) },
+  // A silent session left to time out, so the next test starts from a
+  // working microphone. Skipped when the last session already timed out.
+  async function cleanSlate(last, name) {
+    if (stopped) return;
+    if (last && !last.heard && last.error === 'audio-capture') { log(`${name}: mic already clean`); return; }
+    log(`── ${name}: clearing the mic (a silent session left to time out) ──`);
+    const r = await listen(`${name} · clearing the mic, about 40s`, null, 'abort');
+    log(`${name}: clear — heard ${r.heard ? 'SOMETHING (noise?)' : 'nothing'}, ended by ${r.endedBy}${r.error ? ', ' + r.error : ''}`);
+  }
 
-    { key: 'T', title: 'The same, but ending with stop() instead of abort() — after 0.2s and 1s',
-      say: 'whatever the yellow line says, three times',
-      go: cycles('T', 'stop', [0, 200, 1000],
-        ['one breakdown', 'two breakdowns', 'three breakdowns']) },
+  const record = (test, what, r) => {
+    const line = `${test} · ${what}: heard ${r.heard ? 'YES' : 'NO'} (start +${r.lag}ms, ended by ${r.endedBy}${r.error ? ', ' + r.error : ''})`;
+    results.push(line);
+    log('RESULT ' + line);
+    return r;
+  };
 
-    { key: 'U', title: 'One session kept open; Clear throws away what was heard, like Try again',
-      say: 'a phrase, tap Clear, the next phrase — as the yellow line asks',
-      go() {
-        running = 'U';
-        log('── test U ──');
-        const phrases = ['one fire', 'two fires', 'three fires', 'four fires'];
-        let step = 0;
-        const counts = [0, 0, 0, 0];
-        const rec = make();
-        heard = '';
-        $('heard').textContent = '';
-        rec.__onResult = () => { counts[step]++; };
-        rec.__onEnd = () => {
-          onClear = null;
-          log('── U summary ──');
-          phrases.forEach((p, i) => log(`  "${p}": ${counts[i]} result event${counts[i] === 1 ? '' : 's'}${i > step ? ' (not reached)' : ''}`));
-          status('U done — tap Copy log');
-          running = null;
-        };
-        onClear = () => {
-          if (step >= phrases.length - 1) {
-            log(`#${rec.__id} abort() — U finished`);
-            rec.abort();
-            return;
-          }
-          step++;
-          heard = '';
-          $('heard').textContent = '';
-          log(`── cleared; now "${phrases[step]}" ──`);
-          status(`U ${step + 1}/${phrases.length} — say: "${phrases[step]}", then tap Clear`);
-        };
-        status(`U 1/${phrases.length} — say: "${phrases[0]}", then tap Clear`);
-        begin(rec, 'in tap');
-        setTimeout(() => { if (current === rec) { log(`#${rec.__id} abort() — 60s cap`); rec.abort(); } }, 60000);
-      } },
-  ];
+  const TESTS = {
+    async T() {
+      const a = record('T', 'first session', await listen('T 1/2', 'one service', 'stop'));
+      if (stopped) return a;
+      await sleep(500);
+      return record('T', 'again 0.5s after stop()', await listen('T 2/2', 'two services', 'stop'));
+    },
 
-  TESTS.forEach((t) => {
-    const b = document.createElement('button');
-    b.innerHTML = `<b>${t.key} · ${t.title}</b><small>Say: ${t.say}</small>`;
-    b.addEventListener('click', () => {
-      if (!SR) { log('no SpeechRecognition in this browser'); return; }
-      if (running || current) {
-        log(`${t.key}: test ${running || '?'} still running — let it finish or tap Abort`);
-        return;
+    async V() {
+      const a = record('V', 'first session', await listen('V 1/2', 'one breakdown', 'abort'));
+      if (stopped) return a;
+      status('V: resetting the microphone — tap Allow if Safari asks');
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        log(`getUserMedia granted (${stream.getAudioTracks().length} audio track)`);
+        await sleep(300);
+        stream.getTracks().forEach((t) => t.stop());
+        log('getUserMedia tracks stopped');
+      } catch (err) {
+        log(`getUserMedia FAILED ${err.name}: ${err.message}`);
       }
-      t.go();
-    });
+      await sleep(500);
+      return record('V', 'again after getUserMedia reset', await listen('V 2/2', 'two breakdowns', 'abort'));
+    },
+
+    // Never restart: one session, phrases separated by long quiet spells.
+    U() {
+      return new Promise((resolve) => {
+        const steps = [
+          { say: 'one fire', idleAfter: 10 },
+          { say: 'two fires', idleAfter: 25 },
+          { say: 'three fires', idleAfter: 0 },
+        ];
+        const heardAt = [false, false, false];
+        let step = 0;
+        let quiet = null;
+        let giveUp = null;
+        const rec = make();
+
+        const finish = (why) => {
+          clearTimeout(quiet); clearTimeout(giveUp);
+          if (current === rec) { log(`#${rec.__id} abort() — ${why}`); rec.abort(); }
+        };
+        const prompt = () => {
+          $('heard').textContent = '';
+          status(`U ${step + 1}/3 (same session): say now — "${steps[step].say}"`);
+          clearTimeout(giveUp);
+          giveUp = setTimeout(() => { log(`U: nothing heard for "${steps[step].say}" in 15s`); next(); }, 15000);
+        };
+        const next = async () => {
+          clearTimeout(giveUp);
+          const idle = steps[step].idleAfter;
+          step++;
+          if (step >= steps.length || stopped) { finish('U finished'); return; }
+          for (let s = idle; s > 0; s--) {
+            if (current !== rec || stopped) return;
+            status(`U: stay quiet ${s}s — the session stays open`);
+            await sleep(1000);
+          }
+          if (current === rec) prompt();
+        };
+        rec.__onResult = () => {
+          if (step >= steps.length) return;
+          heardAt[step] = true;
+          clearTimeout(quiet);
+          quiet = setTimeout(next, 2500);
+        };
+        rec.__onEnd = () => {
+          clearTimeout(quiet); clearTimeout(giveUp);
+          steps.forEach((s, i) => {
+            const idleBefore = i === 0 ? 'at the start' : `after ${steps[i - 1].idleAfter}s quiet`;
+            results.push(`U · "${s.say}" ${idleBefore}: heard ${heardAt[i] ? 'YES' : 'NO'}${i > step ? ' (not reached)' : ''}`);
+            log('RESULT ' + results[results.length - 1]);
+          });
+          if (step < steps.length) log(`U: session ended during step ${step + 1}${rec.__error ? ' — ' + rec.__error : ''}`);
+          resolve({ id: rec.__id, heard: heardAt.some(Boolean), lag: rec.__lag, endedBy: 'U', error: rec.__error || null });
+        };
+        if (begin(rec, 'U, one session')) prompt(); else rec.__onEnd();
+        setTimeout(() => finish('100s cap'), 100000);
+      });
+    },
+
+    async W() {
+      const a = record('W', 'first session', await listen('W 1/2', 'one quote', 'abort'));
+      if (stopped) return a;
+      for (let s = 60; s > 0; s--) {
+        if (stopped) return a;
+        status(`W: wait ${s}s — say nothing`);
+        await sleep(1000);
+      }
+      return record('W', 'again 60s later', await listen('W 2/2', 'two quotes', 'abort'));
+    },
+  };
+
+  const TITLES = {
+    T: ['T · End with stop() instead of abort(), then listen again', 'Say two phrases when asked'],
+    V: ['V · Reset the microphone (getUserMedia) before listening again', 'Two phrases; Safari may ask for the mic'],
+    U: ['U · Never restart: one session, long quiet spells between phrases', 'Three phrases, with 10s and 25s of quiet'],
+    W: ['W · Does time clear it? Listen again 60 seconds later', 'Two phrases, a minute apart'],
+  };
+
+  let wakeLock = null;
+  async function keepAwake() {
+    try { if ('wakeLock' in navigator) { wakeLock = await navigator.wakeLock.request('screen'); log('screen kept awake'); } }
+    catch (err) { log(`wake lock unavailable: ${err.message}`); }
+  }
+
+  async function run(keys) {
+    if (!SR) { log('no SpeechRecognition in this browser'); return; }
+    if (busy) { log('already running'); return; }
+    busy = true; stopped = false;
+    await keepAwake();
+    let last = null;
+    for (let i = 0; i < keys.length; i++) {
+      if (stopped) break;
+      if (i > 0 || keys.length === 1) await cleanSlate(last, keys[i]);
+      if (stopped) break;
+      log(`── test ${keys[i]} ──`);
+      last = await TESTS[keys[i]]();
+    }
+    log('── RESULTS ──');
+    results.forEach((r) => log('  ' + r));
+    status(stopped ? 'Aborted — tap Copy log' : 'All done — tap Copy log and paste it to Claude');
+    busy = false;
+    if (wakeLock) { try { wakeLock.release(); } catch (e) {} }
+  }
+
+  const all = document.createElement('button');
+  all.className = 'big';
+  all.textContent = 'Run everything (about 6 minutes)';
+  all.addEventListener('click', () => run(['T', 'V', 'U', 'W']));
+  $('tests').appendChild(all);
+
+  Object.keys(TESTS).forEach((k) => {
+    const b = document.createElement('button');
+    b.innerHTML = `<b>${TITLES[k][0]}</b><small>${TITLES[k][1]}</small>`;
+    b.addEventListener('click', () => run([k]));
     $('tests').appendChild(b);
   });
 
-  $('clear').addEventListener('click', () => {
-    if (onClear) onClear();
-    else log('clear: only used in test U');
-  });
-
   $('abort').addEventListener('click', () => {
-    running = null;
-    onClear = null;
-    if (!current) { log('abort: nothing listening'); status('Aborted'); return; }
-    log(`#${current.__id} abort() — button`);
-    current.abort();
-    status('Aborted');
+    stopped = true;
+    if (current) { log(`#${current.__id} abort() — button`); current.abort(); }
+    status('Aborting…');
   });
 
   $('copy').addEventListener('click', async () => {
