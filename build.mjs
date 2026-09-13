@@ -38,6 +38,9 @@ const SHIP = [
   'sw.js',
   'manifest.json',
   'icons',
+  // TEMPORARY — a diagnostic page for voice capture on iPhone, linked from
+  // nowhere in the app. Remove, along with the file, once voice is settled.
+  'voice-lab.html',
 ];
 
 await rm(OUT, { recursive: true, force: true });

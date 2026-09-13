@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CTAP voice lab</title>
+<!--
+  Voice lab: a diagnostic page, not part of the app, and linked from nowhere.
+
+  Voice capture on iPhone hears the first phrase and then nothing: not after a
+  pause, and not when the mic is tapped to try again. jsdom can't say why, and
+  the app's own flow changes several things at once (a timer-started restart, a
+  new recogniser each time, abort() before starting again). Each test here
+  changes one of those, and the log records exactly what iOS does in return.
+
+  Remove once voice capture is settled.
+-->
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0;
+    padding: max(16px, env(safe-area-inset-top)) 16px 48px;
+    font: 15px -apple-system, system-ui, sans-serif;
+    background: #0b0d12; color: #eef2f8;
+  }
+  h1 { font-size: 1.25rem; margin: 0 0 6px; }
+  p { color: #a4aec0; margin: 6px 0; line-height: 1.45; }
+  .env { font: 11.5px ui-monospace, Menlo, monospace; color: #7b8698; white-space: pre-wrap; margin: 10px 0; }
+  .bar { display: flex; gap: 8px; position: sticky; top: 0; background: #0b0d12; padding: 8px 0; z-index: 1; }
+  .bar button { flex: 1; text-align: center; font-weight: 700; background: #5b93e0; color: #0b0d12; }
+  .bar button.alt { background: #2b3342; color: #eef2f8; }
+  #status { font-weight: 700; margin: 8px 0 6px; }
+  #heard { min-height: 2.6em; background: #141822; border-radius: 10px; padding: 10px; }
+  .tests { display: grid; gap: 8px; margin: 14px 0; }
+  button { font: inherit; border: 0; border-radius: 12px; padding: 12px 14px; text-align: left; background: #1b212d; color: #eef2f8; }
+  button b { display: block; }
+  button small { color: #a4aec0; }
+  #log { font: 11.5px ui-monospace, Menlo, monospace; white-space: pre-wrap; background: #141822; border-radius: 10px; padding: 10px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<h1>Voice lab</h1>
+<p>Each test starts the phone's speech recogniser a different way. Tap a test, say the words shown, and wait until the status says <b>ended</b> before the next one.</p>
+<p>When you've done them all, tap <b>Copy log</b> and paste it back to Claude.</p>
+<div class="env" id="env"></div>
+<div class="bar"><button id="abort" class="alt">Abort</button><button id="copy">Copy log</button></div>
+<div id="status">Idle</div>
+<div id="heard"></div>
+<div class="tests" id="tests"></div>
+<div id="log"></div>
+
+<script>
+(function () {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const t0 = performance.now();
+  const lines = [];
+  const $ = (id) => document.getElementById(id);
+  const stamp = () => String(Math.round(performance.now() - t0)).padStart(6, ' ');
+  const log = (msg) => { lines.push(stamp() + '  ' + msg); $('log').textContent = lines.slice().reverse().join('\n'); };
+  const status = (s) => { $('status').textContent = s; };
+
+  $('env').textContent = [
+    navigator.userAgent,
+    'standalone: ' + (navigator.standalone === true || matchMedia('(display-mode: standalone)').matches),
+    'SpeechRecognition: ' + (window.SpeechRecognition ? 'yes' : 'no') +
+      ' · webkitSpeechRecognition: ' + (window.webkitSpeechRecognition ? 'yes' : 'no'),
+    'secure context: ' + window.isSecureContext,
+  ].join('\n');
+  log('page loaded');
+
+  let seq = 0;
+  let current = null;   // the recogniser listening right now, if any
+  let shared = null;    // test D reuses one recogniser across taps
+  let run = null;       // { name, restart?: (rec) => void, stopAt?: number }
+  let heard = '';
+
+  function wire(rec) {
+    const id = rec.__id;
+    ['start', 'audiostart', 'soundstart', 'speechstart', 'speechend', 'soundend', 'audioend'].forEach((ev) => {
+      rec['on' + ev] = () => {
+        log(`#${id} ${ev}`);
+        if (ev === 'start') status(`#${id} listening (test ${run ? run.name : '?'})`);
+      };
+    });
+    rec.onresult = (e) => {
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        log(`#${id} result ${r.isFinal ? 'FINAL' : 'interim'} "${r[0].transcript}"`);
+        if (r.isFinal) heard = (heard + ' ' + r[0].transcript).trim();
+      }
+      $('heard').textContent = heard;
+    };
+    rec.onnomatch = () => log(`#${id} nomatch`);
+    rec.onerror = (e) => log(`#${id} ERROR ${e.error}${e.message ? ' — ' + e.message : ''}`);
+    rec.onend = () => {
+      log(`#${id} end`);
+      if (current === rec) current = null;
+      if (run && run.restart && performance.now() < run.stopAt) run.restart(rec);
+      else { status(`#${id} ended`); run = null; }
+    };
+  }
+
+  function make(opts) {
+    const rec = new SR();
+    rec.lang = 'en-GB';
+    rec.interimResults = true;
+    rec.continuous = !!(opts && opts.continuous);
+    rec.maxAlternatives = 1;
+    rec.__id = ++seq;
+    wire(rec);
+    log(`#${rec.__id} created (continuous=${rec.continuous})`);
+    return rec;
+  }
+
+  function begin(rec, how) {
+    try {
+      rec.start();
+      current = rec;
+      log(`#${rec.__id} start() — ${how}`);
+    } catch (err) {
+      log(`#${rec.__id} start() THREW ${err.name}: ${err.message}`);
+    }
+  }
+
+  const TESTS = [
+    { key: 'A', title: 'New recogniser, started inside the tap',
+      say: 'six breakdowns. When it ends, tap A again: two services',
+      go() { run = { name: 'A' }; begin(make(), 'in tap'); } },
+
+    { key: 'B', title: 'New recogniser, started 180ms after the tap',
+      say: 'two services',
+      go() { run = { name: 'B' }; const rec = make(); setTimeout(() => begin(rec, 'timer 180ms'), 180); } },
+
+    { key: 'C', title: 'New recogniser, started 1.5s after the tap',
+      say: 'three fires (start talking once it says listening)',
+      go() { run = { name: 'C' }; const rec = make(); setTimeout(() => begin(rec, 'timer 1500ms'), 1500); } },
+
+    { key: 'D', title: 'The same recogniser every time, started inside the tap',
+      say: 'one service. When it ends, tap D again: two services',
+      go() { run = { name: 'D' }; if (!shared) shared = make(); begin(shared, 'in tap, reused'); } },
+
+    { key: 'E', title: 'Keeps going: a new recogniser after each pause (what the app does)',
+      say: 'six breakdowns … wait 3s … two services … wait 3s … three fires',
+      go() {
+        run = { name: 'E', stopAt: performance.now() + 30000,
+          restart: () => setTimeout(() => { if (run && run.name === 'E') begin(make(), 'auto-restart, new, 180ms'); }, 180) };
+        begin(make(), 'in tap');
+      } },
+
+    { key: 'F', title: 'Keeps going: the same recogniser restarted after each pause',
+      say: 'six breakdowns … wait 3s … two services … wait 3s … three fires',
+      go() {
+        run = { name: 'F', stopAt: performance.now() + 30000,
+          restart: (rec) => { if (run && run.name === 'F') begin(rec, 'auto-restart, same, 0ms'); } };
+        begin(make(), 'in tap');
+      } },
+
+    { key: 'G', title: 'One recogniser, continuous = true (the lab aborts it after 25s)',
+      say: 'six breakdowns … wait 3s … two services … wait 3s … three fires',
+      go() {
+        run = { name: 'G' };
+        const rec = make({ continuous: true });
+        begin(rec, 'in tap, continuous');
+        setTimeout(() => { if (current === rec) { log(`#${rec.__id} abort() — lab 25s cap`); rec.abort(); } }, 25000);
+      } },
+
+    { key: 'H', title: 'Abort while listening, then a new recogniser in the same tap',
+      say: 'tap H and say nothing; tap H again straight away and say: two services',
+      go() {
+        run = { name: 'H' };
+        if (current) { log(`#${current.__id} abort() — in tap`); current.abort(); }
+        begin(make(), 'in tap, straight after abort');
+      } },
+  ];
+
+  TESTS.forEach((t) => {
+    const b = document.createElement('button');
+    b.innerHTML = `<b>${t.key} · ${t.title}</b><small>Say: ${t.say}</small>`;
+    b.addEventListener('click', () => {
+      if (!SR) { log('no SpeechRecognition in this browser'); return; }
+      if (current && t.key !== 'H') {
+        log(`${t.key}: #${current.__id} still listening — wait for "ended" or tap Abort`);
+        return;
+      }
+      heard = '';
+      $('heard').textContent = '';
+      log(`── test ${t.key} ──`);
+      t.go();
+    });
+    $('tests').appendChild(b);
+  });
+
+  $('abort').addEventListener('click', () => {
+    run = null;
+    if (!current) { log('abort: nothing listening'); return; }
+    log(`#${current.__id} abort() — button`);
+    current.abort();
+  });
+
+  $('copy').addEventListener('click', async () => {
+    const text = $('env').textContent + '\n\n' + lines.join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    }
+    status('Log copied — paste it back to Claude');
+  });
+})();
+</script>
+</body>
+</html>
