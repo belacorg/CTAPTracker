@@ -160,6 +160,13 @@ _Avoid_: "onboarding" (implies a flow the engineer is walked through), "wizard",
 The parsed, editable result of speaking work into the Log Job page — a list of proposed entries (job, count, and a value for variable jobs), **each tagged with the day it belongs to**, alongside any spoken fragments the parser could not match. A **Voice draft** is a proposal, not a record: it holds no place in state until the engineer confirms it, at which point it is written through the same shapes the job tiles produce. See ADR-0007.
 _Avoid_: "voice entry", "voice log" (for the draft itself — the draft is what exists before confirmation)
 
+**Voice session**:
+The one speech-recognition session the Voice sheet opens and keeps for as long as it is up. Done **mutes** it (results arrive and are discarded); Start over and Try again **unmute** it. It is ended only by closing the sheet, logging or discarding the draft, or the ceiling on one session — never by a second dictation, because on iPhone the session after one that has heard speech is deaf. See ADR-0018.
+_Avoid_: "restart", "listen again" as a description of the engine (nothing is restarted; the sheet listens again on the session it has)
+
+**Mishearing**:
+A phrase the recogniser writes for a job word it does not know — "bank accounts" for *breakdowns*. Folded back to the word said by `VOICE_MISHEARD`, on the same rule as the number homophones: only phrases nobody says while logging gas jobs. Distinct from a **guessed** match (ADR-0007), which is a real phrase that names more than one job. See ADR-0018.
+
 **Day segment**:
 One day's slice of a spoken transcript, produced by cutting the utterance at each day named. An engineer catching up on a Friday says the week as one sentence — *"Monday six breakdowns, Tuesday three services"* — and each segment is parsed independently, so the jobs land on the day they were said against. Both orders are understood: the day leading its work, or trailing it (*"six breakdowns on Monday"*). Naming no day, or one, produces a single segment and the original single-day behaviour. See ADR-0014.
 _Avoid_: "clause" (the parser scans, it does not split on grammar)

@@ -1,14 +1,15 @@
-// Voice capture: listening must always be escapable, and a dictation must hear
-// past its first phrase.
+// Voice capture: listening must always be escapable, and a second go must
+// hear as well as the first.
 //
-// Two iPhone bugs shaped this. First, continuous = true with no timers of our
-// own stranded the sheet in "Listening…": the engine never ended and no tap
-// got the page out. Timers we own now guarantee an exit. Second, measured with
-// voice-lab.html on iOS 18.7: a recogniser that ends on its own keeps the
-// microphone for ~45 seconds, and anything started in that window hears
-// nothing. The short, self-restarting bursts that replaced continuous heard the
-// first phrase and then went deaf. One continuous session, always ended by our
-// abort(), fixes it.
+// Three iPhone findings shaped this. First, continuous = true with no timers
+// of our own stranded the sheet in "Listening…": the engine never ended and no
+// tap got the page out. Timers we own now guarantee an exit. Second, measured
+// with voice-lab.html on iOS 18.7: once a session has heard speech, the NEXT
+// session is deaf for ~40 seconds, however the first one ended and whatever
+// the gap. Short self-restarting bursts therefore heard one phrase; and Try
+// again after Done heard nothing. Third, one continuous session carries phrase
+// after phrase through pauses. So the sheet opens one session and keeps it:
+// Done mutes it, Start over unmutes it, and only closing the sheet aborts it.
 //
 // Anything here that relies on the *engine* behaving is a trap; the timers we
 // own and abort() are what actually guarantee an exit and a released mic.
@@ -73,11 +74,11 @@ function makeRecognitionClass(log) {
     // Results accumulate the way a continuous session reports them: a phrase
     // in progress replaces the interim at the end of the list, and a final one
     // fixes it there.
-    say(text, isFinal) {
+    say(text, isFinal, alternatives = []) {
       if (!this.onresult) return;
       const last = this.results[this.results.length - 1];
       const index = last && !last.isFinal ? this.results.length - 1 : this.results.length;
-      const result = [{ transcript: text }];
+      const result = [{ transcript: text }].concat(alternatives.map((t) => ({ transcript: t })));
       result.isFinal = !!isFinal;
       this.results[index] = result;
       this.onresult({ resultIndex: index, results: this.results.slice() });
@@ -173,13 +174,24 @@ describe('voice capture — always escapable', () => {
     expect(h.$('.voice-heard').textContent).toContain('six breakdowns');
   });
 
-  it('aborts the engine rather than waiting on stop()', () => {
+  it('mutes rather than ends the session when the pause runs long', () => {
+    // Ending it would make the next start deaf on iPhone. The sheet moves on;
+    // the engine keeps running, and what it hears now is discarded.
+    const h = boot();
+    h.openMic();
+    h.advance(7000);
+    expect(h.log.aborted).toBe(0);
+    expect(h.log.stopped).toBe(0);
+    expect(h.rec().onresult).toBeTruthy();
+  });
+
+  it('aborts the engine rather than waiting on stop() when the sheet closes', () => {
     // stop() waits for a final result and can hang on iOS; abort() drops it,
     // and it is what releases the microphone.
     const h = boot();
     h.openMic();
-    h.advance(7000);
-    expect(h.log.aborted).toBeGreaterThan(0);
+    h.click('#voice-close');
+    expect(h.log.aborted).toBe(1);
     expect(h.log.stopped).toBe(0);
   });
 
@@ -281,12 +293,14 @@ describe('voice capture — listening through pauses', () => {
     expect(h.$('.voice-message').textContent).toMatch(/didn’t catch/i);
   });
 
-  it('ends a dictation with abort(), so the microphone is released', () => {
+  it('keeps the session through Done, and releases the microphone when the draft is logged', () => {
     const h = boot();
     h.openMic();
     const rec = h.rec();
     rec.say('three fires', true);
     h.click('#voice-stop');
+    expect(rec.aborted).toBe(false);
+    h.click('#voice-commit');
     expect(rec.aborted).toBe(true);
     expect(h.log.stopped).toBe(0);
   });
@@ -300,29 +314,32 @@ describe('voice capture — listening through pauses', () => {
   });
 });
 
-// Tapping the mic means "listen again".
+// Tapping the mic means "listen again" — on the session already open.
 //
 // The mic circle used to be a second Done button, added as one more way out
 // when iOS held the microphone. But the exit is guaranteed by the timers we
 // own, not by how many buttons stop capture — and on a phone, tapping the mic
-// because it didn't catch you is the natural thing to do.
+// because it didn't catch you is the natural thing to do. And it must not
+// restart the engine: on iPhone the session after one that heard speech is
+// deaf, which is exactly the "works once" bug Jake reported.
 describe('voice capture — trying again', () => {
-  it('starts listening again when the mic is tapped mid-capture, rather than giving up', () => {
+  it('listens again on the same session when the mic is tapped mid-capture', () => {
     const h = boot();
     h.openMic();
     h.click('#voice-mic-again');
     expect(h.$('.voice-listening')).toBeTruthy();
     expect(h.$('.voice-message')).toBeNull();
-    h.advance(200);
-    expect(h.log.started).toBe(2);
+    h.advance(1000);
+    expect(h.log.started).toBe(1);
+    expect(h.log.aborted).toBe(0);
+    expect(h.log.instances.length).toBe(1);
   });
 
   it('drops what it heard, so the second go is a clean one', () => {
     const h = boot();
     h.openMic();
-    h.rec().say('three fires', false);
+    h.rec().say('three fires', true);
     h.click('#voice-mic-again');
-    h.advance(200);
     expect(h.$('#voice-live').textContent).not.toContain('three fires');
     h.rec().say('two services', true);
     h.click('#voice-stop');
@@ -330,45 +347,113 @@ describe('voice capture — trying again', () => {
     expect(h.$('.voice-heard').textContent).not.toContain('three fires');
   });
 
-  it('aborts the old recogniser, releasing the mic, before starting a new one', () => {
+  it('ignores a phrase from before the tap that the engine finalises late', () => {
+    // The engine was part-way through "three fires" when the mic was tapped.
+    // When it fixes that phrase a moment later it must not land in the new go.
     const h = boot();
     h.openMic();
-    const first = h.rec();
+    h.rec().say('three fires', false);
     h.click('#voice-mic-again');
-    expect(first.aborted).toBe(true);
+    h.rec().say('three fires', true);           // same slot, now final
+    expect(h.$('#voice-live').textContent).not.toContain('three fires');
+    h.rec().say('two services', true);
+    h.click('#voice-stop');
+    expect(h.$('#voice-commit').textContent.trim()).toBe('Log 2');
+  });
+
+  it('starts over from the draft without restarting the engine', () => {
+    const h = boot();
+    h.openMic();
+    h.rec().say('six breakdowns', true);
+    h.click('#voice-stop');
+    expect(h.$('.voice-review')).toBeTruthy();
+    h.click('#voice-retry');
+    expect(h.$('.voice-listening')).toBeTruthy();
     expect(h.log.started).toBe(1);
-    h.advance(200);
-    expect(h.log.started).toBe(2);
+    expect(h.log.aborted).toBe(0);
+    h.rec().say('two services', true);
+    h.click('#voice-stop');
+    expect(h.$('.voice-heard').textContent).toBe('“two services”');
+  });
+
+  it('discards what the engine hears between Done and Start over', () => {
+    const h = boot();
+    h.openMic();
+    h.rec().say('six breakdowns', true);
+    h.click('#voice-stop');
+    h.rec().say('and some chat with the customer', true);
+    expect(h.$('.voice-heard').textContent).toBe('“six breakdowns”');
+    h.click('#voice-retry');
+    expect(h.$('#voice-live').textContent).not.toContain('customer');
   });
 
   it('is still escapable after starting again', () => {
     const h = boot();
     h.openMic();
     h.click('#voice-mic-again');
-    h.advance(200);
     h.advance(7000);
     expect(h.$('.voice-listening')).toBeNull();
     expect(h.$('#voice-text')).toBeTruthy();
   });
 
-  it('starts nothing if the sheet is closed during the gap', () => {
-    const h = boot();
-    h.openMic();
-    h.click('#voice-mic-again');
-    h.click('#voice-close');
-    h.advance(1000);
-    expect(h.log.started).toBe(1);
-    expect(h.$('#voice-sheet').classList.contains('hidden')).toBe(true);
-  });
-
-  it('offers to listen again from "Didn\'t catch anything"', () => {
+  it('offers to listen again from "Didn\'t catch anything", on the same session', () => {
     const h = boot();
     h.openMic();
     h.advance(7000);
     expect(h.$('.voice-message').textContent).toMatch(/didn’t catch/i);
     h.click('#voice-listen-again');
     expect(h.$('.voice-listening')).toBeTruthy();
+    expect(h.log.started).toBe(1);
+    h.rec().say('four services', true);
+    h.click('#voice-stop');
+    expect(h.$('#voice-commit').textContent.trim()).toBe('Log 4');
+  });
+
+  it('starts fresh only when the engine has already gone', () => {
+    const h = boot();
+    h.openMic();
+    h.rec().say('six breakdowns', true);
+    h.rec().end();                                // iOS ended it itself
+    expect(h.$('.voice-review')).toBeTruthy();
+    h.click('#voice-retry');
     expect(h.log.started).toBe(2);
+    expect(h.$('.voice-listening')).toBeTruthy();
+  });
+
+  it('tries once more when iOS reports the fresh start deaf', () => {
+    // A deaf session fails with audio-capture ~40s in, and the start after
+    // that failure is the one that hears.
+    const h = boot();
+    h.openMic();
+    h.rec().end();
+    h.click('#voice-listen-again');
+    expect(h.log.started).toBe(2);
+    h.rec().fail('audio-capture');
+    expect(h.log.started).toBe(3);
+    expect(h.$('.voice-listening')).toBeTruthy();
+    h.rec().fail('audio-capture');               // a phone with no microphone at all
+    expect(h.log.started).toBe(3);
+    expect(h.$('#voice-text')).toBeTruthy();
+  });
+
+  it('lets a muted session fail quietly, without disturbing the draft', () => {
+    const h = boot();
+    h.openMic();
+    h.rec().say('six breakdowns', true);
+    h.click('#voice-stop');
+    h.rec().fail('audio-capture');
+    expect(h.$('.voice-review')).toBeTruthy();
+    expect(h.$('.voice-message')).toBeNull();
+  });
+
+  it('releases the microphone at the ceiling even while muted', () => {
+    const h = boot();
+    h.openMic();
+    h.rec().say('six breakdowns', true);
+    h.click('#voice-stop');
+    h.advance(120000);
+    expect(h.log.aborted).toBe(1);
+    expect(h.$('.voice-review')).toBeTruthy();   // the draft is untouched
   });
 
   it('offers no listen-again where voice cannot work', () => {
@@ -380,6 +465,34 @@ describe('voice capture — trying again', () => {
     blocked.openMic();
     blocked.rec().fail('not-allowed');
     expect(blocked.$('#voice-listen-again')).toBeNull();
+  });
+});
+
+// The engine offers several readings of a phrase and ranks them as English.
+// The job vocabulary re-ranks them, so "six bank accounts" comes in as the
+// "six breakdowns" it was.
+describe('voice capture — picking the reading that names jobs', () => {
+  it('asks the engine for more than one reading', () => {
+    const h = boot();
+    h.openMic();
+    expect(h.rec().maxAlternatives).toBeGreaterThan(1);
+  });
+
+  it('keeps the reading with the jobs in it', () => {
+    const h = boot();
+    h.openMic();
+    h.rec().say('six bank statements', true, ['six breakdowns', 'sick break downs']);
+    expect(h.$('#voice-live').textContent).toContain('six breakdowns');
+    h.click('#voice-stop');
+    expect(h.$('#voice-commit').textContent.trim()).toBe('Log 6');
+  });
+
+  it("keeps the engine's own choice when it already fits", () => {
+    const h = boot();
+    h.openMic();
+    h.rec().say('two services', true, ['two surfaces', 'to services']);
+    h.click('#voice-stop');
+    expect(h.$('.voice-heard').textContent).toBe('“two services”');
   });
 });
 
@@ -399,12 +512,15 @@ describe('voice capture — closing out', () => {
     expect(h.$('#voice-sheet').classList.contains('hidden')).toBe(true);
   });
 
-  it('drops to typing from the link while listening', () => {
+  it('drops to typing from the link while listening, keeping the session for a Try again', () => {
     const h = boot();
     h.openMic();
     h.click('#voice-type-instead');
     expect(h.$('#voice-text')).toBeTruthy();
-    expect(h.log.aborted).toBeGreaterThan(0);
+    expect(h.log.aborted).toBe(0);
+    h.click('#voice-listen-again');
+    expect(h.log.started).toBe(1);
+    expect(h.$('.voice-listening')).toBeTruthy();
   });
 
   it('leaves no timer able to reopen a closed sheet', () => {

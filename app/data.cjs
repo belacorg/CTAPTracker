@@ -1107,10 +1107,11 @@ const VOICE_WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 
 // never does. Lookahead only — Safari's lookbehind support is too recent to
 // rely on inside a home-screen PWA.
 const VOICE_HOMOPHONES = [
-  [/\b(install|installs|installed|fit|fitted|fitting|sold|uninstall|recall)\s+high\b/g, '$1 hive'],
+  [/\b(install|installs|installed|fit|fitted|fitting|sold|uninstall|recall)\s+(?:high|hi)\b/g, '$1 hive'],
   // `e?s?` rather than listing every plural — "high minis" and "high trvs" are
   // as likely to be said as the singular.
-  [/\bhigh\b(?=\s+(?:install|installed|hub|mini|thermostat|trv|wireless|wired|zone|repair|fault|breakdown|recall|sale|sold|fit|fitting|uninstall)e?s?\b)/g, 'hive'],
+  [/\b(?:high|hi)\b(?=\s+(?:install|installed|hub|mini|minnie|thermostat|trv|wireless|wired|zone|repair|fault|breakdown|recall|sale|sold|fit|fitting|uninstall)e?s?\b)/g, 'hive'],
+  [/\bhive minnie\b/g, 'hive mini'],
   // Number homophones. Each of these is a word with no place in a job
   // dictation, so folding costs nothing: "too"/"tree"/"won"/"ate" would
   // otherwise land in the unmatched pile and the count would silently be one.
@@ -1120,6 +1121,66 @@ const VOICE_HOMOPHONES = [
   [/\bwon\b/g, 'one'],
   [/\bate\b/g, 'eight'],
 ];
+
+// Whole phrases the recogniser produces for a job word it has never heard of.
+//
+// Jake: "I said 'six breakdowns' and it came up 'six bank accounts'". There is
+// no vocabulary to hand the engine and Safari has no grammar list, so the
+// repair is a table of what it actually says, on the same rule as the
+// homophones above: every left-hand side is something nobody says while
+// logging gas jobs, so folding it can only ever help. Anything an engineer
+// might genuinely say ("empty", "five", "free") stays out, whatever the engine
+// mangles it into. Extend it from the field, one reported mishearing at a
+// time; each entry is a test.
+const VOICE_MISHEARD = [
+  [/\bbank accounts\b/g, 'breakdowns'],
+  [/\bbank account\b/g, 'breakdown'],
+  [/\b(?:break|brake)[ -]?(downs?)\b/g, 'break$1'],
+  [/\bsurfaces\b/g, 'services'],
+  [/\bsurface\b/g, 'service'],
+  [/\bservers\b/g, 'services'],
+  [/\b(?:inhibiter|in hibitor)\b/g, 'inhibitor'],
+  [/\bopen (?:term|firm|thumb|therm)\b/g, 'opentherm'],
+  [/\b(?:buy|bi|bye) box\b/g, 'bybox'],
+  [/\bfirst fixed\b/g, 'first fix'],
+  [/\bboiler (?:leeds|lids)\b/g, 'boiler leads'],
+  [/\bboiler (?:leed|lid)\b/g, 'boiler lead'],
+  [/\b(?:un vented|invented)\b/g, 'unvented'],
+  [/\bmulti ?points?\b/g, 'multipoint'],
+  [/\bwarm hair\b/g, 'warm air'],
+  [/\bhymn upgrade\b/g, 'him upgrade'],
+  [/\b(?:see o|seo|c o) alarms?\b/g, 'co alarm'],
+  [/\b(?:mpt|npd|n p t|and pt|empty quick)\b/g, 'npt'],
+  [/\bo c a\b/g, 'oca'],
+  [/\bt r vs?\b/g, 'trvs'],
+];
+
+// How well a piece of speech fits the job vocabulary.
+//
+// The recogniser can offer more than one reading of a phrase. It ranks them by
+// how much like English they sound, which is the wrong test in a van: "six
+// bank accounts" is perfectly good English and "six breakdowns" is what was
+// said. So the app asks for a few readings and keeps the one that names the
+// most jobs and leaves the fewest words it couldn't place. Higher is better;
+// a tie keeps the engine's own first choice.
+function voiceVocabularyScore(text) {
+  const parsed = parseVoiceBody(normaliseVoiceText(text));
+  const jobs = parsed.items.reduce(function(n, it) { return n + it.qty; }, 0);
+  const strays = parsed.unmatched.reduce(function(n, u) { return n + u.split(' ').length; }, 0);
+  return parsed.items.length * 2 + jobs - strays;
+}
+
+function bestVoiceAlternative(alternatives) {
+  const list = (alternatives || []).map(function(a) { return String(a || ''); }).filter(Boolean);
+  if (list.length === 0) return '';
+  let best = list[0];
+  let bestScore = voiceVocabularyScore(best);
+  for (let i = 1; i < list.length; i++) {
+    const score = voiceVocabularyScore(list[i]);
+    if (score > bestScore) { best = list[i]; bestScore = score; }
+  }
+  return best;
+}
 
 // A job said before the appliance it was on.
 //
@@ -1154,6 +1215,8 @@ function normaliseVoiceText(text) {
     // Remaining apostrophes go too, so "I've" reads as the filler word "ive"
     // rather than surfacing as something the parser couldn't understand.
     .replace(/[’']/g, '')
+    // "call-out", "forty-five": the aliases and number words are spaced.
+    .replace(/-/g, ' ')
     .replace(/\bt\s*(?:&|and)\s*r\b/g, 'trace and repair')
     .replace(/\b(?:c\.?o\.?|carbon monoxide)\s*alarm/g, 'co alarm')
     .replace(/&/g, ' and ')
@@ -1162,6 +1225,7 @@ function normaliseVoiceText(text) {
   // Homophone repair runs last, on already-tidied text, so the word-boundary
   // rules above don't have to cope with punctuation.
   VOICE_HOMOPHONES.forEach(function(pair) { out = out.replace(pair[0], pair[1]); });
+  VOICE_MISHEARD.forEach(function(pair) { out = out.replace(pair[0], pair[1]); });
   VOICE_APPLIANCE_REWRITES.forEach(function(pair) { out = out.replace(pair[0], pair[1]); });
   return out;
 }
@@ -1942,6 +2006,9 @@ if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     VOICE_BROAD: VOICE_BROAD,
     voiceAssumedHint: voiceAssumedHint,
     normaliseVoiceText: normaliseVoiceText,
+    VOICE_MISHEARD: VOICE_MISHEARD,
+    voiceVocabularyScore: voiceVocabularyScore,
+    bestVoiceAlternative: bestVoiceAlternative,
     extractDurationMins: extractDurationMins,
     extractVoiceDay: extractVoiceDay,
     findVoiceDayMarkers: findVoiceDayMarkers,

@@ -46,10 +46,12 @@ let voiceMessage = '';
 let _recognition = null;
 let _voiceStartGuard = null;
 let _voiceSilenceGuard = null;
-let _voiceRestartTimer = null;
 let _voiceMaxTimer = null;
 let _voiceCommitted = '';   // finalised phrases so far this dictation
 let _voiceInterim = '';     // the phrase currently being spoken
+let _voiceSeenResults = 0;  // how many results the open session has reported
+let _voiceResultFloor = 0;  // results below this belong to an earlier dictation
+let _voiceDeafRetries = 0;  // fresh starts made after iOS reported a deaf session
 let _ctapUser = null;          // populated by __ctapInit
 let _ctapDisplayName = '';     // populated by __ctapInit
 
@@ -2184,36 +2186,43 @@ function speechRecognitionCtor() {
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
 }
 
-// One recogniser per dictation, and we always end it — never the engine.
+// One recogniser per sheet, and we always end it — never the engine.
 //
-// Measured on an iPhone with voice-lab.html (iOS 18.7): a recogniser that ends
-// on its own never fires audioend. iOS keeps hold of the microphone, the mic
-// indicator stays on, and every start for the next ~45 seconds reports
-// "listening" but gets no audio, then fails with audio-capture "Source is
-// stopped". The old design — short bursts, restarted after each natural pause —
-// was therefore deaf after the first phrase, and so was tapping the mic to try
-// again. abort() does release the microphone.
+// Measured on an iPhone with voice-lab.html (iOS 18.7): once a session has
+// heard speech, the next session is deaf — whether the first ended on its own
+// or by our abort(), and however long the gap (0.25s, 1s, 21s all failed). A
+// deaf session fails about 40 seconds after it starts ("Source is stopped"),
+// and only a start after that failure hears again. Every design that restarts
+// the engine between dictations therefore hears the first one and nothing
+// after it, which is exactly what Jake found with Try again.
 //
-// So:
-//   1. continuous = true. One session carries the pauses an engineer takes
-//      between jobs (it held three phrases with pauses on the phone), so
-//      nothing is restarted mid-dictation.
-//   2. It ends by our abort() — Done, or a timer we own. If the engine ends on
-//      its own anyway we wrap up rather than restart, since that restart is
-//      the deaf one.
-//   3. Timers we own stay the backstop: an engine that never starts, goes
-//      quiet or runs on is aborted by us. continuous = true once stranded the
-//      sheet on iOS because nothing but the engine could end it; with these
-//      timers it can't.
+// So the restart is the thing to avoid:
+//   1. continuous = true, and ONE session for as long as the sheet is open. It
+//      carries the pauses an engineer takes between jobs (three phrases with
+//      pauses held on the phone).
+//   2. Done, the silence guard and the cap on a dictation parse what was heard
+//      and MUTE the session: results still arrive and are discarded. Start
+//      over, Try again and the mic unmute it and listen from that point. None
+//      of them touch the engine.
+//   3. It ends by our abort(): closing the sheet, logging or discarding the
+//      draft, or the ceiling on one session. If the engine ends on its own we
+//      keep what was heard and wait for the next tap, which starts fresh and
+//      takes its chances; a start that turns out deaf is retried once when
+//      iOS reports it.
+//   4. Timers we own stay the backstop for the listening state: an engine that
+//      never starts, goes quiet or runs on is handled without it.
 const VOICE_START_TIMEOUT = 4000;    // engine never got going
 const VOICE_SILENCE_TIMEOUT = 7000;  // no NEW speech for this long → wrap up
-const VOICE_MAX_SESSION = 120000;    // hard cap on one dictation
-const VOICE_RESTART_GAP = 180;       // after abort(), before starting again
+const VOICE_MAX_SESSION = 120000;    // ceiling on one engine session, muted or not
+const VOICE_ALTERNATIVES = 3;        // readings to ask the engine for per phrase
 
-function clearVoiceTimers() {
+function clearVoiceListenTimers() {
   if (_voiceStartGuard) { clearTimeout(_voiceStartGuard); _voiceStartGuard = null; }
   if (_voiceSilenceGuard) { clearTimeout(_voiceSilenceGuard); _voiceSilenceGuard = null; }
-  if (_voiceRestartTimer) { clearTimeout(_voiceRestartTimer); _voiceRestartTimer = null; }
+}
+
+function clearVoiceTimers() {
+  clearVoiceListenTimers();
   if (_voiceMaxTimer) { clearTimeout(_voiceMaxTimer); _voiceMaxTimer = null; }
 }
 
@@ -2238,13 +2247,12 @@ function armVoiceSilenceGuard() {
   }, VOICE_SILENCE_TIMEOUT);
 }
 
-// Single exit from listening, whether the engine ended it, a timer did, or the
-// engineer tapped Done.
+// Single exit from listening, whether a timer did it or the engineer tapped
+// Done. The session stays open and muted; only the sheet moves on.
 function finishVoiceCapture() {
-  clearVoiceTimers();
+  clearVoiceListenTimers();
   const heard = voiceHeard();
   voiceTranscript = heard;
-  stopVoiceCapture();
   if (heard.trim()) {
     parseVoiceInput(heard);
   } else {
@@ -2254,25 +2262,51 @@ function finishVoiceCapture() {
   }
 }
 
+// Listen on the session that is already open: drop what was heard, and ignore
+// any phrase the engine was part-way through, should it finalise late.
+function listenVoiceAgain() {
+  voiceTranscript = '';
+  _voiceCommitted = '';
+  _voiceInterim = '';
+  _voiceResultFloor = _voiceSeenResults;
+  voiceStatus = 'listening';
+  voiceMessage = '';
+  refreshVoiceSheet();
+  armVoiceSilenceGuard();
+}
+
+// The readings the engine offers for one phrase, best first by its own lights.
+function voiceAlternatives(result) {
+  const out = [];
+  for (let k = 0; k < result.length; k++) out.push(result[k].transcript);
+  return out;
+}
+
 function buildRecognition() {
   const SR = speechRecognitionCtor();
   const rec = new SR();
   rec.lang = 'en-GB';
   rec.interimResults = true;
   rec.continuous = true;
-  rec.maxAlternatives = 1;
+  // The engine ranks its readings by how much like English they sound, which
+  // hears "six breakdowns" as "six bank accounts". Given a few, the job
+  // vocabulary picks; see bestVoiceAlternative.
+  rec.maxAlternatives = VOICE_ALTERNATIVES;
 
   rec.onstart = function() {
     if (_voiceStartGuard) { clearTimeout(_voiceStartGuard); _voiceStartGuard = null; }
-    armVoiceSilenceGuard();
+    if (voiceStatus === 'listening') armVoiceSilenceGuard();
   };
-  rec.onspeechstart = armVoiceSilenceGuard;
-  rec.onaudiostart = armVoiceSilenceGuard;
+  rec.onspeechstart = function() { if (voiceStatus === 'listening') armVoiceSilenceGuard(); };
+  rec.onaudiostart = rec.onspeechstart;
 
   rec.onresult = function(e) {
+    _voiceSeenResults = e.results.length;
+    if (voiceStatus !== 'listening') return;          // muted: the sheet has moved on
     let interim = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
-      const text = e.results[i][0].transcript;
+      if (i < _voiceResultFloor) continue;            // from before Start over
+      const text = bestVoiceAlternative(voiceAlternatives(e.results[i]));
       if (e.results[i].isFinal) _voiceCommitted = (_voiceCommitted + ' ' + text).replace(/\s+/g, ' ').trim();
       else interim += text + ' ';
     }
@@ -2288,8 +2322,19 @@ function buildRecognition() {
     if (e.error === 'no-speech') return;
     clearVoiceTimers();
     _recognition = null;
+    // A muted session failing changes nothing the engineer can see; the next
+    // tap of the mic starts fresh.
+    if (voiceStatus !== 'listening') return;
     const blocked = e.error === 'not-allowed' || e.error === 'service-not-allowed';
     if (!blocked && voiceHeard()) { finishVoiceCapture(); return; }
+    // iOS reports a deaf session this way, ~40s in — and the start after that
+    // report is the one that hears. One retry, so a phone that is genuinely
+    // without a microphone doesn't loop.
+    if (e.error === 'audio-capture' && _voiceDeafRetries < 1) {
+      _voiceDeafRetries++;
+      startVoiceCapture();
+      return;
+    }
     voiceStatus = blocked ? 'error' : 'typing';
     voiceMessage = blocked
       ? 'Microphone access was blocked. Allow it in Settings, or type it below.'
@@ -2298,14 +2343,14 @@ function buildRecognition() {
   };
 
   // Every session we end goes through stopVoiceCapture, which detaches this
-  // handler before abort(). Reaching here means the engine stopped on its own —
-  // and on iOS a start in the next ~45s would hear nothing. So wrap up with
-  // what was heard; never restart.
+  // handler before abort(). Reaching here means the engine stopped on its own.
+  // Keep what was heard; never restart — the next tap does that.
   rec.onend = function() {
+    clearVoiceTimers();
     _recognition = null;
+    if (voiceStatus !== 'listening') return;        // muted: nothing to wrap up
     _voiceCommitted = (_voiceCommitted + ' ' + _voiceInterim).replace(/\s+/g, ' ').trim();
     _voiceInterim = '';
-    if (voiceStatus !== 'listening') return;        // already moved on
     finishVoiceCapture();
   };
 
@@ -2318,10 +2363,14 @@ function startVoiceCapture() {
     // Safari in standalone PWA mode is the common case here — the keyboard's
     // own dictation key still works in the textarea fallback.
     voiceStatus = 'typing';
-    voiceMessage = 'Voice capture isn\u2019t available on this device.';
+    voiceMessage = 'Voice capture isn’t available on this device.';
     refreshVoiceSheet();
     return;
   }
+
+  // A session is already open: listen on it. This is the whole fix for
+  // Try again — see the note above buildRecognition.
+  if (_recognition) { listenVoiceAgain(); return; }
 
   const voiceStartFailed = function() {
     clearVoiceTimers();
@@ -2332,16 +2381,14 @@ function startVoiceCapture() {
   };
 
   try {
-    // Starting again mid-capture means a recogniser is still live. abort()
-    // releases the microphone within a few milliseconds on the phone; leave a
-    // short gap after it rather than calling start() in the same tick.
-    const hadLive = !!_recognition;
-    stopVoiceCapture();
     voiceTranscript = '';
     _voiceCommitted = '';
     _voiceInterim = '';
+    _voiceSeenResults = 0;
+    _voiceResultFloor = 0;
 
     voiceStatus = 'listening';
+    voiceMessage = '';
     refreshVoiceSheet();
 
     // Armed before start() — onstart can fire synchronously and clears this,
@@ -2352,31 +2399,21 @@ function startVoiceCapture() {
       if (voiceStatus !== 'listening') return;
       stopVoiceCapture();
       voiceStatus = 'typing';
-      voiceMessage = 'Voice capture didn\u2019t start on this device \u2014 type it below instead.';
+      voiceMessage = 'Voice capture didn’t start on this device — type it below instead.';
       refreshVoiceSheet();
     }, VOICE_START_TIMEOUT);
 
-    // However long the pauses, one dictation can't run forever.
+    // However long the sheet stays up, one session can't hold the microphone
+    // forever. Past the ceiling the next tap starts fresh.
     _voiceMaxTimer = setTimeout(function() {
       _voiceMaxTimer = null;
-      if (voiceStatus === 'listening') finishVoiceCapture();
+      const wasListening = voiceStatus === 'listening';
+      stopVoiceCapture();
+      if (wasListening) finishVoiceCapture();
     }, VOICE_MAX_SESSION);
 
-    if (hadLive) {
-      _voiceRestartTimer = setTimeout(function() {
-        _voiceRestartTimer = null;
-        if (voiceStatus !== 'listening') return;
-        try {
-          _recognition = buildRecognition();
-          _recognition.start();
-        } catch (e) {
-          voiceStartFailed();
-        }
-      }, VOICE_RESTART_GAP);
-    } else {
-      _recognition = buildRecognition();
-      _recognition.start();
-    }
+    _recognition = buildRecognition();
+    _recognition.start();
   } catch (err) {
     voiceStartFailed();
   }
@@ -2384,6 +2421,7 @@ function startVoiceCapture() {
 
 function stopVoiceCapture() {
   clearVoiceTimers();
+  _voiceDeafRetries = 0;
   if (!_recognition) return;
   const rec = _recognition;
   _recognition = null;
@@ -2535,7 +2573,8 @@ function attachVoiceSheetListeners() {
   on('voice-listen-again', startVoiceCapture);
 
   on('voice-type-instead', function() {
-    stopVoiceCapture();
+    // The session stays open, muted, so a Try again from here needs no restart.
+    clearVoiceListenTimers();
     voiceStatus = 'typing';
     voiceMessage = '';
     refreshVoiceSheet();
