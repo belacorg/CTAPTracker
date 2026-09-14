@@ -1,0 +1,7 @@
+# Rest days are read from the Schedule, not marked
+
+A rota isn't always Monday to Friday. An engineer might work Monday to Thursday, be off Friday, and work Saturday. That Friday is a **Rest day**: a normal non-working day which, unlike **Leave**, does not reduce **Rostered hours** — the week is still 40 hours, worked across different days. Before this, the Weekly Forecast counted any weekday without a shift as a working day still to come, so that rota spread the target over six days instead of five, and the Friday off still asked for a daily target.
+
+A rest day is inferred rather than marked: once any day in the week has shift times, every day without times is a rest day, with no daily target and no place in "days left". A week with no times at all is read the way the app always read it — Monday to Friday worked, the weekend rest — so an engineer who never touches the Schedule sees no change. Rest days show as "Rest" on the Schedule and in the Forecast strip, so a day left empty by mistake is visible at once and fixed with one Confirm.
+
+Alternative considered: a "Rest" toggle on each day, like Leave. Rejected: it is a second thing to set for every day not worked, on top of the times for the days that are, and a forgotten toggle would quietly count a day off as a day of work — the same failure as before, moved. The cost of inferring is the half-set week: an engineer who has confirmed Monday and nothing else sees Tuesday to Friday as rest days until they set them, which the "Rest" labels make plain.

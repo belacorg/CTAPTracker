@@ -87,6 +87,10 @@ and any annual leave.
 - **Also apply to**, in the same picker, puts those times on other days. Pick
   them one at a time (Monday to Thursday and Saturday, say), or use
   **Rest of week** or **Whole week**. Days on leave are never changed.
+- **A day with no times is a rest day**, a normal day off in your rota, and
+  shows as **Rest**. Unlike Leave it doesn't reduce your week's hours, it just
+  isn't a day you're expected to earn on. (If you've set no times at all for a
+  week, Monday to Friday count as working days.)
 - **"Standard week"** button applies Mon–Fri 08:00–16:30 with your default
   lunch. One tap if your week is normal.
 - **"Leave"** chip per day toggles annual leave. That day drops out of your

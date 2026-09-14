@@ -201,6 +201,45 @@ describe('copying a shift to other days', () => {
   });
 });
 
+describe('rest days', () => {
+  // Monday to Thursday and Saturday: off Friday. Friday is a rest day, not leave.
+  const rota = (s) => {
+    const shift = { start: '08:30', end: '17:00', lunch: '30' };
+    s.weeks[WEEK] = {
+      days: {},
+      shifts: { [MON]: { ...shift }, [TUE]: { ...shift }, [WED]: { ...shift }, [THU]: { ...shift }, [SAT]: { ...shift } },
+    };
+  };
+
+  it('counts only the days actually worked as days left in the Forecast', () => {
+    // Wednesday morning, nothing logged: Wednesday, Thursday and Saturday are
+    // left, so the 32h target is spread over three days, not five.
+    const h = bootApp({ now: NOW });
+    rota(h.state());
+    tab(h, 'dashboard');
+    h.click('#week-tile');
+    expect(h.$('#forecast-sheet .forecast-needed').textContent).toContain('10.67h average per remaining day');
+  });
+
+  it('shows a rest day as Rest on the Schedule and in the Forecast strip', () => {
+    const h = schedule(rota);
+    const row = h.$(`[data-action="edit-shift"][data-day="${FRI}"]`).closest('.shift-row');
+    expect(row.querySelector('.sched-hrs').textContent.trim()).toBe('Rest');
+    tab(h, 'dashboard');
+    h.click('#week-tile');
+    expect(h.$(`#forecast-sheet [data-strip-day="${FRI}"] .dsp-hrs`).textContent.trim()).toBe('Rest');
+    expect(h.$(`#forecast-sheet [data-strip-day="${SAT}"] .dsp-hrs`).textContent.trim()).not.toBe('Rest');
+  });
+
+  it('asks for nothing on a rest day', () => {
+    const h = bootApp({ now: '2026-09-11T10:00:00' });   // the Friday off
+    rota(h.state());
+    tab(h, 'dashboard');
+    const stillNeeded = h.$$('.hero-col').find(c => /still needed/i.test(c.textContent));
+    expect(stillNeeded.querySelector('.hero-col-num').textContent).toMatch(/^0\.00/);
+  });
+});
+
 describe('the Weekly Forecast covers the whole week', () => {
   function forecast({ now = NOW, seed } = {}) {
     const h = bootApp({ now });

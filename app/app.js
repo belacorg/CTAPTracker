@@ -320,8 +320,8 @@ function buildDashboard() {
   // pace isn't meaningful.
   let weekColour;
   if (isCurrentWeek) {
-    const wkDays5 = weekDays(currentWeekKey).slice(0, 5);
-    const workingDays = wkDays5.filter(dk => !dayIsLeave(week, dk));
+    // Working days are the whole week less leave and rest days.
+    const workingDays = weekDays(currentWeekKey).filter(dk => isWorkingDay(week, dk));
     const completed = workingDays.filter(dk => dk < todayKey).length;
     const pacePct = workingDays.length > 0 ? (completed / workingDays.length) * 100 : 0;
     weekColour = weekPct >= pacePct ? 'green'
@@ -573,7 +573,7 @@ function buildSchedule() {
     const note = (s.note || '').trim();
     const hasNote = note.length > 0;
     const isNoteOpen = scheduleNoteOpenDay === dk;
-    const rowHtml = `<div class="shift-row${isToday ? ' shift-today' : ''}${isLeave ? ' shift-leave' : ''}"><div class="sched-day-col${isToday ? ' is-today' : ''}"><span class="sched-day-abbr">${DAY_ABBR[i]}</span><span class="sched-day-num">${dayNum}</span></div>${isLeave ? `<div class="sched-leave-label">Annual leave</div>` : `<button type="button" class="sched-time-wrap sched-time-btn" data-action="edit-shift" data-day="${dk}" aria-label="Set ${d.toLocaleDateString('en-GB', { weekday: 'long' })}'s shift times"><span class="sched-time-val">${s.start || '--:--'}</span><span class="shift-sep">–</span><span class="sched-time-val">${s.end || '--:--'}</span></button>`}<span class="sched-hrs${isToday ? ' is-today' : ''}">${isLeave ? 'AL' : hrs !== null ? hrs.toFixed(1) + 'h' : '—'}</span><button class="al-btn${isLeave ? ' active' : ''}" data-day="${dk}" data-action="toggle-leave">${isLeave ? '✓ Leave' : 'Leave'}</button><button class="sched-note-btn${hasNote ? ' has-note' : ''}${isNoteOpen ? ' is-open' : ''}" data-day="${dk}" data-action="toggle-note" title="Day note" aria-label="Day note">${hasNote ? '●' : '+'}</button></div>`;
+    const rowHtml = `<div class="shift-row${isToday ? ' shift-today' : ''}${isLeave ? ' shift-leave' : ''}"><div class="sched-day-col${isToday ? ' is-today' : ''}"><span class="sched-day-abbr">${DAY_ABBR[i]}</span><span class="sched-day-num">${dayNum}</span></div>${isLeave ? `<div class="sched-leave-label">Annual leave</div>` : `<button type="button" class="sched-time-wrap sched-time-btn" data-action="edit-shift" data-day="${dk}" aria-label="Set ${d.toLocaleDateString('en-GB', { weekday: 'long' })}'s shift times"><span class="sched-time-val">${s.start || '--:--'}</span><span class="shift-sep">–</span><span class="sched-time-val">${s.end || '--:--'}</span></button>`}<span class="sched-hrs${isToday ? ' is-today' : ''}">${isLeave ? 'AL' : hrs !== null ? hrs.toFixed(1) + 'h' : isRestDay(week, dk) ? 'Rest' : '—'}</span><button class="al-btn${isLeave ? ' active' : ''}" data-day="${dk}" data-action="toggle-leave">${isLeave ? '✓ Leave' : 'Leave'}</button><button class="sched-note-btn${hasNote ? ' has-note' : ''}${isNoteOpen ? ' is-open' : ''}" data-day="${dk}" data-action="toggle-note" title="Day note" aria-label="Day note">${hasNote ? '●' : '+'}</button></div>`;
     const notePanel = isNoteOpen
       ? `<div class="sched-note-panel"><textarea class="sched-note-input" data-day="${dk}" rows="2" placeholder="What happened today? Stuck in traffic, customer reschedule, training…">${note.replace(/</g, '&lt;')}</textarea><p class="sched-note-hint">Saves automatically</p></div>`
       : '';
@@ -1410,7 +1410,7 @@ function buildDayStrip(weekKey, week, activeDk) {
   return `<div class="day-strip" data-week-key="${weekKey}">${days.map((dk, i) => {
     const h = ((week.days || {})[dk] || []).reduce((s, j) => s + j.creditMins, 0) / 60;
     const isLeave = dayIsLeave(week, dk);
-    const lbl = isLeave ? 'AL' : (h > 0 ? h.toFixed(1) + 'h' : '—');
+    const lbl = isLeave ? 'AL' : h > 0 ? h.toFixed(1) + 'h' : isRestDay(week, dk) ? 'Rest' : '—';
     return `<button class="dsp-pill${dk === activeDk ? ' dsp-active' : ''}" data-strip-day="${dk}">
       <span class="dsp-abbr">${DAY_ABB[i]}</span>
       <span class="dsp-hrs">${lbl}</span>
@@ -1638,14 +1638,13 @@ function buildWeekForecastSheet() {
     return jobs.length > 0 && (isPastWeek || dk <= todayKey);
   });
 
-  // Remaining working days: from today (inclusive) onwards with no jobs yet
-  const remainingDayKeys = isPastWeek ? [] : wDays.filter((dk, i) => {
+  // Remaining working days: from today (inclusive) onwards with no jobs yet.
+  // Leave and rest days aren't working days, so a Friday off in a Monday-to-
+  // Thursday-and-Saturday rota doesn't thin the target out over an extra day.
+  const remainingDayKeys = isPastWeek ? [] : wDays.filter(dk => {
     if (dk < todayKey) return false;
-    if (dayIsLeave(week, dk)) return false;
-    const hasJobs = ((week.days || {})[dk] || []).length > 0;
-    if (hasJobs) return false;
-    const shift = (week.shifts || {})[dk];
-    return (shift && (shift.start || shift.end)) || i < 5;
+    if (!isWorkingDay(week, dk)) return false;
+    return ((week.days || {})[dk] || []).length === 0;
   });
 
   const daysWorked = workedDayKeys.length;
@@ -4141,8 +4140,7 @@ function buildCoachCard() {
       msgs.push(`You're level — neither in credit nor in deficit. A week above target puts you in front.`);
     }
     const todayKey = getTodayKey();
-    const wkDays5 = weekDays(todayWk).slice(0, 5);
-    const remainDays = wkDays5.filter(dk => dk >= todayKey && !dayIsLeave(week, dk)).length;
+    const remainDays = weekDays(todayWk).filter(dk => dk >= todayKey && isWorkingDay(week, dk)).length;
     const needed = targetHours - earnedHours;
     if (needed > 0.05 && remainDays > 0) {
       msgs.push(`You need ${needed.toFixed(2)}h across ${remainDays} remaining day${remainDays === 1 ? '' : 's'} to hit this week's target.`);
@@ -4159,9 +4157,9 @@ function buildCoachCard() {
       msgs.push(`You've hit target ${streak} weeks in a row — great consistency.`);
     } else {
       const todayKey = getTodayKey();
-      const wkDays5 = weekDays(todayWk).slice(0, 5);
-      const workedDays = wkDays5.filter(dk => dk <= todayKey && !dayIsLeave(week, dk) && ((week.days||{})[dk]||[]).length > 0).length;
-      const remainDays = wkDays5.filter(dk => dk > todayKey && !dayIsLeave(week, dk)).length;
+      const wkDaysAll = weekDays(todayWk);
+      const workedDays = wkDaysAll.filter(dk => dk <= todayKey && !dayIsLeave(week, dk) && ((week.days||{})[dk]||[]).length > 0).length;
+      const remainDays = wkDaysAll.filter(dk => dk > todayKey && isWorkingDay(week, dk)).length;
       if (workedDays > 0 && remainDays > 0) {
         const projected = earnedHours + (earnedHours / workedDays) * remainDays;
         msgs.push(`At your current pace, you'll finish on ${projected.toFixed(2)} hours. This is ${(projected - targetHours).toFixed(2)} hours above target.`);

@@ -8,6 +8,49 @@ const data = require('../app/data.cjs');
 // read the day's shift × CTAP %, less that day's NPT, while the Weekly Forecast
 // and the daily-streak insight read the bare shift — so on the same morning one
 // screen said 2.05h still needed and the other 3.65h.
+// A rest day is a normal non-working day in a rota ("off Friday, in Saturday"),
+// not leave: it doesn't reduce Rostered hours. Once any day in a week has shift
+// times, a day without them is a rest day. A week with no times at all reads as
+// Monday to Friday, which is how the app worked before rotas.
+describe('rest days', () => {
+  const shift = { start: '08:30', end: '17:00', lunch: '30' };
+  // Monday to Thursday and Saturday, off Friday.
+  const rota = {
+    days: {},
+    shifts: { '2026-09-07': shift, '2026-09-08': shift, '2026-09-09': shift, '2026-09-10': shift, '2026-09-12': shift },
+    deductionLog: [],
+  };
+  const state = { baseHours: 40, weeklyTargetPct: 0.8, weeks: {} };
+
+  it('makes a day without times a rest day once the week has shifts', () => {
+    expect(data.isRestDay(rota, '2026-09-11')).toBe(true);    // Friday
+    expect(data.isRestDay(rota, '2026-09-13')).toBe(true);    // Sunday
+    expect(data.isRestDay(rota, '2026-09-12')).toBe(false);   // Saturday, worked
+    expect(data.isRestDay(rota, '2026-09-07')).toBe(false);   // Monday, worked
+  });
+
+  it('reads a week with no times as Monday to Friday', () => {
+    const unscheduled = { days: {}, shifts: {} };
+    expect(data.isRestDay(unscheduled, '2026-09-11')).toBe(false);
+    expect(data.isRestDay(unscheduled, '2026-09-12')).toBe(true);
+    expect(data.isRestDay(unscheduled, '2026-09-13')).toBe(true);
+  });
+
+  it('never calls a day of leave a rest day', () => {
+    const w = { days: {}, shifts: { ...rota.shifts, '2026-09-11': { leave: true } } };
+    expect(data.isRestDay(w, '2026-09-11')).toBe(false);
+  });
+
+  it('gives a rest day no daily target', () => {
+    expect(data.getDailyTarget(state, rota, '2026-09-11')).toBe(0);
+    expect(data.adjustedDailyTargetHours(state, rota, '2026-09-11')).toBe(0);
+  });
+
+  it('leaves Rostered hours whole, unlike leave', () => {
+    expect(data.rosteredHours(state, rota)).toBe(40);
+  });
+});
+
 describe('adjustedDailyTargetHours', () => {
   const DAY = '2026-09-09';
   const state = { baseHours: 40, weeklyTargetPct: 0.8, weeks: {} };

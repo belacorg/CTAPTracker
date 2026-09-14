@@ -132,6 +132,27 @@ function dayIsLeave(week, dayKey) {
   return !!(s && s.leave);
 }
 
+// A **Rest day** is a normal non-working day in the engineer's rota: off Friday
+// in a Monday-to-Thursday-and-Saturday week, or an ordinary weekend. Unlike
+// Leave it doesn't reduce Rostered hours; it has no daily target and isn't a day
+// left to work. Once any day in the week has shift times, a day without them is
+// a rest day. A week with no times at all reads as Monday to Friday, which is how
+// the app worked before rotas. See ADR-0017.
+function isRestDay(week, dayKey) {
+  if (dayIsLeave(week, dayKey)) return false;
+  const shifts = week.shifts || {};
+  const hasTimes = s => !!(s && (s.start || s.end));
+  if (hasTimes(shifts[dayKey])) return false;
+  if (Object.values(shifts).some(hasTimes)) return true;
+  const dow = new Date(dayKey + 'T00:00:00').getDay();
+  return dow === 0 || dow === 6;
+}
+
+// A day the engineer is rostered to work: neither leave nor a rest day.
+function isWorkingDay(week, dayKey) {
+  return !dayIsLeave(week, dayKey) && !isRestDay(week, dayKey);
+}
+
 function weekLeaveHours(state, week) {
   var total = 0;
   var shifts = week.shifts || {};
@@ -147,6 +168,7 @@ function weekLeaveHours(state, week) {
 
 function getDailyTarget(state, week, dayKey) {
   if (dayIsLeave(week, dayKey)) return 0;
+  if (isRestDay(week, dayKey)) return 0;
   const mentor = (week.mentorDays || {})[dayKey];
   if (mentor === 'full') return 0;
   const h = shiftHours((week.shifts || {})[dayKey]);
@@ -687,13 +709,14 @@ function getCoachInsights(state, weekKey, ctx) {
         text: `${weekLeadCount} boiler lead${weekLeadCount === 1 ? '' : 's'} banked this week` });
     }
 
-    // End-of-week pace projection
-    const wkDaysMF = weekDays(todayWk).slice(0, 5);
-    const workedN = wkDaysMF.filter(function(dk) {
+    // End-of-week pace projection, over the whole week less leave and rest days:
+    // a Saturday worked counts, a Friday off doesn't.
+    const wkDays = weekDays(todayWk);
+    const workedN = wkDays.filter(function(dk) {
       return dk <= todayKey && !dayIsLeave(week, dk) && ((week.days || {})[dk] || []).length > 0;
     }).length;
-    const remainN = wkDaysMF.filter(function(dk) {
-      return dk > todayKey && !dayIsLeave(week, dk);
+    const remainN = wkDays.filter(function(dk) {
+      return dk > todayKey && isWorkingDay(week, dk);
     }).length;
     if (workedN >= 2 && remainN > 0 && weekTarget > 0) {
       const proj = paceProjection(weekEarned, workedN, remainN, weekTarget);
@@ -708,7 +731,7 @@ function getCoachInsights(state, weekKey, ctx) {
 
     // Consecutive days hitting daily target this week
     let streak = 0;
-    for (const dk of wkDaysMF) {
+    for (const dk of wkDays) {
       if (dk > todayKey) break;
       if (dayIsLeave(week, dk)) continue;
       const dt = adjustedDailyTargetHours(state, week, dk);
@@ -803,12 +826,13 @@ function getCoachInsights(state, weekKey, ctx) {
     if (isCurrentWeek) {
       const last8 = pastWks.slice(-8);
       const avg8  = last8.reduce(function(s, wk) { return s + weekCreditHours(state.weeks[wk]); }, 0) / last8.length;
-      const wkDaysMF = weekDays(todayWk).slice(0, 5);
-      const workedN = wkDaysMF.filter(function(dk) {
+      const wkDays = weekDays(todayWk);
+      const workedN = wkDays.filter(function(dk) {
         return dk <= todayKey && !dayIsLeave(week, dk) && ((week.days || {})[dk] || []).length > 0;
       }).length;
-      if (workedN >= 1) {
-        const projFull = (weekEarned / workedN) * 5;
+      const workingN = wkDays.filter(function(dk) { return isWorkingDay(week, dk); }).length;
+      if (workedN >= 1 && workingN > 0) {
+        const projFull = (weekEarned / workedN) * workingN;
         const diff = projFull - avg8;
         if (Math.abs(diff) >= 0.3) {
           insights.push({ kind: 'tracking_vs_average', priority: 4, severity: diff >= 0 ? 'green' : 'amber',
@@ -1876,6 +1900,8 @@ if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     weekLabel: weekLabel,
     shiftHours: shiftHours,
     dayIsLeave: dayIsLeave,
+    isRestDay: isRestDay,
+    isWorkingDay: isWorkingDay,
     weekLeaveHours: weekLeaveHours,
     getDailyTarget: getDailyTarget,
     adjustedDailyTargetHours: adjustedDailyTargetHours,
