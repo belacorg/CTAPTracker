@@ -1788,6 +1788,178 @@ details[open] .info-chevron { transform: rotate(90deg); }
 }
 .forecast-body { padding: 16px 20px; }
 
+/* ── Schedule: a day's times open the shift sheet ── */
+.sched-time-btn {
+  font: inherit;
+  color: var(--fg);
+  border: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.sched-time-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sched-time-val {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-size: 0.88rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Shift sheet: two wheels a time, confirm, copy to other days ── */
+.shift-times {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.shift-time-label,
+.shift-apply-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.shift-time-label { text-align: center; margin-bottom: 6px; }
+.shift-wheels {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 6px;
+  border-radius: 12px;
+  background: var(--surface2);
+}
+/* The band the chosen value comes to rest in. */
+.shift-wheels::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 50%;
+  height: 36px;
+  transform: translateY(-50%);
+  border-radius: 8px;
+  background: var(--surface3);
+  pointer-events: none;
+}
+.shift-wheel {
+  position: relative;
+  z-index: 1;
+  width: 52px;
+  height: 180px;
+  /* (180 − 36) / 2 above and below, so the first and last values reach the band */
+  padding: 72px 0;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 32%, #000 68%, transparent);
+          mask-image: linear-gradient(to bottom, transparent, #000 32%, #000 68%, transparent);
+}
+.shift-wheel::-webkit-scrollbar { display: none; }
+.shift-wheel-opt {
+  display: block;
+  width: 100%;
+  height: 36px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  scroll-snap-align: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.shift-wheel-opt.is-selected { color: var(--fg); font-weight: 700; }
+.shift-wheel-colon { position: relative; z-index: 1; font-weight: 700; color: var(--muted); }
+
+.shift-preview {
+  margin-bottom: 16px;
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.shift-preview span { display: block; margin-top: 2px; font-size: 0.74rem; font-weight: 400; color: var(--muted); }
+.shift-preview.is-invalid span { color: var(--red, #ff453a); }
+
+.shift-apply { margin-bottom: 16px; }
+.shift-apply-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.shift-apply-shortcuts { display: flex; gap: 14px; }
+.shift-apply-shortcut {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.shift-apply-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.shift-apply-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-height: 42px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid var(--sep);
+  background: var(--surface2);
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.shift-apply-chip.is-on { background: var(--accent); border-color: var(--accent); color: #fff; }
+/* The day being set: already included, so shown but not choosable. */
+.shift-apply-chip.is-self { border-style: dashed; border-color: var(--accent); background: transparent; color: var(--accent); }
+.shift-apply-chip:disabled { opacity: 0.45; cursor: default; }
+.shift-apply-chip small { font-size: 0.5rem; font-weight: 500; color: var(--amber); }
+
+.shift-confirm-btn {
+  display: block;
+  width: 100%;
+  padding: 13px;
+  border: none;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.shift-confirm-btn:disabled { opacity: 0.4; cursor: default; }
+.shift-clear-btn {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
 /* ── CTAP Cash-Out sheet ── */
 .cashout-balance-row {
   display: flex;

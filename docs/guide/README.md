@@ -81,7 +81,12 @@ and any annual leave.
 
 ### Key actions
 
-- **Tap a time** to edit. Saves automatically.
+- **Tap a day's times** to open the time picker. Scroll or tap the start and
+  finish, then **Confirm**. Nothing changes until you confirm, and
+  **Clear this day's times** empties a day you're not working.
+- **Also apply to**, in the same picker, puts those times on other days. Pick
+  them one at a time (Monday to Thursday and Saturday, say), or use
+  **Rest of week** or **Whole week**. Days on leave are never changed.
 - **"Standard week"** button applies Mon–Fri 08:00–16:30 with your default
   lunch. One tap if your week is normal.
 - **"Leave"** chip per day toggles annual leave. That day drops out of your

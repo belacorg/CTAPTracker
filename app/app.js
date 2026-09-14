@@ -26,6 +26,9 @@ let openSettingsInfo = null;
 let startBalSignNeg = null;
 let legalInfoExpanded = false;
 let scheduleNoteOpenDay = null;
+// The day whose times are being set in the shift sheet, with the times and the
+// other days to apply them to, as picked so far. Nothing is saved until Confirm.
+let shiftSheet = null;   // { dk, start: 'HH:MM', end: 'HH:MM', applyTo: [dayKey] } | null
 let eraseDataStep = 'idle';
 let howToExpanded = false;
 let graphWeekKey = getWeekKey(new Date());
@@ -231,6 +234,7 @@ function buildApp() {
     ${buildCashOutSheet()}
     ${buildVoiceSheet()}
     ${buildCheckinSheet()}
+    ${buildShiftSheet()}
     <div class="toast" id="toast"></div>
   `;
 }
@@ -569,7 +573,7 @@ function buildSchedule() {
     const note = (s.note || '').trim();
     const hasNote = note.length > 0;
     const isNoteOpen = scheduleNoteOpenDay === dk;
-    const rowHtml = `<div class="shift-row${isToday ? ' shift-today' : ''}${isLeave ? ' shift-leave' : ''}"><div class="sched-day-col${isToday ? ' is-today' : ''}"><span class="sched-day-abbr">${DAY_ABBR[i]}</span><span class="sched-day-num">${dayNum}</span></div>${isLeave ? `<div class="sched-leave-label">Annual leave</div>` : `<div class="sched-time-wrap"><input type="time" class="shift-input" data-day="${dk}" data-field="start" value="${s.start || ''}"><span class="shift-sep">–</span><input type="time" class="shift-input" data-day="${dk}" data-field="end" value="${s.end || ''}"></div>`}<span class="sched-hrs${isToday ? ' is-today' : ''}">${isLeave ? 'AL' : hrs !== null ? hrs.toFixed(1) + 'h' : '—'}</span><button class="al-btn${isLeave ? ' active' : ''}" data-day="${dk}" data-action="toggle-leave">${isLeave ? '✓ Leave' : 'Leave'}</button><button class="sched-note-btn${hasNote ? ' has-note' : ''}${isNoteOpen ? ' is-open' : ''}" data-day="${dk}" data-action="toggle-note" title="Day note" aria-label="Day note">${hasNote ? '●' : '+'}</button></div>`;
+    const rowHtml = `<div class="shift-row${isToday ? ' shift-today' : ''}${isLeave ? ' shift-leave' : ''}"><div class="sched-day-col${isToday ? ' is-today' : ''}"><span class="sched-day-abbr">${DAY_ABBR[i]}</span><span class="sched-day-num">${dayNum}</span></div>${isLeave ? `<div class="sched-leave-label">Annual leave</div>` : `<button type="button" class="sched-time-wrap sched-time-btn" data-action="edit-shift" data-day="${dk}" aria-label="Set ${d.toLocaleDateString('en-GB', { weekday: 'long' })}'s shift times"><span class="sched-time-val">${s.start || '--:--'}</span><span class="shift-sep">–</span><span class="sched-time-val">${s.end || '--:--'}</span></button>`}<span class="sched-hrs${isToday ? ' is-today' : ''}">${isLeave ? 'AL' : hrs !== null ? hrs.toFixed(1) + 'h' : '—'}</span><button class="al-btn${isLeave ? ' active' : ''}" data-day="${dk}" data-action="toggle-leave">${isLeave ? '✓ Leave' : 'Leave'}</button><button class="sched-note-btn${hasNote ? ' has-note' : ''}${isNoteOpen ? ' is-open' : ''}" data-day="${dk}" data-action="toggle-note" title="Day note" aria-label="Day note">${hasNote ? '●' : '+'}</button></div>`;
     const notePanel = isNoteOpen
       ? `<div class="sched-note-panel"><textarea class="sched-note-input" data-day="${dk}" rows="2" placeholder="What happened today? Stuck in traffic, customer reschedule, training…">${note.replace(/</g, '&lt;')}</textarea><p class="sched-note-hint">Saves automatically</p></div>`
       : '';
@@ -595,7 +599,7 @@ function buildSchedule() {
     </div>
     <div class="autosave-bar">
       <span id="autosave-check" class="autosave-check">✓</span>
-      <span class="autosave-text">Saved automatically · Lunch deducted from daily target</span>
+      <span class="autosave-text">Tap a day's times to change them · Lunch deducted from daily target</span>
     </div>
     ${isFuture ? `<div style="background:rgba(255,165,36,0.08);border:1px solid rgba(255,165,36,0.2);border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:0.76rem;color:var(--accent);line-height:1.5"><strong>Future week</strong> — Set your schedule in advance.</div>` : ''}
     <div class="dashboard-card" style="padding:2px 12px">
@@ -1105,7 +1109,7 @@ function buildSettings() {
       </button>
       ${howToExpanded ? `<div class="st-how-to-body">
         <ol class="info-steps">
-          <li><div><span class="info-step-title">Set up your schedule</span>Go to the <b>Schedule</b> tab and enter shift start/end times. Tap <b>Standard week</b> for Mon–Fri 08:00–16:30 with default lunch. Tap <b>Leave</b> on any day to mark annual leave. Saves automatically.</div></li>
+          <li><div><span class="info-step-title">Set up your schedule</span>Go to the <b>Schedule</b> tab and tap a day's times to set them, then <b>Confirm</b>. <b>Also apply to</b> puts the same times on other days. Tap <b>Standard week</b> for Mon–Fri 08:00–16:30 with default lunch. Tap <b>Leave</b> on any day to mark annual leave. Saves automatically.</div></li>
           <li><div><span class="info-step-title">Log your jobs</span>Tap <b>Log Job</b> and pick a category — Core, Hive, Sales, or Absence. Tap a tile to log instantly; dashed tiles ask for extra input. You can also tap <b>+ Add a job</b> at the bottom of <b>Today's Jobs</b> on the Dashboard.</div></li>
           <li><div><span class="info-step-title">Track on the Dashboard</span>See today's credit hours, the week's progress and a day-by-day chart. Tap the <b>CTAP</b> tile to open the cash-out sheet (what your balance is worth after tax). Tap the <b>Week</b> tile for the full weekly forecast with per-day detail.</div></li>
           <li><div><span class="info-step-title">Understand your CTAP balance</span>CTAP is your running credit or deficit. It starts from your starting balance, then each completed week's surplus or shortfall is added. Green = in credit. You can only cash out when in credit.</div></li>
@@ -1188,10 +1192,221 @@ function buildModal() {
 }
 
 // ── Week Forecast Sheet ────────────────────────────────────────────────────
+// ── Shift sheet ────────────────────────────────────────────────────────────
+// A day's times are set here, with a Confirm, rather than in two native time
+// inputs. Those saved and redrew the Schedule on every change, and the redraw
+// threw away the input the iPhone's wheel belonged to, so the wheel closed as
+// soon as an hour was picked and the minutes were never reachable.
+//
+// Nothing changes until Confirm. The same times can go onto other days chosen
+// one by one, because a working week is often not Monday to Friday: Monday to
+// Thursday, off Friday, back in on Saturday. Days on leave are never touched.
+const SHIFT_MINUTE_STEP = 5;
+const SHIFT_DEFAULT_TIMES = { start: '08:00', end: '16:30' };
+const SHIFT_DAY_ABBR = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+function shiftClockMinutes(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+// A day keeps its own lunch; a day without one takes the default, as Standard
+// week does, so a shift set here and one set by Standard week count the same.
+function shiftSheetLunch(shift) {
+  if (shift && shift.lunch !== undefined && shift.lunch !== '') return String(shift.lunch);
+  return String(state.defaultLunch !== undefined ? state.defaultLunch : 30);
+}
+
+function openShiftSheet(dk) {
+  const days = weekDays(currentWeekKey);
+  const shifts = getOrCreateWeek(state, currentWeekKey).shifts || {};
+  const own = shifts[dk] || {};
+  // An empty day starts from the nearest earlier day with a shift, so a week of
+  // the same times is one Confirm a day even without choosing days to copy to.
+  let from = own.start && own.end ? own : null;
+  for (let i = days.indexOf(dk) - 1; !from && i >= 0; i--) {
+    const s = shifts[days[i]];
+    if (s && s.start && s.end && !s.leave) from = s;
+  }
+  shiftSheet = {
+    dk,
+    start: (from && from.start) || SHIFT_DEFAULT_TIMES.start,
+    end: (from && from.end) || SHIFT_DEFAULT_TIMES.end,
+    applyTo: [],
+  };
+  render();
+  centreShiftWheels(false);
+}
+
+function buildShiftWheel(name, values, selected, label) {
+  return `<div class="shift-wheel" data-wheel="${name}" role="listbox" aria-label="${label}">${values.map(v =>
+    `<button type="button" class="shift-wheel-opt${v === selected ? ' is-selected' : ''}" role="option" aria-selected="${v === selected}" data-value="${v}">${v}</button>`
+  ).join('')}</div>`;
+}
+
+function buildShiftSheet() {
+  if (!shiftSheet) return '';
+  const [sh, sm] = shiftSheet.start.split(':');
+  const [eh, em] = shiftSheet.end.split(':');
+  const dateLabel = new Date(shiftSheet.dk + 'T00:00:00')
+    .toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+  // Five-minute steps, plus the minute a day already has if it is off-step, so
+  // opening and confirming an 08:07 start never quietly moves it.
+  const minutesWith = (m) => {
+    const steps = Array.from({ length: 60 / SHIFT_MINUTE_STEP }, (_, i) => String(i * SHIFT_MINUTE_STEP).padStart(2, '0'));
+    return [...new Set([...steps, m])].sort();
+  };
+  return `
+    <div class="forecast-sheet shift-sheet" id="shift-sheet">
+      <div class="forecast-backdrop" id="shift-backdrop"></div>
+      <div class="forecast-panel" role="dialog" aria-modal="true" aria-labelledby="shift-sheet-title">
+        <div class="forecast-handle"></div>
+        <div class="forecast-header">
+          <span class="forecast-title" id="shift-sheet-title">${dateLabel}</span>
+          <button class="forecast-close" id="shift-close" aria-label="Close without saving">✕</button>
+        </div>
+        <div class="forecast-body">
+          <div class="shift-times">
+            <div class="shift-time-col">
+              <div class="shift-time-label">Start</div>
+              <div class="shift-wheels">${buildShiftWheel('start-h', hours, sh, 'Start hour')}<span class="shift-wheel-colon">:</span>${buildShiftWheel('start-m', minutesWith(sm), sm, 'Start minutes')}</div>
+            </div>
+            <div class="shift-time-col">
+              <div class="shift-time-label">Finish</div>
+              <div class="shift-wheels">${buildShiftWheel('end-h', hours, eh, 'Finish hour')}<span class="shift-wheel-colon">:</span>${buildShiftWheel('end-m', minutesWith(em), em, 'Finish minutes')}</div>
+            </div>
+          </div>
+          <div id="shift-sheet-foot">${buildShiftSheetFoot()}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// Everything under the wheels, redrawn whenever a value or a chosen day changes.
+function buildShiftSheetFoot() {
+  const { dk, start, end, applyTo } = shiftSheet;
+  const week = state.weeks[currentWeekKey] || {};
+  const lunch = shiftSheetLunch((week.shifts || {})[dk]);
+  const valid = shiftClockMinutes(end) > shiftClockMinutes(start);
+  const hrs = shiftHours({ start, end, lunch });
+  const count = 1 + applyTo.length;
+  const chips = weekDays(currentWeekKey).map((d, i) => {
+    if (d === dk) return `<span class="shift-apply-chip is-self">${SHIFT_DAY_ABBR[i]}</span>`;
+    const onLeave = dayIsLeave(week, d);
+    const on = applyTo.includes(d);
+    return `<button type="button" class="shift-apply-chip${on ? ' is-on' : ''}" data-apply-day="${d}" aria-pressed="${on}"${onLeave ? ' disabled' : ''}>${SHIFT_DAY_ABBR[i]}${onLeave ? '<small>Leave</small>' : ''}</button>`;
+  }).join('');
+  const preview = valid
+    ? `${start} – ${end} · ${hrs !== null ? hrs.toFixed(1) : '0.0'}h${Number(lunch) > 0 ? ` <span>after ${lunch} min lunch</span>` : ''}`
+    : `${start} – ${end} <span>Finish must be after the start</span>`;
+  return `
+    <div class="shift-preview${valid ? '' : ' is-invalid'}" id="shift-preview">${preview}</div>
+    <div class="shift-apply">
+      <div class="shift-apply-head">
+        <span class="shift-apply-label">Also apply to</span>
+        <span class="shift-apply-shortcuts">
+          <button type="button" class="shift-apply-shortcut" id="apply-rest-week">Rest of week</button>
+          <button type="button" class="shift-apply-shortcut" id="apply-whole-week">Whole week</button>
+        </span>
+      </div>
+      <div class="shift-apply-days">${chips}</div>
+    </div>
+    <button type="button" class="shift-confirm-btn" id="shift-confirm"${valid ? '' : ' disabled'}>${count === 1 ? 'Confirm' : `Confirm for ${count} days`}</button>
+    <button type="button" class="shift-clear-btn" id="shift-clear">Clear this day's times</button>`;
+}
+
+// "Rest of week" is the weekdays after the day being set; "Whole week" is every
+// other day, the weekend included. Neither ever includes a day on leave.
+function shiftSheetDaysFor(scope) {
+  const days = weekDays(currentWeekKey);
+  const week = state.weeks[currentWeekKey] || {};
+  const from = days.indexOf(shiftSheet.dk);
+  return days.filter((d, i) => d !== shiftSheet.dk && !dayIsLeave(week, d)
+    && (scope === 'whole' || (i > from && i < 5)));
+}
+
+function setShiftSheetValue(wheel, value) {
+  const [which, part] = wheel.split('-');   // 'start' | 'end', 'h' | 'm'
+  const [h, m] = shiftSheet[which].split(':');
+  shiftSheet[which] = part === 'h' ? `${value}:${m}` : `${h}:${value}`;
+}
+
+function refreshShiftSheet() {
+  const sheet = document.getElementById('shift-sheet');
+  if (!sheet || !shiftSheet) return;
+  const selected = {
+    'start-h': shiftSheet.start.split(':')[0], 'start-m': shiftSheet.start.split(':')[1],
+    'end-h': shiftSheet.end.split(':')[0], 'end-m': shiftSheet.end.split(':')[1],
+  };
+  sheet.querySelectorAll('[data-wheel]').forEach(w => {
+    w.querySelectorAll('[data-value]').forEach(o => {
+      const on = o.dataset.value === selected[w.dataset.wheel];
+      o.classList.toggle('is-selected', on);
+      o.setAttribute('aria-selected', String(on));
+    });
+  });
+  const foot = document.getElementById('shift-sheet-foot');
+  if (foot) foot.innerHTML = buildShiftSheetFoot();
+}
+
+function centreShiftWheels(smooth) {
+  document.querySelectorAll('#shift-sheet .shift-wheel').forEach(w => {
+    const sel = w.querySelector('.is-selected');
+    if (!sel) return;
+    const top = sel.offsetTop - (w.clientHeight - sel.offsetHeight) / 2;
+    if (typeof w.scrollTo === 'function') w.scrollTo({ top, behavior: smooth ? 'smooth' : 'auto' });
+    else w.scrollTop = top;
+  });
+}
+
+function shiftWheelValueAtCentre(w) {
+  if (!w.clientHeight) return null;
+  const centre = w.scrollTop + w.clientHeight / 2;
+  let best = null;
+  let bestDistance = Infinity;
+  w.querySelectorAll('[data-value]').forEach(o => {
+    const distance = Math.abs(o.offsetTop + o.offsetHeight / 2 - centre);
+    if (distance < bestDistance) { bestDistance = distance; best = o; }
+  });
+  return best ? best.dataset.value : null;
+}
+
+function confirmShiftSheet() {
+  if (!shiftSheet) return;
+  const { dk, start, end, applyTo } = shiftSheet;
+  if (shiftClockMinutes(end) <= shiftClockMinutes(start)) return;
+  const week = getOrCreateWeek(state, currentWeekKey);
+  if (!week.shifts) week.shifts = {};
+  [dk, ...applyTo].forEach(d => {
+    if (dayIsLeave(week, d)) return;
+    const s = week.shifts[d] || (week.shifts[d] = {});
+    s.start = start;
+    s.end = end;
+    s.lunch = shiftSheetLunch(s);
+  });
+  shiftSheet = null;
+  saveState(state);
+  render();
+  showToast(applyTo.length ? `Shift set for ${applyTo.length + 1} days` : 'Shift saved');
+}
+
+function clearShiftSheetDay() {
+  if (!shiftSheet) return;
+  const s = (getOrCreateWeek(state, currentWeekKey).shifts || {})[shiftSheet.dk];
+  if (s) { delete s.start; delete s.end; delete s.lunch; }
+  shiftSheet = null;
+  saveState(state);
+  render();
+  showToast('Times cleared');
+}
+
 // ── Day strip + detail panel (shared by forecast & summary sheets) ──────────
+// All seven days: a week is seven days, each with an optional shift, and a
+// Saturday worked has to be findable here like any other day.
 function buildDayStrip(weekKey, week, activeDk) {
-  const days = weekDays(weekKey).slice(0, 5);
-  const DAY_ABB = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+  const days = weekDays(weekKey);
+  const DAY_ABB = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   return `<div class="day-strip" data-week-key="${weekKey}">${days.map((dk, i) => {
     const h = ((week.days || {})[dk] || []).reduce((s, j) => s + j.creditMins, 0) / 60;
     const isLeave = dayIsLeave(week, dk);
@@ -1453,8 +1668,7 @@ function buildWeekForecastSheet() {
   const pct       = targetHours > 0 ? Math.min((earnedHours / targetHours) * 100, 100) : 0;
   const barColour = pct >= 90 ? 'green' : pct >= 70 ? 'amber' : 'red';
   const isFinalTone = isPastWeek || (!isFutureWeek && daysRemaining === 0);
-  const wkDays5   = wDays.slice(0, 5);
-  const initDay   = (activeDayKey && wkDays5.includes(activeDayKey)) ? activeDayKey : wkDays5[0];
+  const initDay   = (activeDayKey && wDays.includes(activeDayKey)) ? activeDayKey : wDays[0];
 
   // Plain English summary
   let summary;
@@ -1642,10 +1856,19 @@ function closeCashOutSheet() {
 
 function openForecastSheet() {
   forecastSheetOpen = true;
+  dayEditMode = false;
   const todayKey = getTodayKey();
-  const wkDays5 = weekDays(currentWeekKey).slice(0, 5);
-  activeDayKey = wkDays5.includes(todayKey) ? todayKey : wkDays5[0];
-  document.getElementById('forecast-sheet').classList.remove('hidden');
+  const days = weekDays(currentWeekKey);
+  activeDayKey = days.includes(todayKey) ? todayKey : days[0];
+  // The sheet was drawn with the Dashboard, before a day was chosen, so it
+  // would open on Monday. Bring its strip and day panel round to today.
+  const sheet = document.getElementById('forecast-sheet');
+  sheet.querySelectorAll('[data-strip-day]').forEach(b => {
+    b.classList.toggle('dsp-active', b.dataset.stripDay === activeDayKey);
+  });
+  const wrap = sheet.querySelector('.day-detail-wrap');
+  if (wrap) wrap.innerHTML = buildDayDetailPanel(currentWeekKey, state.weeks[currentWeekKey] || {}, activeDayKey, false);
+  sheet.classList.remove('hidden');
 }
 
 function closeForecastSheet() {
@@ -2761,8 +2984,8 @@ function buildWeekSummarySheet() {
   if (!week) return emptySheet;
 
   const wk = weekSummaryKey;
-  const wkDays5 = weekDays(wk).slice(0, 5);
-  const initDay = (activeDayKey && wkDays5.includes(activeDayKey)) ? activeDayKey : wkDays5[0];
+  const wkDaysAll = weekDays(wk);
+  const initDay = (activeDayKey && wkDaysAll.includes(activeDayKey)) ? activeDayKey : wkDaysAll[0];
 
   // All values + structured "standout" come from data.cjs's weekSummary().
   const summary       = weekSummary(state, wk);
@@ -3229,19 +3452,55 @@ function attachListeners() {
     const el = document.getElementById('autosave-check');
     if (el) { el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1200); }
   }
-  document.querySelectorAll('.shift-input').forEach(input => {
-    input.addEventListener('change', () => {
-      const dk = input.dataset.day;
-      const field = input.dataset.field;
-      const week = getOrCreateWeek(state, currentWeekKey);
-      if (!week.shifts) week.shifts = {};
-      if (!week.shifts[dk]) week.shifts[dk] = {};
-      week.shifts[dk][field] = input.value;
-      saveState(state);
-      flashAutosave();
-      render();
-    });
+  // Shift times are set in the shift sheet, not in native time inputs: saving and
+  // redrawing on each input change closed the iPhone's wheel after the first scroll.
+  document.querySelectorAll('[data-action="edit-shift"]').forEach(btn => {
+    btn.addEventListener('click', () => openShiftSheet(btn.dataset.day));
   });
+  const shiftSheetEl = document.getElementById('shift-sheet');
+  if (shiftSheetEl) {
+    const closeWithoutSaving = () => { shiftSheet = null; render(); };
+    document.getElementById('shift-close').addEventListener('click', closeWithoutSaving);
+    document.getElementById('shift-backdrop').addEventListener('click', closeWithoutSaving);
+
+    // A finger scroll picks whatever value comes to rest in the band. Patched in
+    // place rather than redrawn, which would snap the wheel back mid-scroll.
+    shiftSheetEl.querySelectorAll('.shift-wheel').forEach(w => {
+      let settle = null;
+      w.addEventListener('scroll', () => {
+        clearTimeout(settle);
+        settle = setTimeout(() => {
+          const v = shiftWheelValueAtCentre(w);
+          if (!v || !shiftSheet) return;
+          setShiftSheetValue(w.dataset.wheel, v);
+          refreshShiftSheet();
+        }, 120);
+      }, { passive: true });
+    });
+
+    shiftSheetEl.addEventListener('click', e => {
+      const opt = e.target.closest('[data-wheel] [data-value]');
+      if (opt) {
+        setShiftSheetValue(opt.closest('[data-wheel]').dataset.wheel, opt.dataset.value);
+        refreshShiftSheet();
+        centreShiftWheels(true);
+        return;
+      }
+      const chip = e.target.closest('[data-apply-day]');
+      if (chip) {
+        const d = chip.dataset.applyDay;
+        const chosen = new Set(shiftSheet.applyTo);
+        if (chosen.has(d)) chosen.delete(d); else chosen.add(d);
+        shiftSheet.applyTo = weekDays(currentWeekKey).filter(x => chosen.has(x));
+        refreshShiftSheet();
+        return;
+      }
+      if (e.target.closest('#apply-rest-week')) { shiftSheet.applyTo = shiftSheetDaysFor('rest'); refreshShiftSheet(); return; }
+      if (e.target.closest('#apply-whole-week')) { shiftSheet.applyTo = shiftSheetDaysFor('whole'); refreshShiftSheet(); return; }
+      if (e.target.closest('#shift-confirm')) { confirmShiftSheet(); return; }
+      if (e.target.closest('#shift-clear')) { clearShiftSheetDay(); }
+    });
+  }
 
 
   // Default lunch chip — cycle through options
