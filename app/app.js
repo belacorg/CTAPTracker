@@ -306,11 +306,7 @@ function buildDashboard() {
 
   // ── Today's stats ──
   const todayKey = getTodayKey();
-  const todayDedMins = (week.deductionLog || [])
-    .filter(d => d.date === todayKey)
-    .reduce((s, d) => s + d.mins, 0);
-  const pctFactor = typeof state.weeklyTargetPct === 'number' ? state.weeklyTargetPct : 0.8;
-  const dailyTargetHours = Math.max(0, getDailyTarget(state, week, todayKey) * pctFactor - todayDedMins / 60);
+  const dailyTargetHours = adjustedDailyTargetHours(state, week, todayKey);
   const todayJobs = (week.days || {})[todayKey] || [];
   const todayHours = todayJobs.reduce((s, j) => s + j.creditMins, 0) / 60;
 
@@ -1487,10 +1483,9 @@ function buildWeekForecastSheet() {
   // Insights for current week only
   let insightsHTML = '';
   if (currentWeekKey === todayWk) {
-    const todayDedMins = (week.deductionLog || []).filter(d => d.date === todayKey).reduce((s, d) => s + d.mins, 0);
     const todayJobs = (week.days || {})[todayKey] || [];
     const todayHrs  = todayJobs.reduce((s, j) => s + j.creditMins, 0) / 60;
-    const dailyTgt  = Math.max(0, getDailyTarget(state, week, todayKey) - todayDedMins / 60);
+    const dailyTgt  = adjustedDailyTargetHours(state, week, todayKey);
     const pfMins    = estimatedDailyPFMins(dailyRawOutputHours(state, week, todayKey));
     insightsHTML = buildInsightsCard(dailyTgt, todayHrs, targetHours, earnedHours, pfMins);
   }

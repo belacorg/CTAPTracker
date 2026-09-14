@@ -155,6 +155,32 @@ describe('what Coach actually renders', () => {
   });
 });
 
+// "Still needed today" is one number. The Weekly Forecast used to build its own
+// Insights from the bare shift, so on the same morning the Dashboard said 2.05h
+// and the Forecast sheet said 3.65h.
+describe("today's target is the same figure on every screen", () => {
+  it("has the Forecast sheet's Insights agree with the Dashboard on what is still needed today", () => {
+    const h = bootApp({ now: '2026-09-09T10:00:00' });   // a Wednesday
+    h.window.localStorage.setItem('jcpd_coach_mode', 'true');
+    h.state().weeks['2026-09-07'] = {
+      days: { '2026-09-09': [{ id: 'gas_repair', name: 'Gas Repair (any appliance)', creditMins: 56 }] },
+      shifts: { '2026-09-09': { start: '08:00', end: '16:30', lunch: '30' } },
+      deductionLog: [],
+    };
+    h.click(h.$$('.bottom-nav button').find(b => b.dataset.tab === 'dashboard'));
+
+    const sheet = h.$('#forecast-sheet');
+    const todayLine = (rows) => rows.map(r => r.textContent.trim())
+      .find(t => /today/.test(t) && /needed|to go/.test(t));
+    const onDashboard = todayLine(h.$$('.tip-row').filter(r => !sheet.contains(r)));
+    const inForecast = todayLine([...sheet.querySelectorAll('.tip-row')]);
+
+    // 6.40h target (an 8.0h shift at 80%) less the 0.93h Gas Repair = 5.47h.
+    expect(onDashboard).toContain('5.47h');
+    expect(inForecast).toBe(onDashboard);
+  });
+});
+
 // The Best advice strip: everything worth recommending after a service or a
 // repair, listed together rather than one at a time.
 describe('the Best advice strip', () => {

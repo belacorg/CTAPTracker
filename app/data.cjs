@@ -155,6 +155,20 @@ function getDailyTarget(state, week, dayKey) {
   return base;
 }
 
+// A day's credit target as the engineer is shown it: the day's rostered hours
+// scaled by the CTAP percentage, less any NPT logged against that day. Every
+// "still needed today" and "daily target hit" reads this one figure. The
+// Weekly Forecast and the daily-streak insight used to take the bare shift, so
+// on the same morning the Dashboard said 2.05h still needed and the Forecast
+// sheet said 3.65h.
+function adjustedDailyTargetHours(state, week, dayKey) {
+  const pct = typeof state.weeklyTargetPct === 'number' ? state.weeklyTargetPct : 0.8;
+  const nptMins = (week.deductionLog || [])
+    .filter(d => d.date === dayKey)
+    .reduce((s, d) => s + d.mins, 0);
+  return Math.max(0, getDailyTarget(state, week, dayKey) * pct - nptMins / 60);
+}
+
 function weekMentorTargetReduction(state, week) {
   var reduction = 0;
   var mentorDays = week.mentorDays || {};
@@ -640,7 +654,7 @@ function getCoachInsights(state, weekKey, ctx) {
       }, 0) / nPast;
       if (avgHive >= 1 && weekHiveCount === 0) {
         insights.push({ kind: 'hive_pattern', priority: 2, severity: 'amber',
-          text: `You average ${avgHive.toFixed(1)} Hive install${avgHive >= 2 ? 's' : ''} per week but haven't logged any yet this week — worth offering where there are no smart controls` });
+          text: `You average ${avgHive.toFixed(1)} Hive install${avgHive.toFixed(1) === '1.0' ? '' : 's'} per week but haven't logged any yet this week — worth offering where there are no smart controls` });
       } else if (weekHiveCount > 0) {
         insights.push({ kind: 'hive_pattern', priority: 3, severity: 'green',
           text: `${weekHiveCount} Hive install${weekHiveCount === 1 ? '' : 's'} logged this week` });
@@ -660,7 +674,7 @@ function getCoachInsights(state, weekKey, ctx) {
       }, 0) / nPast;
       if (avgLead >= 1 && weekLeadCount === 0) {
         insights.push({ kind: 'boiler_lead_pattern', priority: 2, severity: 'amber',
-          text: `You average ${avgLead.toFixed(1)} boiler lead${avgLead >= 2 ? 's' : ''} per week — none logged yet this week` });
+          text: `You average ${avgLead.toFixed(1)} boiler lead${avgLead.toFixed(1) === '1.0' ? '' : 's'} per week — none logged yet this week` });
       } else if (weekLeadCount > 0) {
         insights.push({ kind: 'boiler_lead_pattern', priority: 3, severity: 'green',
           text: `${weekLeadCount} boiler lead${weekLeadCount === 1 ? '' : 's'} banked this week — keep looking on visits` });
@@ -697,7 +711,7 @@ function getCoachInsights(state, weekKey, ctx) {
     for (const dk of wkDaysMF) {
       if (dk > todayKey) break;
       if (dayIsLeave(week, dk)) continue;
-      const dt = getDailyTarget(state, week, dk);
+      const dt = adjustedDailyTargetHours(state, week, dk);
       if (dt <= 0) continue;
       const dayJobs = (week.days || {})[dk] || [];
       if (dk === todayKey && dayJobs.length === 0) continue;
@@ -1864,6 +1878,7 @@ if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     dayIsLeave: dayIsLeave,
     weekLeaveHours: weekLeaveHours,
     getDailyTarget: getDailyTarget,
+    adjustedDailyTargetHours: adjustedDailyTargetHours,
     weekMentorTargetReduction: weekMentorTargetReduction,
     cumulativeBalance: cumulativeBalance,
     loadState: loadState,

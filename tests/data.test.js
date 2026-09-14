@@ -1,8 +1,97 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const data = require('../app/data.cjs');
+
+// One figure for "today's target", wherever the app states it. The Dashboard
+// read the day's shift × CTAP %, less that day's NPT, while the Weekly Forecast
+// and the daily-streak insight read the bare shift — so on the same morning one
+// screen said 2.05h still needed and the other 3.65h.
+describe('adjustedDailyTargetHours', () => {
+  const DAY = '2026-09-09';
+  const state = { baseHours: 40, weeklyTargetPct: 0.8, weeks: {} };
+  const week = (extra = {}) => ({
+    days: {},
+    shifts: { [DAY]: { start: '08:00', end: '16:30', lunch: '30' } },
+    deductionLog: [],
+    ...extra,
+  });
+
+  it("scales the day's rostered hours by the CTAP percentage", () => {
+    // 08:00–16:30 less a 30-minute lunch is 8.0h; 80% of that is 6.4h.
+    expect(data.adjustedDailyTargetHours(state, week(), DAY)).toBeCloseTo(6.4, 5);
+  });
+
+  it('takes off NPT logged against that day, and only that day', () => {
+    const w = week({ deductionLog: [{ date: DAY, mins: 30 }, { date: '2026-09-08', mins: 60 }] });
+    expect(data.adjustedDailyTargetHours(state, w, DAY)).toBeCloseTo(5.9, 5);
+  });
+});
+
+describe('Coach insights read the same daily target as the Dashboard', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('counts a day as hitting target at 80% of the shift, not the whole shift', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-09T15:00:00'));   // Wednesday afternoon
+    const shift = { start: '08:00', end: '16:30', lunch: '30' };
+    const sevenHours = [{ id: 'gas_repair', name: 'Gas Repair (any appliance)', creditMins: 420 }];
+    const state = {
+      baseHours: 40,
+      weeklyTargetPct: 0.8,
+      weeks: {
+        '2026-09-07': {
+          days: { '2026-09-07': sevenHours, '2026-09-08': sevenHours, '2026-09-09': sevenHours },
+          shifts: { '2026-09-07': shift, '2026-09-08': shift, '2026-09-09': shift },
+          deductionLog: [],
+        },
+      },
+    };
+    // 7.0h clears the 6.4h daily target but not the 8.0h shift behind it.
+    const texts = data.getCoachInsights(state, '2026-09-07', {}).map((i) => i.text);
+    expect(texts).toContain('3 days in a row hitting daily target this week');
+  });
+});
+
+describe('Coach insights say "installs" and "leads" the way a person would', () => {
+  afterEach(() => vi.useRealTimers());
+
+  // Three completed weeks holding the given counts of one job, none this week.
+  function historyOf(jobId, counts) {
+    const weeks = {};
+    ['2026-08-17', '2026-08-24', '2026-08-31'].forEach((wk, i) => {
+      weeks[wk] = {
+        days: { [wk]: Array.from({ length: counts[i] }, () => ({ id: jobId, name: jobId, creditMins: 60 })) },
+        shifts: {},
+        deductionLog: [],
+      };
+    });
+    return { baseHours: 40, weeklyTargetPct: 0.8, weeks };
+  }
+
+  function insightText(state) {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-09T10:00:00'));
+    return data.getCoachInsights(state, '2026-09-07', {}).map((i) => i.text).join('\n');
+  }
+
+  it('says "installs" for an average of 1.3, which used to read "1.3 Hive install"', () => {
+    expect(insightText(historyOf('hvi_min', [1, 1, 2]))).toContain('You average 1.3 Hive installs per week');
+  });
+
+  it('keeps "install" singular at exactly 1.0', () => {
+    expect(insightText(historyOf('hvi_min', [1, 1, 1]))).toContain('You average 1.0 Hive install per week');
+  });
+
+  it('says "leads" for an average of 1.3 boiler leads', () => {
+    expect(insightText(historyOf('hi_lead', [1, 1, 2]))).toContain('You average 1.3 boiler leads per week');
+  });
+
+  it('keeps "lead" singular at exactly 1.0', () => {
+    expect(insightText(historyOf('hi_lead', [1, 1, 1]))).toContain('You average 1.0 boiler lead per week');
+  });
+});
 
 describe('estimatedDailyPFMins', () => {
   it('caps at PF_DAY_CAP (40 minutes) regardless of input', () => {
