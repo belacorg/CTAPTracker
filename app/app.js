@@ -1061,7 +1061,7 @@ function buildSettings() {
       ${rowDiv()}
       <div class="st-row">
         <div style="flex:1;min-width:0">
-          <span class="st-row-label">Daily check-in</span>
+          <span class="st-row-label">Daily check-in <span class="beta-badge">BETA</span></span>
           <div class="st-row-sub">A private diary only you can read</div>
         </div>
         <label class="coach-slider-wrap">
