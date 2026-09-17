@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="../fonts.css">
 <style>
   :root {
+    color-scheme: light;
     --ground: #EEF1F6;
     --surface: #FFFFFF;
     --ink: #0F1522;
@@ -24,18 +25,6 @@
     --band-ink: #E9EDF4;
     --band-muted: #A3ADBF;
     --shadow: 0 18px 40px -22px rgba(15, 21, 34, 0.45);
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --ground: #0A0E15; --surface: #131925; --ink: #E9EDF4; --muted: #97A1B3; --rule: #252D3B;
-      --accent: #7AAAEB; --bezel: #2C3444; --well: #F2F2F7; --good: #5FD08D; --bad: #FF7B72;
-      --band: #1A2231; --shadow: 0 18px 40px -22px rgba(0, 0, 0, 0.8);
-    }
-  }
-  :root[data-theme="dark"] {
-    --ground: #0A0E15; --surface: #131925; --ink: #E9EDF4; --muted: #97A1B3; --rule: #252D3B;
-    --accent: #7AAAEB; --bezel: #2C3444; --well: #F2F2F7; --good: #5FD08D; --bad: #FF7B72;
-    --band: #1A2231; --shadow: 0 18px 40px -22px rgba(0, 0, 0, 0.8);
   }
 
   * { box-sizing: border-box; }
@@ -624,7 +613,7 @@
   function decide() {
     var root = document.documentElement;
     var on = root.classList.contains('scrolly-on');
-    var real = window.innerHeight > 0 && window.innerHeight < 1600;
+    var real = window.innerHeight > 0 && window.innerHeight < 1600 && window.innerWidth >= 800;
     if (!on && real && root.scrollHeight > window.innerHeight + 200) root.classList.add('scrolly-on');
     if (on && !real) root.classList.remove('scrolly-on');
   }
