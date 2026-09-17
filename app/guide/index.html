@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CTAP Tracker Quick Start</title>
+<meta name="description" content="CTAP Tracker in five steps: install it, enter your balance, set your week, log your jobs, see where you stand.">
+<link rel="stylesheet" href="../fonts.css">
+<style>
+  :root {
+    --ground: #EEF1F6;
+    --surface: #FFFFFF;
+    --ink: #0F1522;
+    --muted: #586274;
+    --rule: #D6DCE6;
+    --accent: #2F6BC4;
+    --pin: #4A86D8;
+    --pin-ink: #FFFFFF;
+    --bezel: #C9D1DD;
+    --band: #0F1522;
+    --band-ink: #E9EDF4;
+    --band-muted: #A3ADBF;
+    --shadow: 0 18px 40px -22px rgba(15, 21, 34, 0.45);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0A0E15; --surface: #131925; --ink: #E9EDF4; --muted: #97A1B3; --rule: #252D3B;
+      --accent: #7AAAEB; --bezel: #2C3444; --band: #1A2231; --shadow: 0 18px 40px -22px rgba(0, 0, 0, 0.8);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0A0E15; --surface: #131925; --ink: #E9EDF4; --muted: #97A1B3; --rule: #252D3B;
+    --accent: #7AAAEB; --bezel: #2C3444; --band: #1A2231; --shadow: 0 18px 40px -22px rgba(0, 0, 0, 0.8);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 17px;
+    line-height: 1.5;
+    padding-inline: 20px;
+    padding-block: 0 48px;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: 980px; margin: 0 auto; }
+
+  /* ---------- Masthead ---------- */
+  .masthead { padding-block: 36px 8px; display: grid; gap: 12px; max-width: 640px; }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand svg { width: 30px; height: 30px; flex: none; }
+  .brand-c { stroke: var(--pin); }
+  .brand-hands { stroke: var(--ink); }
+  .brand-name { font-weight: 700; font-size: 15px; line-height: 1.15; }
+  .brand-sub { color: var(--muted); font-size: 13px; }
+  h1 { font-size: clamp(32px, 5vw, 50px); line-height: 1.02; letter-spacing: -0.03em; margin: 6px 0 0; text-wrap: balance; }
+  .lede { margin: 0; font-size: 18px; color: var(--muted); }
+
+  /* ---------- Scrolly ---------- */
+  .scrolly { display: grid; grid-template-columns: 300px minmax(0, 1fr); column-gap: 64px; align-items: start; }
+  .stage { position: sticky; top: 0; height: 100vh; display: grid; align-content: center; justify-items: center; }
+  .frame { position: relative; width: 280px; max-width: 100%; aspect-ratio: 640 / 1385; max-height: calc(100vh - 48px); }
+  .layer { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; border-radius: 26px; border: 1px solid var(--bezel); box-shadow: var(--shadow); background: var(--surface); transition: opacity 300ms ease; }
+  .layer.hide { opacity: 0; }
+
+  /* Step 1 has no screen yet: it shows the icon it puts on the home screen. */
+  .home { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 10px; border-radius: 26px; border: 1px solid var(--bezel); background: linear-gradient(var(--surface), var(--surface)); box-shadow: var(--shadow); transition: opacity 300ms ease; }
+  .home img { width: 96px; height: 96px; border-radius: 22px; box-shadow: 0 6px 16px -8px rgba(15,21,34,.5); }
+  .home span { font-size: 14px; font-weight: 500; color: var(--ink); }
+  .home.hide { opacity: 0; }
+
+  .dot { position: absolute; left: var(--x); top: var(--y); width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; background: var(--pin); box-shadow: 0 0 0 3px #FFFFFF, 0 2px 8px rgba(0,0,0,.45); transition: opacity 200ms ease; }
+  .dot::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 3px solid var(--pin); animation: ring 1.8s ease-out infinite; }
+  @keyframes ring { from { transform: scale(1); opacity: .8; } to { transform: scale(2.2); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .layer, .home { transition: none; } .dot::after { animation: none; display: none; } }
+
+  .steps { display: grid; }
+  .step { min-height: 80vh; display: grid; align-content: center; gap: 14px; padding-block: 40px; max-width: 520px; }
+  .step-num { width: 44px; height: 44px; border-radius: 50%; background: var(--pin); color: var(--pin-ink); font-size: 20px; font-weight: 700; display: grid; place-items: center; }
+  .where { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+  h2 { margin: 0; font-size: clamp(28px, 3.6vw, 38px); line-height: 1.08; letter-spacing: -0.02em; text-wrap: balance; }
+  .step p { margin: 0; font-size: 18px; color: var(--muted); max-width: 44ch; }
+  .step p b { color: var(--ink); font-weight: 600; }
+  .say { color: var(--accent); font-weight: 500; }
+  .taps { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 0; padding: 0; list-style: none; }
+  .taps li { font-size: 15px; font-weight: 600; padding: 6px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--rule); }
+  .taps li + li::before { content: "→"; color: var(--muted); font-weight: 400; margin: 0 8px 0 -2px; }
+  .taps li + li { padding-left: 10px; }
+
+  /* ---------- Done ---------- */
+  .done { margin-top: 24px; padding: 28px; border-radius: 16px; background: var(--surface); border: 1px solid var(--rule); display: grid; gap: 18px; }
+  .done h2 { font-size: clamp(26px, 3vw, 32px); }
+  .done ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+  .done li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; font-size: 17px; }
+  .done li::before { content: ""; width: 8px; height: 8px; margin: 9px 0 0 6px; border-radius: 50%; background: var(--pin); }
+  .done li b { font-weight: 600; }
+  .band { margin-top: 20px; padding: 18px 22px; border-radius: 14px; background: var(--band); color: var(--band-muted); font-size: 14px; display: grid; gap: 6px; }
+  .band strong { color: var(--band-ink); font-weight: 600; }
+
+  /* ---------- Phone ---------- */
+  @media (max-width: 799px) {
+    body { font-size: 16px; }
+    .scrolly { grid-template-columns: 1fr; }
+    .stage { top: 0; height: 46vh; min-height: 280px; z-index: 3; background: var(--ground); padding-block: 12px; }
+    .frame { width: auto; height: 100%; max-height: 100%; }
+    .home img { width: 64px; height: 64px; border-radius: 15px; }
+    .step { min-height: 62vh; align-content: start; padding-block: 28px 12px; }
+    h2 { font-size: 28px; }
+    .step p { font-size: 17px; }
+  }
+
+  /* ---------- Print: one row per step ---------- */
+  .print-shot { display: none; }
+  @page { size: A4; margin: 10mm 14mm; }
+  @media print {
+    body { background: #FFFFFF; color: #0F1522; padding-inline: 0; padding-block: 0; font-size: 12px; }
+    .stage { display: none !important; }
+    .scrolly { display: block; }
+    .masthead { padding-block: 0 8px; gap: 6px; }
+    h1 { font-size: 26px; }
+    .lede { font-size: 13px; }
+    .step { min-height: 0; max-width: none; display: grid; grid-template-columns: 58px minmax(0, 1fr); column-gap: 18px; row-gap: 3px; align-content: start; padding-block: 7px; border-top: 1px solid #D6DCE6; break-inside: avoid; }
+    .step > :not(.print-shot) { grid-column: 2; }
+    .step-num { width: 22px; height: 22px; font-size: 12px; }
+    .where { font-size: 9.5px; }
+    h2 { font-size: 17px; }
+    .step p { font-size: 12px; max-width: none; }
+    .taps li { font-size: 11px; padding: 3px 8px; }
+    .print-shot { display: block; grid-column: 1; grid-row: 1 / span 5; position: relative; margin: 0; width: 58px; }
+    .print-shot img { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid #C9D1DD; }
+    .print-shot.icon img { width: 48px; border: 0; border-radius: 11px; margin: 4px 8px; }
+    .dot { width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; box-shadow: 0 0 0 1.5px #FFFFFF; }
+    .dot::after { display: none; }
+    .done { margin-top: 10px; padding: 12px 16px; gap: 8px; break-inside: avoid; border-color: #D6DCE6; }
+    .done h2 { font-size: 17px; }
+    .done ul { gap: 5px; }
+    .done li { font-size: 12px; }
+    .done li::before { margin-top: 6px; }
+    .band { margin-top: 10px; padding: 10px 16px; background: #0F1522; break-inside: avoid; font-size: 10.5px; gap: 2px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .step-num, .dot, .done li::before { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<main class="wrap">
+
+  <header class="masthead">
+    <div class="brand">
+      <svg viewBox="0 0 40 40" fill="none" aria-hidden="true">
+        <path class="brand-c" d="M29.9 10.1 A14 14 0 1 0 29.9 29.9" stroke-width="4.2" stroke-linecap="round"/>
+        <path class="brand-hands" d="M20 20 V12.4 M20 20 H26.6" stroke-width="3.2" stroke-linecap="round"/>
+      </svg>
+      <div>
+        <div class="brand-name">CTAP Tracker</div>
+        <div class="brand-sub">Service + Repair</div>
+      </div>
+    </div>
+    <h1>Get going in five steps</h1>
+    <p class="lede">Two minutes, phone in hand. Everything else can wait.</p>
+  </header>
+
+  <div class="scrolly">
+
+    <aside class="stage" aria-hidden="true">
+      <div class="frame">
+        <div class="home" id="home"><img src="shots/app-icon.png" alt=""><span>CTAP Tracker</span></div>
+        <img class="layer a hide" id="layer-a" src="shots/setup-card.png" alt="">
+        <img class="layer b hide" id="layer-b" src="shots/setup-card.png" alt="">
+        <div id="dots"></div>
+      </div>
+    </aside>
+
+    <div class="steps">
+
+      <section class="step" data-shot="home">
+        <span class="step-num">1</span>
+        <h2>Put it on your phone</h2>
+        <p>Open the link I sent you in <b>Safari</b>, then:</p>
+        <ol class="taps"><li>Share</li><li>Add to Home Screen</li></ol>
+        <p>From now on, open it from the icon.</p>
+      </section>
+
+      <section class="step" data-shot="setup-card" data-dots="8.4,44.2">
+        <span class="step-num">2</span>
+        <span class="where">Dashboard</span>
+        <h2>Enter your CTAP balance</h2>
+        <p>Tap <b>Set your starting CTAP balance</b> and put in the hours you're up or down. <b>Skip this and everything starts from zero.</b></p>
+      </section>
+
+      <section class="step" data-shot="schedule" data-dots="65.6,13.7">
+        <span class="step-num">3</span>
+        <span class="where">Schedule tab</span>
+        <h2>Set your week</h2>
+        <p>Normal Mon–Fri? Tap <b>Standard week</b>. Done. Anything else, tap a day's times, set them, and <b>Confirm</b>.</p>
+      </section>
+
+      <section class="step" data-shot="log-job" data-dots="50,21.9">
+        <span class="step-num">4</span>
+        <span class="where">Log Job tab</span>
+        <h2>Log your jobs</h2>
+        <p>Tap a job. Or tap the blue bar and say it: <span class="say">“six breakdowns and two services”</span>. Check the list, then tap <b>Log</b>.</p>
+      </section>
+
+      <section class="step" data-shot="dashboard" data-dots="4.3,16.3;4.3,63.4">
+        <span class="step-num">5</span>
+        <span class="where">Dashboard</span>
+        <h2>See where you stand</h2>
+        <p><b>Earned today</b>, what's <b>still needed</b>, and your <b>CTAP balance</b>. Tap the balance to see what it's worth in pounds.</p>
+      </section>
+
+    </div>
+  </div>
+
+  <section class="done">
+    <h2>That's it.</h2>
+    <ul>
+      <li><span><b>Your figures stay on your phone.</b> Nobody else can see them.</span></li>
+      <li><span><b>There's no backup, so don't delete the app.</b> If something looks wrong, message me first.</span></li>
+      <li><span><b>Want more?</b> Coach, the Forecast, History and the rest are in the <a href="full.html">full guide</a>.</span></li>
+    </ul>
+  </section>
+
+  <footer class="band">
+    <span><strong>Designed and created by Jake Rainford.</strong> Stuck? Get me on Teams.</span>
+    <span>Screens show demo figures. Personal estimates only; check anything that matters against your payslip.</span>
+  </footer>
+
+</main>
+
+<script>
+(function () {
+  var home = document.getElementById('home');
+  var layers = [document.getElementById('layer-a'), document.getElementById('layer-b')];
+  var dotsEl = document.getElementById('dots');
+  var steps = Array.prototype.slice.call(document.querySelectorAll('.step'));
+  var front = 0, current = null;
+
+  function parseDots(spec) {
+    return (spec || '').split(';').filter(Boolean).map(function (p) { return p.split(',').map(Number); });
+  }
+  function makeDots(target, spec) {
+    target.innerHTML = '';
+    parseDots(spec).forEach(function (p) {
+      var d = document.createElement('span');
+      d.className = 'dot';
+      d.style.setProperty('--x', p[0] + '%');
+      d.style.setProperty('--y', p[1] + '%');
+      target.appendChild(d);
+    });
+  }
+
+  function show(step) {
+    if (step === current) return;
+    current = step;
+    var shot = step.dataset.shot;
+    if (shot === 'home') {
+      home.classList.remove('hide');
+      layers.forEach(function (l) { l.classList.add('hide'); });
+    } else {
+      home.classList.add('hide');
+      var back = 1 - front;
+      layers[back].src = 'shots/' + shot + '.png';
+      layers[back].classList.remove('hide');
+      layers[front].classList.add('hide');
+      front = back;
+    }
+    makeDots(dotsEl, step.dataset.dots);
+  }
+
+  function update() {
+    var line = window.innerWidth < 800 ? window.innerHeight * 0.62 : window.innerHeight * 0.55;
+    var pick = steps[0];
+    steps.forEach(function (s) { if (s.getBoundingClientRect().top <= line) pick = s; });
+    show(pick);
+  }
+
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () { ticking = false; update(); });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll);
+
+  // Print: each step carries its own screen.
+  steps.forEach(function (step) {
+    var fig = document.createElement('figure');
+    var isHome = step.dataset.shot === 'home';
+    fig.className = 'print-shot' + (isHome ? ' icon' : '');
+    var img = document.createElement('img');
+    img.src = 'shots/' + (isHome ? 'app-icon' : step.dataset.shot) + '.png';
+    img.alt = '';
+    fig.appendChild(img);
+    if (!isHome) {
+      var holder = document.createElement('div');
+      fig.appendChild(holder);
+      makeDots(holder, step.dataset.dots);
+    }
+    step.insertBefore(fig, step.firstChild);
+  });
+
+  update();
+})();
+</script>
+</body>
+</html>

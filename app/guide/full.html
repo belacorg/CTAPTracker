@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CTAP Tracker Full Guide</title>
+<meta name="description" content="How to use CTAP Tracker, screen by screen: install it, set it up, log your jobs, and read where you stand.">
+<link rel="stylesheet" href="../fonts.css">
+<style>
+  :root {
+    --ground: #EEF1F6;
+    --surface: #FFFFFF;
+    --ink: #0F1522;
+    --muted: #586274;
+    --rule: #D6DCE6;
+    --accent: #2F6BC4;
+    --pin: #4A86D8;
+    --pin-ink: #FFFFFF;
+    --bezel: #C9D1DD;
+    --well: #F2F2F7;
+    --good: #1F8A4C;
+    --bad: #C2372F;
+    --band: #0F1522;
+    --band-ink: #E9EDF4;
+    --band-muted: #A3ADBF;
+    --shadow: 0 18px 40px -22px rgba(15, 21, 34, 0.45);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0A0E15; --surface: #131925; --ink: #E9EDF4; --muted: #97A1B3; --rule: #252D3B;
+      --accent: #7AAAEB; --bezel: #2C3444; --well: #F2F2F7; --good: #5FD08D; --bad: #FF7B72;
+      --band: #1A2231; --shadow: 0 18px 40px -22px rgba(0, 0, 0, 0.8);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0A0E15; --surface: #131925; --ink: #E9EDF4; --muted: #97A1B3; --rule: #252D3B;
+    --accent: #7AAAEB; --bezel: #2C3444; --well: #F2F2F7; --good: #5FD08D; --bad: #FF7B72;
+    --band: #1A2231; --shadow: 0 18px 40px -22px rgba(0, 0, 0, 0.8);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+    padding-inline: 20px;
+    padding-block: 0 56px;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+
+  /* ---------- Masthead ---------- */
+  .masthead { padding-block: 36px 28px; display: grid; gap: 14px; max-width: 700px; }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand svg { width: 32px; height: 32px; flex: none; }
+  .brand-c { stroke: var(--pin); }
+  .brand-hands { stroke: var(--ink); }
+  .brand-name { font-weight: 700; font-size: 15px; line-height: 1.15; }
+  .brand-sub { color: var(--muted); font-size: 13px; }
+  h1 { font-size: clamp(30px, 4.6vw, 46px); line-height: 1.04; letter-spacing: -0.025em; margin: 4px 0 0; text-wrap: balance; }
+  .lede { margin: 0; font-size: 17px; color: var(--muted); max-width: 60ch; }
+  .lede strong { color: var(--ink); font-weight: 500; }
+
+  /* ---------- The loop ---------- */
+  .loop { list-style: none; margin: 0 0 34px; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+  .loop li { padding: 14px 18px 14px 0; display: grid; gap: 2px; }
+  .loop li + li { padding-left: 18px; border-left: 1px solid var(--rule); }
+  .loop .when { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+  .loop .what { font-weight: 700; font-size: 15px; }
+  .loop .how { color: var(--muted); font-size: 13.5px; }
+  @media (max-width: 719px) {
+    .loop { grid-template-columns: 1fr 1fr; }
+    .loop li:nth-child(3) { border-left: 0; padding-left: 0; border-top: 1px solid var(--rule); }
+    .loop li:nth-child(4) { border-top: 1px solid var(--rule); }
+  }
+
+  /* ---------- Contents rail ---------- */
+  .rail { position: sticky; top: 0; z-index: 5; background: var(--ground); padding-block: 10px; margin-bottom: 18px; border-bottom: 1px solid var(--rule); }
+  .rail ol { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+  .rail ol::-webkit-scrollbar { display: none; }
+  .rail a { display: block; white-space: nowrap; font-size: 13px; font-weight: 500; color: var(--muted); text-decoration: none; padding: 5px 11px; border-radius: 999px; border: 1px solid transparent; }
+  .rail a:hover { color: var(--ink); }
+  .rail a.on { color: var(--pin-ink); background: var(--pin); }
+  .rail a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---------- Scrolly layout ---------- */
+  .scrolly { display: grid; grid-template-columns: 320px minmax(0, 1fr); column-gap: 48px; align-items: start; }
+  .stage { position: sticky; top: 64px; height: calc(100vh - 80px); display: grid; align-content: center; justify-items: center; }
+  .frame { position: relative; width: 300px; max-width: 100%; }
+  .frame.phone { aspect-ratio: 640 / 1385; max-height: calc(100vh - 110px); }
+  .frame.card { width: 320px; padding: 14px; border-radius: 16px; background: var(--well); box-shadow: var(--shadow); }
+  .frame.card .layer { position: static; }
+  .layer { position: absolute; inset: 0; display: block; width: 100%; height: auto; transition: opacity 320ms ease; }
+  .frame.phone .layer { border-radius: 26px; border: 1px solid var(--bezel); box-shadow: var(--shadow); height: 100%; object-fit: contain; }
+  .frame.card .layer { border-radius: 0; border: 0; box-shadow: none; width: 100%; height: auto; }
+  .frame.card .layer.b { position: absolute; inset: 14px; width: calc(100% - 28px); }
+  .layer.hide { opacity: 0; pointer-events: none; }
+  @media (prefers-reduced-motion: reduce) { .layer { transition: none; } }
+
+  .pin { position: absolute; left: var(--x); top: var(--y); transform: translate(-50%, -50%); width: 22px; height: 22px; border-radius: 50%; background: var(--pin); color: var(--pin-ink); font-size: 12px; font-weight: 700; line-height: 22px; text-align: center; box-shadow: 0 0 0 2px #FFFFFF, 0 2px 6px rgba(0,0,0,.5); transition: transform 200ms ease, opacity 200ms ease; }
+  .pins.focused .pin { opacity: 0.45; }
+  .pins.focused .pin.on { opacity: 1; transform: translate(-50%, -50%) scale(1.35); z-index: 1; }
+
+  /* ---------- Sections ---------- */
+  .steps { display: grid; gap: 0; }
+  .step { padding-block: 40px 56px; border-top: 1px solid var(--rule); scroll-margin-top: 56px; }
+  .step:first-child { border-top: 0; padding-top: 8px; }
+  .step-head { display: grid; gap: 6px; margin-bottom: 20px; max-width: 60ch; }
+  .kicker { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+  h2 { margin: 0; font-size: clamp(22px, 2.6vw, 28px); line-height: 1.15; letter-spacing: -0.015em; text-wrap: balance; }
+  .step-head p { margin: 2px 0 0; color: var(--muted); font-size: 15.5px; }
+
+  .callouts { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; max-width: 60ch; }
+  .callouts li { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; border: 1px solid transparent; transition: background 200ms ease, border-color 200ms ease; }
+  .callouts li.on { background: var(--surface); border-color: var(--rule); }
+  .num { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--pin); color: var(--pin-ink); font-size: 12.5px; font-weight: 700; line-height: 24px; text-align: center; margin-top: 1px; }
+  .callouts li.plain .num { background: var(--rule); color: var(--ink); }
+  .txt { font-size: 15px; line-height: 1.5; }
+  .txt b { font-weight: 700; }
+  .txt .eg { color: var(--muted); }
+  .txt .say { color: var(--accent); font-weight: 500; }
+
+  .note { margin: 22px 0 0; max-width: 60ch; padding: 14px 16px; border-radius: 12px; background: var(--surface); border: 1px solid var(--rule); font-size: 14.5px; color: var(--muted); }
+  .note b { color: var(--ink); font-weight: 600; }
+  .note.warn { border-color: color-mix(in srgb, var(--bad) 45%, var(--rule)); }
+  .note.warn b { color: var(--bad); }
+
+  /* ---------- Footer band ---------- */
+  .band { margin-top: 48px; background: var(--band); color: var(--band-ink); border-radius: 14px; padding: 22px 24px; display: grid; gap: 14px; }
+  .band h2 { font-size: 19px; color: var(--band-ink); }
+  .band p { margin: 0; color: var(--band-muted); font-size: 14px; max-width: 70ch; }
+  .band strong { color: var(--band-ink); font-weight: 500; }
+  .band .fine { padding-top: 12px; border-top: 1px solid rgba(233,237,244,.14); font-size: 13px; }
+
+  /* ---------- Phone width ---------- */
+  @media (max-width: 799px) {
+    .scrolly { grid-template-columns: 1fr; column-gap: 0; }
+    .stage { top: 52px; height: 42vh; min-height: 260px; z-index: 4; background: var(--ground); }
+    .frame { width: auto; height: 100%; }
+    .frame.phone { aspect-ratio: 640 / 1385; max-height: 100%; }
+    .frame.card { height: auto; width: min(100%, 360px); }
+    .steps { padding-top: 12px; }
+    .step { padding-block: 28px 40px; scroll-margin-top: calc(42vh + 60px); }
+  }
+
+  /* ---------- Print: linear, one screen per section ---------- */
+  .print-shot { display: none; }
+  @media print {
+    body { background: #FFFFFF; color: #0F1522; padding-inline: 0; font-size: 12px; }
+    .rail, .stage { display: none !important; }
+    .scrolly { display: block; }
+    .step { display: grid; grid-template-columns: 180px minmax(0, 1fr); column-gap: 24px; break-inside: avoid; page-break-inside: avoid; padding-block: 18px 22px; border-top: 1px solid #D6DCE6; }
+    .step-head { grid-column: 2; margin-bottom: 10px; }
+    .callouts, .note { grid-column: 2; }
+    .callouts { gap: 6px; }
+    .callouts li { padding: 4px 0; border: 0 !important; background: none !important; }
+    .print-shot { display: block; grid-column: 1; grid-row: 1 / span 3; position: relative; margin: 0; width: 180px; }
+    .print-shot img { display: block; width: 100%; height: auto; border-radius: 16px; border: 1px solid #C9D1DD; }
+    .print-shot.card { padding: 8px; background: #F2F2F7; border-radius: 10px; }
+    .print-shot.card img { border-radius: 0; border: 0; }
+    .pin { transition: none; box-shadow: none; outline: 2px solid #FFFFFF; }
+    .pins.focused .pin { opacity: 1; transform: translate(-50%, -50%); }
+    .band { break-inside: avoid; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+<main class="wrap">
+
+  <header class="masthead">
+    <div class="brand">
+      <svg viewBox="0 0 40 40" fill="none" aria-hidden="true">
+        <path class="brand-c" d="M29.9 10.1 A14 14 0 1 0 29.9 29.9" stroke-width="4.2" stroke-linecap="round"/>
+        <path class="brand-hands" d="M20 20 V12.4 M20 20 H26.6" stroke-width="3.2" stroke-linecap="round"/>
+      </svg>
+      <div>
+        <div class="brand-name">CTAP Tracker</div>
+        <div class="brand-sub">Service + Repair</div>
+      </div>
+    </div>
+    <h1>The full guide</h1>
+    <p class="lede">Every screen, and what each part does. <strong>Just want the basics?</strong> The <a href="index.html">quick start</a> takes two minutes.</p>
+  </header>
+
+  <ol class="loop" aria-label="How a week goes">
+    <li><span class="when">Once</span><span class="what">Install and set up</span><span class="how">Starting balance, your shifts. Five minutes.</span></li>
+    <li><span class="when">Each week</span><span class="what">Set your week</span><span class="how">Shift times, leave, rest days.</span></li>
+    <li><span class="when">Each job</span><span class="what">Log it</span><span class="how">Tap a tile, or just say it.</span></li>
+    <li><span class="when">Whenever</span><span class="what">See where you stand</span><span class="how">Today, the week, your balance.</span></li>
+  </ol>
+
+  <nav class="rail" aria-label="Sections">
+    <ol>
+      <li><a href="#install">Install</a></li>
+      <li><a href="#setup">Set up</a></li>
+      <li><a href="#schedule">Schedule</a></li>
+      <li><a href="#shifts">Shift picker</a></li>
+      <li><a href="#log">Log Job</a></li>
+      <li><a href="#voice">Say it</a></li>
+      <li><a href="#dashboard">Dashboard</a></li>
+      <li><a href="#cashout">Cash-Out</a></li>
+      <li><a href="#forecast">Forecast</a></li>
+      <li><a href="#coach">Coach</a></li>
+      <li><a href="#checkin">Check-in</a></li>
+      <li><a href="#history">History</a></li>
+      <li><a href="#settings">Settings</a></li>
+      <li><a href="#theme">Dark mode</a></li>
+      <li><a href="#data">Your data</a></li>
+    </ol>
+  </nav>
+
+  <div class="scrolly">
+
+    <aside class="stage" aria-hidden="true">
+      <div class="frame phone" id="frame">
+        <img class="layer a" id="layer-a" src="shots/setup-card.png" alt="">
+        <img class="layer b hide" id="layer-b" src="shots/setup-card.png" alt="">
+        <div class="pins" id="pins"></div>
+      </div>
+    </aside>
+
+    <div class="steps">
+
+      <!-- 1 Install -->
+      <section class="step" id="install" data-shot="setup-card">
+        <div class="step-head">
+          <span class="kicker">Step 1 · once</span>
+          <h2>Install it on your phone</h2>
+          <p>It's a web app, so there's nothing to download from the App Store. It goes on your home screen like any other app.</p>
+        </div>
+        <ol class="callouts">
+          <li class="plain"><span class="num">1</span><span class="txt"><b>Open the link in Safari.</b> On iPhone it has to be Safari; Chrome can't put web apps on the home screen. The link is the one I sent you.</span></li>
+          <li class="plain"><span class="num">2</span><span class="txt"><b>Tap Share, then Add to Home Screen.</b> The Share button is the square with the arrow at the bottom of Safari.</span></li>
+          <li class="plain"><span class="num">3</span><span class="txt"><b>From now on, open it from the icon</b>, not from Safari. It runs full-screen and it works with no signal, so plant rooms and cellars are fine.</span></li>
+        </ol>
+      </section>
+
+      <!-- 2 Set up -->
+      <section class="step" id="setup" data-shot="setup-card">
+        <div class="step-head">
+          <span class="kicker">Step 2 · once</span>
+          <h2>Three taps to set it up</h2>
+          <p>The first time you open it, the Dashboard shows a Set up card. It ticks each one off and disappears when they're done.</p>
+        </div>
+        <ol class="callouts">
+          <li data-pin="1"><span class="num">1</span><span class="txt"><b>Your starting CTAP balance.</b> The hours you're already up or down. <b>This is the one that matters</b>: without it every figure starts from zero, which is almost certainly not where you are. If you're genuinely level, enter 0 so it knows you've answered.</span></li>
+          <li data-pin="2"><span class="num">2</span><span class="txt"><b>This week's shifts.</b> Tap <b>Standard week</b> if you're a normal Mon–Fri 08:00–16:30. Anything else, see the Schedule below.</span></li>
+          <li data-pin="3"><span class="num">3</span><span class="txt"><b>How the app works.</b> Two minutes, and it covers where your data lives (short version: on your phone and nowhere else).</span></li>
+        </ol>
+      </section>
+
+      <!-- 3 Schedule -->
+      <section class="step" id="schedule" data-shot="schedule">
+        <div class="step-head">
+          <span class="kicker">Schedule tab · each week</span>
+          <h2>Set the week you're working</h2>
+          <p>This is what sets your target. Get it right and everything else falls out of it.</p>
+        </div>
+        <ol class="callouts">
+          <li data-pin="1"><span class="num">1</span><span class="txt"><b>Pick the week</b> with the arrows.</span></li>
+          <li data-pin="2"><span class="num">2</span><span class="txt"><b>Standard week</b> sets Mon–Fri 08:00–16:30 in one tap.</span></li>
+          <li data-pin="3"><span class="num">3</span><span class="txt"><b>A day's times.</b> Tap them to open the shift picker (next section), set start and finish, then Confirm.</span></li>
+          <li data-pin="4"><span class="num">4</span><span class="txt"><b>Leave.</b> Annual leave or sickness. It takes that day's hours off your week, so you're not marked down for being off.</span></li>
+          <li data-pin="5"><span class="num">5</span><span class="txt"><b>Day note.</b> Traffic, no access, training. It shows next to that day in the Forecast, so the context sits beside the numbers.</span></li>
+          <li data-pin="6"><span class="num">6</span><span class="txt"><b>Rest day.</b> A day with no times is a normal day off in your rota. Unlike Leave it doesn't reduce your hours; you just aren't expected to earn that day.</span></li>
+          <li data-pin="7"><span class="num">7</span><span class="txt"><b>Default lunch.</b> Taken off each day's target.</span></li>
+        </ol>
+      </section>
+
+      <!-- 4 Shift picker -->
+      <section class="step" id="shifts" data-shot="shift-picker">
+        <div class="step-head">
+          <span class="kicker">Schedule tab · tap a day's times</span>
+          <h2>Set one day, copy it to the rest</h2>
+          <p>Weeks don't have to be Monday to Friday. Monday to Thursday and Saturday is fine.</p>
+        </div>
+        <ol class="callouts">
+          <li data-pin="1"><span class="num">1</span><span class="txt"><b>Start and finish.</b> Scroll or tap the hours and minutes. Nothing is saved yet.</span></li>
+          <li data-pin="2"><span class="num">2</span><span class="txt"><b>The shift and its hours</b> after lunch, so you can check it before you save.</span></li>
+          <li data-pin="3"><span class="num">3</span><span class="txt"><b>Also apply to.</b> Tap any other days to give them the same times. Days on leave can't be picked.</span></li>
+          <li data-pin="4"><span class="num">4</span><span class="txt"><b>Rest of week</b> picks the weekdays after this one. <b>Whole week</b> picks every day.</span></li>
+          <li data-pin="5"><span class="num">5</span><span class="txt"><b>Confirm</b> saves it and tells you how many days it's setting. Close with ✕ instead and nothing changes.</span></li>
+          <li data-pin="6"><span class="num">6</span><span class="txt"><b>Clear this day's times</b> for a day you're not working. It becomes a rest day.</span></li>
+        </ol>
+      </section>
+
+      <!-- 5 Log Job -->
+      <section class="step" id="log" data-shot="log-job">
+        <div class="step-head">
+          <span class="kicker">Log Job tab · each job</span>
+          <h2>Log a job in one tap</h2>
+          <p>The app opens here. Built to be used one-handed between calls.</p>
+        </div>
+        <ol class="callouts">
+          <li data-pin="1"><span class="num">1</span><span class="txt"><b>Search</b> any job by name.</span></li>
+          <li data-pin="2"><span class="num">2</span><span class="txt"><b>Day strip.</b> Hours credited each day this week. Tap a day to log against it if you forgot one.</span></li>
+          <li data-pin="3"><span class="num">3</span><span class="txt"><b>Say what you've done.</b> The blue bar. More on this next.</span></li>
+          <li data-pin="4"><span class="num">4</span><span class="txt"><b>Most used.</b> Your six most-logged jobs. One tap logs it at its credit value.</span></li>
+          <li data-pin="5"><span class="num">5</span><span class="txt"><b>Every job</b>, grouped by type (Gas, Hive, Sales, Absence), each with its credit value. Jobs with a dashed edge ask for a time first: wait work, NPT, trace and repair.</span></li>
+        </ol>
+      </section>
+
+      <!-- 6 Voice -->
+      <section class="step" id="voice" data-shot="log-job">
+        <div class="step-head">
+          <span class="kicker">Log Job tab · the blue bar</span>
+          <h2>Or just say it</h2>
+          <p>Tap the bar and talk. Count first, then the job: <span class="say">“six breakdowns and two services”</span>.</p>
+        </div>
+        <ol class="callouts">
+          <li data-pin="3"><span class="num">1</span><span class="txt"><b>Say the day, or the whole week.</b> <span class="say">“Monday six breakdowns, Tuesday three services and an inhibitor, Wednesday a long duration.”</span> Each day lands on the day you said. Take your time between jobs; it waits while you think.</span></li>
+          <li class="plain"><span class="num">2</span><span class="txt"><b>You get a draft, not a write.</b> It reads back what it heard as a list. Change a count, swap a job, or remove one. Anything it couldn't place is shown to you, not quietly dropped. <b>Nothing is logged until you tap Log.</b></span></li>
+          <li class="plain"><span class="num">3</span><span class="txt"><b>Name the appliance.</b> <span class="say">“Four boiler repairs”</span> is exact; <span class="say">“four repairs”</span> is a guess, and the draft flags it in amber so you can check. Same with Hive: say <span class="say">“hive mini”</span>, <span class="say">“hive wired”</span> or <span class="say">“hive trvs”</span>.</span></li>
+          <li class="plain"><span class="num">4</span><span class="txt"><b>Didn't catch you?</b> Tap the mic to start again, or <b>Type it instead</b>. Your keyboard's own microphone key works in the box too.</span></li>
+        </ol>
+        <p class="note">Speech-to-text gets trade words wrong now and then. It knows the usual ones (“bank accounts” is breakdowns, “too high installs” is two Hive installs). If it writes something daft for a job you say a lot, tell me the exact words and I'll add it.</p>
+      </section>
+
+      <!-- 7 Dashboard -->
+      <section class="step" id="dashboard" data-shot="dashboard">
+        <div class="step-head">
+          <span class="kicker">Dashboard tab · whenever</span>
+          <h2>See where you stand today</h2>
+          <p>Check it between jobs. Everything on it comes from what you've logged.</p>
+        </div>
+        <ol class="callouts">
+          <li data-pin="1"><span class="num">1</span><span class="txt"><b>Week switcher.</b> Go back to look at or fix an earlier week.</span></li>
+          <li data-pin="2"><span class="num">2</span><span class="txt"><b>Job credits.</b> <b>Earned today</b>, <b>still needed</b> to hit today's target, and the <b>week gap</b>. The bar fills towards today's target, and the line under it says what would close it. <span class="eg">“5 more Gas Repair closes today's gap.”</span></span></li>
+          <li data-pin="3"><span class="num">3</span><span class="txt"><b>Daily check-in.</b> One private question a day, under a minute. Nothing to do with CTAP; more on it below.</span></li>
+          <li data-pin="4"><span class="num">4</span><span class="txt"><b>Coach.</b> Reads your own figures back: streaks, balance, what's left this week, and what the extras on a visit are worth.</span></li>
+          <li data-pin="5"><span class="num">5</span><span class="txt"><b>CTAP balance.</b> Your running credit (green) or deficit (red) in hours, starting from the balance you set. <b>Tap it</b> for the Cash-Out.</span></li>
+          <li data-pin="6"><span class="num">6</span><span class="txt"><b>Week.</b> Hours banked against target, a bar for each day. The % goes green when you're on pace for the day you're on, not just at the end of the week. Switch between <b>Actual</b> and <b>Projected</b>. <b>Tap it</b> for the Weekly Forecast.</span></li>
+          <li data-pin="7"><span class="num">7</span><span class="txt"><b>Today's jobs.</b> Everything logged today with its credit. Tap ✕ to remove one, or <b>+ Add a job</b> at the bottom.</span></li>
+        </ol>
+      </section>
+
+      <!-- 8 Cash-Out -->
+      <section class="step" id="cashout" data-shot="cashout-sheet">
+        <div class="step-head">
+          <span class="kicker">Dashboard · tap the CTAP tile</span>
+          <h2>What your balance is worth in your pocket</h2>
+          <p>Slides up from the bottom. Swipe down or tap ✕ to close.</p>
+        </div>
+        <ol class="callouts">
+          <li data-pin="1"><span class="num">1</span><span class="txt"><b>Payable balance.</b> Your CTAP credit in hours. In deficit it shows £0, because there's nothing to cash out yet.</span></li>
+          <li data-pin="2"><span class="num">2</span><span class="txt"><b>Your multiplier.</b> 0×, 0.8×, 1.4× or 2×. Pick yours.</span></li>
+          <li data-pin="3"><span class="num">3</span><span class="txt"><b>Tax band.</b> Gross, Basic (20% tax + 8% NI) or Higher (40% tax + 2% NI).</span></li>
+          <li data-pin="4"><span class="num">4</span><span class="txt"><b>Gross and take-home</b>, with the calculation shown underneath so you can check it. <span class="eg">17.23h × £19.39 × 1.4 − 28% = £336.83.</span></span></li>
+        </ol>
+        <p class="note">Personal estimate only. Check it against your payslip; the app doesn't see your pay.</p>
+      </section>
+
+      <!-- 9 Forecast -->
+      <section class="step" id="forecast" data-shot="forecast-sheet">
+        <div class="step-head">
+          <span class="kicker">Dashboard · tap the Week tile</span>
+          <h2>The week, day by day</h2>
+          <p>Where the week's heading at your current pace, and what you need each day from here.</p>
+        </div>
+        <ol class="callouts">
+          <li data-pin="1"><span class="num">1</span><span class="txt"><b>Day strip.</b> Monday to Sunday with each day's hours. Rest days show as Rest. Opens on today; tap any day.</span></li>
+          <li data-pin="2"><span class="num">2</span><span class="txt"><b>That day's jobs</b> with the credit for each. Tap ✕ to remove one. Any day note from the Schedule shows here too.</span></li>
+          <li data-pin="3"><span class="num">3</span><span class="txt"><b>Edit Times.</b> Fix the time on a job you logged late.</span></li>
+          <li data-pin="4"><span class="num">4</span><span class="txt"><b>Credits earned</b> against the week's target, and where the week landed or is heading.</span></li>
+          <li data-pin="5"><span class="num">5</span><span class="txt"><b>Projected, daily average, days worked, days left.</b> Days left only counts days you're working, so leave and rest days don't thin out the target.</span></li>
+        </ol>
+      </section>
+
+      <!-- 10 Coach -->
+      <section class="step" id="coach" data-shot="coach-deficit-card" data-frame="card">
+        <div class="step-head">
+          <span class="kicker">Coach Mode · on the Dashboard</span>
+          <h2>Coach works out the way back</h2>
+          <p>Say you're 8.40h in deficit on a Wednesday morning. This is what Coach does with that.</p>
+        </div>
+        <ol class="callouts">
+          <li class="plain" data-shot="coach-deficit-card"><span class="num">1</span><span class="txt"><b>Your run rate.</b> It spreads the deficit over the next 20 working days, so it's a small daily top-up rather than one impossible week. <span class="eg">8.40h ÷ 20 days = +0.42h a day above target.</span> It also tells you whether last week shrank the deficit or added to it.</span></li>
+          <li class="plain" data-shot="coach-hero"><span class="num">2</span><span class="txt"><b>Today, in jobs.</b> Job Credits turns what's left of today's target into jobs, using the credit of the last job you logged. <span class="eg">2.05h still needed ÷ 0.93h per Gas Repair = 3 more.</span></span></li>
+          <li class="plain" data-shot="coach-forecast"><span class="num">3</span><span class="txt"><b>The rest of the week.</b> The Forecast takes your daily average so far, shows where the week finishes at that pace, and gives you the daily rate to still make target. <span class="eg">14.94h to go ÷ 2 days left = 7.47h a day.</span></span></li>
+          <li class="plain" data-shot="coach-best-advice"><span class="num">4</span><span class="txt"><b>What lifts the balance most.</b> After a service or repair it lists the best advice you could give on that visit, a Hive, an inhibitor, a CO alarm, a boiler lead, and what each is worth against today's gap. <b>Never dispatched work</b>: it won't suggest a service or a repair you weren't given.</span></li>
+        </ol>
+        <p class="note">Coach only uses your own logged figures. Turn it off in Settings if you'd rather just have the numbers.</p>
+      </section>
+
+      <!-- 11 Check-in -->
+      <section class="step" id="checkin" data-shot="checkin-card" data-frame="card">
+        <div class="step-head">
+          <span class="kicker">Daily check-in · on the Dashboard</span>
+          <h2>An honest diary only you can read</h2>
+          <p>One question a day, under a minute. It has nothing to do with your CTAP figures.</p>
+        </div>
+        <ol class="callouts">
+          <li class="plain"><span class="num">1</span><span class="txt"><b>Built on GROW.</b> Goal, Reality, Options, Will. Monday asks what you want to work on this week; the rest of the week asks how it's going. Five days read as one conversation.</span></li>
+          <li class="plain"><span class="num">2</span><span class="txt"><b>It's for you.</b> Where the gaps in the day were, what you're struggling with, what you'd do differently. Three answers: not really, so-so, yes. Skip it any day you like.</span></li>
+          <li class="plain"><span class="num">3</span><span class="txt"><b>Nobody else sees it.</b> No team view, no export, no comparing engineers. That's how it's built, not a setting. Off in Settings if it isn't for you.</span></li>
+        </ol>
+      </section>
+
+      <!-- 12 History -->
+      <section class="step" id="history" data-shot="history">
+        <div class="step-head">
+          <span class="kicker">History tab</span>
+          <h2>Every week you've logged</h2>
+          <p>The pattern over time, and the balance that carries from week to week.</p>
+        </div>
+        <ol class="callouts">
+          <li data-pin="1"><span class="num">1</span><span class="txt"><b>Weekly trend.</b> The last six weeks. Green means bonus hit. <span class="eg">“4 / 6 weeks bonus.”</span></span></li>
+          <li data-pin="2"><span class="num">2</span><span class="txt"><b>Each week:</b> hours against target, with a dot for the result: green is bonus, amber is close, red is below. Tap a week to open it.</span></li>
+          <li data-pin="3"><span class="num">3</span><span class="txt"><b>In CTAP.</b> Had a week that wasn't a fair test? Long sickness, a phased return. Untick it and it stays out of your balance without being deleted.</span></li>
+          <li data-pin="4"><span class="num">4</span><span class="txt"><b>Travel.</b> Note that week's travel hours. For now it's a record only; the 80% target already allows for travel.</span></li>
+        </ol>
+      </section>
+
+      <!-- 13 Settings -->
+      <section class="step" id="settings" data-shot="settings">
+        <div class="step-head">
+          <span class="kicker">Settings tab · once</span>
+          <h2>Set once, then leave it alone</h2>
+        </div>
+        <ol class="callouts">
+          <li data-pin="1"><span class="num">1</span><span class="txt"><b>Your name.</b> Only used for the greeting.</span></li>
+          <li data-pin="2"><span class="num">2</span><span class="txt"><b>Appearance.</b> Dark or light, and the switches for Coach and the daily check-in.</span></li>
+          <li data-pin="3"><span class="num">3</span><span class="txt"><b>Weekly hours and Target %.</b> Your rostered hours and the share of them you're aiming to credit. 80% is the default; tap the <b>i</b> for why.</span></li>
+          <li data-pin="4"><span class="num">4</span><span class="txt"><b>Starting CTAP balance.</b> The same one from set-up. The <b>+/−</b> button switches it between credit and deficit.</span></li>
+          <li data-pin="5"><span class="num">5</span><span class="txt"><b>How to use this app.</b> A short version of this guide, built in.</span></li>
+          <li data-pin="6"><span class="num">6</span><span class="txt"><b>On-device.</b> Your data stays on this phone. <b>Erase all data</b> is further down: tap Erase, type ERASE, confirm.</span></li>
+        </ol>
+      </section>
+
+      <!-- 14 Theme -->
+      <section class="step" id="theme" data-shot="dashboard-dark">
+        <div class="step-head">
+          <span class="kicker">Settings · Appearance</span>
+          <h2>Dark mode, if you'd rather</h2>
+          <p>Everything in this guide is shown in light mode. The app works exactly the same in dark; only the colours change.</p>
+        </div>
+        <ol class="callouts">
+          <li class="plain"><span class="num">1</span><span class="txt"><b>Settings → Appearance → Theme.</b> Pick Dark or Light. It's saved on your phone, so it stays how you left it.</span></li>
+          <li class="plain"><span class="num">2</span><span class="txt"><b>Same screens, same taps.</b> Every step above applies either way, so nothing here needs re-reading if you switch.</span></li>
+        </ol>
+      </section>
+
+      <!-- 15 Your data -->
+      <section class="step" id="data" data-shot="settings">
+        <div class="step-head">
+          <span class="kicker">Before you start</span>
+          <h2>Your figures never leave your phone</h2>
+          <p>No account, no server, nothing uploaded. Not to me, not to your manager, not to anyone.</p>
+        </div>
+        <ol class="callouts">
+          <li class="plain"><span class="num">1</span><span class="txt"><b>It's completely secure because there's nothing to secure.</b> Once it's installed the app makes no network requests at all. Nobody can see your CTAP figures but you.</span></li>
+          <li class="plain"><span class="num">2</span><span class="txt"><b>That also means there's no backup.</b> Delete the app, erase the data or lose the phone and it's gone. Nobody can get it back, because nobody else ever had it.</span></li>
+          <li class="plain"><span class="num">3</span><span class="txt"><b>It's a personal tool.</b> The figures are estimates from what you log. Check anything that matters against your payslip and the company systems.</span></li>
+        </ol>
+        <p class="note warn"><b>Don't delete the app to “reinstall” it.</b> Deleting it deletes your data. If something looks wrong, message me first.</p>
+      </section>
+
+    </div>
+  </div>
+
+  <footer class="band">
+    <div>
+      <h2>Stuck, or found something odd?</h2>
+      <p>Get me on Teams or email and I'll sort it. If voice writes something daft, send me the exact words it showed. <strong>Designed and created by Jake Rainford</strong>, Service &amp; Repair Engineer.</p>
+    </div>
+    <p class="fine">The screenshots use made-up demo figures. The app gives personal estimates only, so check them against official systems. Not affiliated with, endorsed by, or representative of any employer.</p>
+  </footer>
+
+</main>
+
+<script>
+(function () {
+  // Pin positions as a percentage of the dark 640×1385 screenshots (setup-card
+  // and checkin-card are the exceptions and have their own sizes).
+  var PINS = {
+    'setup-card':    [[8.4, 44.2], [8.4, 51.3], [8.4, 57.5]],
+    'dashboard':     [[53, 2.2], [4.3, 16.3], [4.3, 35.6], [4.3, 45.3], [4.3, 63.4], [50.6, 63.4], [4.3, 84]],
+    'log-job':       [[86.3, 7.6], [4.3, 13.3], [4.3, 21.9], [4.3, 35.8], [4.3, 69.5]],
+    'schedule':      [[4.2, 13.7], [65.6, 13.7], [18.8, 23], [76.3, 23.5], [92.2, 23.8], [64.2, 60.9], [4.2, 68.4]],
+    'shift-picker':  [[5.2, 46.2], [73.4, 70.2], [3.1, 80.8], [46.9, 76.3], [5.2, 85.3], [28.9, 93.6]],
+    'history':       [[4.3, 7.5], [4.3, 25.1], [8.4, 40.9], [39, 40.9]],
+    'settings':      [[4.3, 12], [4.3, 25.7], [4.3, 51.6], [53, 65.9], [4.3, 75.7], [4.3, 85.8]],
+    'cashout-sheet': [[3, 56.7], [5.2, 64.3], [5.2, 73.6], [5.2, 81.5]],
+    'forecast-sheet':[[2.6, 25.6], [2.6, 32.5], [2.6, 51.6], [2.6, 59.5], [2.6, 80.4]]
+  };
+
+  var frame = document.getElementById('frame');
+  var layers = [document.getElementById('layer-a'), document.getElementById('layer-b')];
+  var pinsEl = document.getElementById('pins');
+  var railLinks = Array.prototype.slice.call(document.querySelectorAll('.rail a'));
+  var sections = Array.prototype.slice.call(document.querySelectorAll('.step'));
+  var front = 0;
+  var currentShot = null;
+  var currentSection = null;
+
+  function drawPins(shot) {
+    pinsEl.innerHTML = '';
+    (PINS[shot] || []).forEach(function (p, i) {
+      var el = document.createElement('span');
+      el.className = 'pin';
+      el.style.setProperty('--x', p[0] + '%');
+      el.style.setProperty('--y', p[1] + '%');
+      el.textContent = i + 1;
+      pinsEl.appendChild(el);
+    });
+    pinsEl.classList.remove('focused');
+  }
+
+  function showShot(shot, kind) {
+    frame.className = 'frame ' + (kind === 'card' ? 'card' : 'phone');
+    if (shot === currentShot) return;
+    currentShot = shot;
+    var back = 1 - front;
+    layers[back].src = 'shots/' + shot + '.png';
+    layers[back].classList.remove('hide');
+    layers[front].classList.add('hide');
+    front = back;
+    drawPins(shot);
+  }
+
+  function focusPin(n) {
+    var pins = pinsEl.querySelectorAll('.pin');
+    if (n === null) { pinsEl.classList.remove('focused'); pins.forEach(function (p) { p.classList.remove('on'); }); return; }
+    pinsEl.classList.add('focused');
+    pins.forEach(function (p, i) { p.classList.toggle('on', i + 1 === n); });
+  }
+
+  function activateSection(sec) {
+    if (sec === currentSection) return;
+    currentSection = sec;
+    showShot(sec.dataset.shot, sec.dataset.frame);
+    railLinks.forEach(function (a) { a.classList.toggle('on', a.getAttribute('href') === '#' + sec.id); });
+    var on = document.querySelector('.rail a.on');
+    if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+  }
+
+  // The section whose top has most recently passed the reading line.
+  function readingLine() { return window.innerWidth < 800 ? window.innerHeight * 0.42 + 80 : window.innerHeight * 0.4; }
+
+  function update() {
+    var line = readingLine();
+    var pick = sections[0];
+    for (var i = 0; i < sections.length; i++) {
+      if (sections[i].getBoundingClientRect().top <= line) pick = sections[i];
+    }
+    activateSection(pick);
+
+    // Within it, the callout nearest the line drives the pin and, where a
+    // callout carries its own screen, the stage.
+    var items = pick.querySelectorAll('.callouts li');
+    var best = null, bestD = Infinity;
+    items.forEach(function (li) {
+      var r = li.getBoundingClientRect();
+      if (r.bottom < line - 40) return;
+      var d = Math.abs(r.top + Math.min(r.height, 80) / 2 - line);
+      if (d < bestD) { bestD = d; best = li; }
+    });
+    items.forEach(function (li) { li.classList.toggle('on', li === best); });
+    if (best && best.dataset.shot) showShot(best.dataset.shot, pick.dataset.frame);
+    else if (best === null && pick.dataset.shot !== currentShot) showShot(pick.dataset.shot, pick.dataset.frame);
+    focusPin(best && best.dataset.pin ? Number(best.dataset.pin) : null);
+  }
+
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () { ticking = false; update(); });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll);
+
+  // Print: give every section its own copy of the screen, pins included.
+  sections.forEach(function (sec) {
+    var fig = document.createElement('figure');
+    fig.className = 'print-shot' + (sec.dataset.frame === 'card' ? ' card' : '');
+    var img = document.createElement('img');
+    img.src = 'shots/' + sec.dataset.shot + '.png';
+    img.alt = '';
+    fig.appendChild(img);
+    var wrap = document.createElement('div');
+    wrap.className = 'pins';
+    (PINS[sec.dataset.shot] || []).forEach(function (p, i) {
+      if (!sec.querySelector('[data-pin="' + (i + 1) + '"]')) return;
+      var el = document.createElement('span');
+      el.className = 'pin';
+      el.style.setProperty('--x', p[0] + '%');
+      el.style.setProperty('--y', p[1] + '%');
+      el.textContent = i + 1;
+      wrap.appendChild(el);
+    });
+    fig.appendChild(wrap);
+    sec.insertBefore(fig, sec.firstChild);
+  });
+
+  drawPins('setup-card');
+  update();
+})();
+</script>
+</body>
+</html>

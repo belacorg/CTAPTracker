@@ -41,6 +41,7 @@ const SHIP = [
   // TEMPORARY — a diagnostic page for voice capture on iPhone, linked from
   // nowhere in the app. Remove, along with the file, once voice is settled.
   'voice-lab.html',
+  'guide',
 ];
 
 await rm(OUT, { recursive: true, force: true });
