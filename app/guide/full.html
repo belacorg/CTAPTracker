@@ -90,7 +90,13 @@
   .rail a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   /* ---------- Scrolly layout ---------- */
-  .scrolly { display: grid; grid-template-columns: 320px minmax(0, 1fr); column-gap: 48px; align-items: start; }
+  /* Where the page itself scrolls, one screen stays put and follows along.
+     Some viewers size the page to its full height and scroll it from outside,
+     so a sticky screen would never move; there each section keeps its own. */
+  .scrolly { display: block; }
+  .scrolly .stage { display: none; }
+  html.scrolly-on .scrolly { display: grid; grid-template-columns: 320px minmax(0, 1fr); column-gap: 48px; align-items: start; }
+  html.scrolly-on .stage { display: grid; }
   .stage { position: sticky; top: 64px; height: calc(100vh - 80px); display: grid; align-content: center; justify-items: center; }
   .frame { position: relative; width: 300px; max-width: 100%; }
   .frame.phone { aspect-ratio: 640 / 1385; max-height: calc(100vh - 110px); }
@@ -140,27 +146,42 @@
 
   /* ---------- Phone width ---------- */
   @media (max-width: 799px) {
-    .scrolly { grid-template-columns: 1fr; column-gap: 0; }
-    .stage { top: 52px; height: 42vh; min-height: 260px; z-index: 4; background: var(--ground); }
+    html.scrolly-on .scrolly { grid-template-columns: 1fr; column-gap: 0; }
+    html.scrolly-on .stage { top: 52px; height: 42vh; min-height: 260px; z-index: 4; background: var(--ground); }
     .frame { width: auto; height: 100%; }
     .frame.phone { aspect-ratio: 640 / 1385; max-height: 100%; }
     .frame.card { height: auto; width: min(100%, 360px); }
     .steps { padding-top: 12px; }
-    .step { padding-block: 28px 40px; scroll-margin-top: calc(42vh + 60px); }
+    .step { padding-block: 28px 40px; }
+    html.scrolly-on .step { scroll-margin-top: calc(42vh + 60px); }
+  }
+
+  .print-shot { display: none; }
+  html:not(.scrolly-on) .step { display: grid; grid-template-columns: 260px minmax(0, 1fr); grid-template-rows: auto auto auto 1fr; column-gap: 44px; }
+  html:not(.scrolly-on) .step > :not(.print-shot) { grid-column: 2; }
+  html:not(.scrolly-on) .print-shot { display: block; grid-column: 1; grid-row: 1 / span 4; position: relative; margin: 0; width: 260px; align-self: start; }
+  html:not(.scrolly-on) .print-shot img { display: block; width: 100%; height: auto; border-radius: 22px; border: 1px solid var(--bezel); box-shadow: var(--shadow); }
+  html:not(.scrolly-on) .print-shot.card { padding: 12px; background: var(--well); border-radius: 14px; box-shadow: var(--shadow); }
+  html:not(.scrolly-on) .print-shot.card img { border-radius: 0; border: 0; box-shadow: none; }
+  html:not(.scrolly-on) .callouts li.on { background: none; border-color: transparent; }
+  @media (max-width: 799px) {
+    html:not(.scrolly-on) .step { grid-template-columns: 1fr; grid-template-rows: none; row-gap: 16px; }
+    html:not(.scrolly-on) .step > * { grid-column: 1 !important; }
+    html:not(.scrolly-on) .print-shot { grid-row: auto; width: min(62vw, 240px); justify-self: center; }
+    html:not(.scrolly-on) .print-shot.card { width: min(100%, 360px); }
   }
 
   /* ---------- Print: linear, one screen per section ---------- */
-  .print-shot { display: none; }
   @media print {
     body { background: #FFFFFF; color: #0F1522; padding-inline: 0; font-size: 12px; }
-    .rail, .stage { display: none !important; }
-    .scrolly { display: block; }
-    .step { display: grid; grid-template-columns: 180px minmax(0, 1fr); column-gap: 24px; break-inside: avoid; page-break-inside: avoid; padding-block: 18px 22px; border-top: 1px solid #D6DCE6; }
+    .rail, html .stage { display: none !important; }
+    html .scrolly { display: block !important; }
+    html .step { display: grid !important; grid-template-rows: auto auto 1fr !important; grid-template-columns: 180px minmax(0, 1fr) !important; column-gap: 24px; break-inside: avoid; page-break-inside: avoid; padding-block: 18px 22px; border-top: 1px solid #D6DCE6; }
     .step-head { grid-column: 2; margin-bottom: 10px; }
     .callouts, .note { grid-column: 2; }
     .callouts { gap: 6px; }
     .callouts li { padding: 4px 0; border: 0 !important; background: none !important; }
-    .print-shot { display: block; grid-column: 1; grid-row: 1 / span 3; position: relative; margin: 0; width: 180px; }
+    html .print-shot { display: block !important; grid-column: 1; grid-row: 1 / span 3; position: relative; margin: 0; width: 180px !important; box-shadow: none !important; }
     .print-shot img { display: block; width: 100%; height: auto; border-radius: 16px; border: 1px solid #C9D1DD; }
     .print-shot.card { padding: 8px; background: #F2F2F7; border-radius: 10px; }
     .print-shot.card img { border-radius: 0; border: 0; }
@@ -599,6 +620,16 @@
     fig.appendChild(wrap);
     sec.insertBefore(fig, sec.firstChild);
   });
+
+  function decide() {
+    var root = document.documentElement;
+    var on = root.classList.contains('scrolly-on');
+    var real = window.innerHeight > 0 && window.innerHeight < 1600;
+    if (!on && real && root.scrollHeight > window.innerHeight + 200) root.classList.add('scrolly-on');
+    if (on && !real) root.classList.remove('scrolly-on');
+  }
+  decide();
+  window.addEventListener('resize', decide);
 
   drawPins('setup-card');
   update();
