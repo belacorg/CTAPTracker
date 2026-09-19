@@ -213,6 +213,8 @@
       <li><a href="#schedule">Schedule</a></li>
       <li><a href="#shifts">Shift picker</a></li>
       <li><a href="#log">Log Job</a></li>
+      <li><a href="#browse">Browse all</a></li>
+      <li><a href="#category">A category</a></li>
       <li><a href="#voice">Say it</a></li>
       <li><a href="#dashboard">Dashboard</a></li>
       <li><a href="#cashout">Cash-Out</a></li>
@@ -309,11 +311,40 @@
           <p>The app opens here. Built to be used one-handed between calls.</p>
         </div>
         <ol class="callouts">
-          <li data-pin="1"><span class="num">1</span><span class="txt"><b>Search</b> any job by name.</span></li>
-          <li data-pin="2"><span class="num">2</span><span class="txt"><b>Day strip.</b> Hours credited each day this week. Tap a day to log against it if you forgot one.</span></li>
-          <li data-pin="3"><span class="num">3</span><span class="txt"><b>Say what you've done.</b> The blue bar. More on this next.</span></li>
-          <li data-pin="4"><span class="num">4</span><span class="txt"><b>Most used.</b> Your six most-logged jobs. One tap logs it at its credit value.</span></li>
-          <li data-pin="5"><span class="num">5</span><span class="txt"><b>Every job</b>, grouped by type (Gas, Hive, Sales, Absence), each with its credit value. Jobs with a dashed edge ask for a time first: wait work, NPT, trace and repair.</span></li>
+          <li data-pin="1"><span class="num">1</span><span class="txt"><b>Search</b> any job by name — across every category, wherever you are.</span></li>
+          <li data-pin="2"><span class="num">2</span><span class="txt"><b>Your week</b>, Monday to Sunday, with the hours credited on each day. Tap a day to log against it if you forgot one; the arrows step back to a week you've finished.</span></li>
+          <li data-pin="3"><span class="num">3</span><span class="txt"><b>What's on that day.</b> Everything you've logged to it, as you log it — so you can see the tap landed, and what it landed as. The <b>✕</b> takes one back off.</span></li>
+          <li data-pin="4"><span class="num">4</span><span class="txt"><b>Say what you've done.</b> The blue bar. More on this next.</span></li>
+          <li data-pin="5"><span class="num">5</span><span class="txt"><b>Most used.</b> Your six most-logged jobs. One tap logs it at its credit value.</span></li>
+        </ol>
+      </section>
+
+      <!-- 5b Browse all -->
+      <section class="step" id="browse" data-shot="log-browse">
+        <div class="step-head">
+          <span class="kicker">Log Job tab · below Most used</span>
+          <h2>Everything else, by category</h2>
+          <p>The other 45 jobs live behind four tiles, so you're not scrolling one list of 51 to find the one you want.</p>
+        </div>
+        <ol class="callouts">
+          <li data-pin="1"><span class="num">1</span><span class="txt"><b>Browse all.</b> Four categories, each saying how many jobs are in it.</span></li>
+          <li data-pin="2"><span class="num">2</span><span class="txt"><b>Gas and Hive.</b> Services, repairs and certificates; smart controls and leads.</span></li>
+          <li data-pin="3"><span class="num">3</span><span class="txt"><b>SGO and Absence.</b> Sales credits and fits; leave, NPT and mentor days.</span></li>
+        </ol>
+      </section>
+
+      <!-- 5c A category -->
+      <section class="step" id="category" data-shot="log-category">
+        <div class="step-head">
+          <span class="kicker">Log Job tab · a category</span>
+          <h2>Tap a tile, get the list</h2>
+          <p>The category takes the whole screen. Tap a job and it's logged, and you stay where you are.</p>
+        </div>
+        <ol class="callouts">
+          <li data-pin="1"><span class="num">1</span><span class="txt"><b>Back</b> to the tiles.</span></li>
+          <li data-pin="2"><span class="num">2</span><span class="txt"><b>The day this is going to.</b> It follows you in, so a backdated job can't land on today by mistake. Tap it to pick a different day.</span></li>
+          <li data-pin="3"><span class="num">3</span><span class="txt"><b>Search</b> from here too — it still looks across all four categories.</span></li>
+          <li data-pin="4"><span class="num">4</span><span class="txt"><b>Every job with its credit value.</b> The ones marked <b>Variable</b> ask for a time first: wait work, NPT, trace and repair.</span></li>
         </ol>
       </section>
 
@@ -492,7 +523,9 @@
   var PINS = {
     'setup-card':    [[8.4, 44.2], [8.4, 51.3], [8.4, 57.5]],
     'dashboard':     [[53, 2.2], [4.3, 16.3], [4.3, 35.6], [4.3, 45.3], [4.3, 63.4], [50.6, 63.4], [4.3, 84]],
-    'log-job':       [[86.3, 7.6], [4.3, 13.3], [4.3, 21.9], [4.3, 35.8], [4.3, 69.5]],
+    'log-job':       [[91, 9.7], [8.4, 15.5], [4.3, 29.9], [4.3, 49.2], [4.3, 56.7]],
+    'log-browse':    [[13.9, 63.1], [50, 70.8], [50, 82.9]],
+    'log-category':  [[6, 9.7], [4.3, 15.1], [88, 15.1], [4.3, 22]],
     'schedule':      [[4.2, 13.7], [65.6, 13.7], [18.8, 23], [76.3, 23.5], [92.2, 23.8], [64.2, 60.9], [4.2, 68.4]],
     'shift-picker':  [[5.2, 46.2], [73.4, 70.2], [3.1, 80.8], [46.9, 76.3], [5.2, 85.3], [28.9, 93.6]],
     'history':       [[4.3, 7.5], [4.3, 25.1], [8.4, 40.9], [39, 40.9]],

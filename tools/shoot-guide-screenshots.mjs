@@ -150,6 +150,19 @@ await tab('log');
 await shot('log-job.png');
 await shotEl('voice-prompt.png', '.lj-voice');
 
+// The four category tiles sit below Most used, off the first screen.
+await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+await new Promise((r) => setTimeout(r, 500));
+await shot('log-browse.png');
+await page.evaluate(() => window.scrollTo(0, 0));
+
+// A category, opened over the whole screen — where the other 45 jobs live.
+await page.evaluate(() => document.querySelector('[data-log-cat="core"]').click());
+await new Promise((r) => setTimeout(r, 500));
+await shot('log-category.png');
+await page.evaluate(() => document.querySelector('#log-cat-back').click());
+await new Promise((r) => setTimeout(r, 400));
+
 await tab('schedule');
 await shot('schedule.png');
 

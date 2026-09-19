@@ -116,22 +116,39 @@ next to the numbers.
 
 ![Log Job tab](screenshots/log-job.png)
 
-Categories: **Core**, **Hive**, **Sales**, **Absence**. Each contains tiles
-for the jobs you'd actually log.
-
 ### Key actions
 
-- **Tap a solid tile** to log instantly at the standard credit time.
-- **Tap a dashed tile** for variable jobs — it'll prompt for the extra input
-  (e.g. minutes spent, units fitted) and calculate credit from that.
-- **Day picker** at the top lets you log against past days if you forgot to
-  enter something at the time.
+- **Your week** runs across the top, Monday to Sunday, with the hours credited
+  on each day. Tap a day to log against it if you forgot something at the time;
+  the arrows step back to a week you've already finished.
+- **What's on that day** sits under the week, and fills in as you log. It is
+  how you tell a tap landed, and what it landed as. The **✕** takes one back off.
+- **Most used** is your six most-logged jobs. One tap logs at the standard
+  credit time.
+- **Search** finds any job by name, subtitle or code, from anywhere on the tab.
 
-### Why category tiles instead of a typed list?
+### The other 45 jobs
+
+![Browse all](screenshots/log-browse.png)
+
+Below Most used, the catalogue sits behind four tiles — **Gas** (20),
+**Hive** (13), **SGO** (10) and **Absence** (8). Tapping one opens that
+category over the whole screen.
+
+![A category](screenshots/log-category.png)
+
+The day you're logging into follows you in, so a backdated job can't land on
+today by mistake. Jobs marked **Variable** ask for an input first (minutes
+spent, units fitted) and work the credit out from that.
+
+### Why categories instead of one list?
 
 Engineers don't have time to type a job name on a phone keyboard between
-appointments. Tiles are one-tap. The most common jobs sit at the top of each
-category so the muscle memory builds fast.
+appointments, so the list has to be tappable. But 51 jobs in one scroll meant
+scrolling past Hive and SGO to reach Absence and losing your place — which is
+what the first trial engineers reported. Most used covers the daily handful
+without any scrolling at all; the categories are for the long tail. See
+`docs/adr/0019-log-job-is-a-week-and-four-categories.md`.
 
 ---
 
