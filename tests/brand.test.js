@@ -56,7 +56,8 @@ describe('typography', () => {
 
   it('keeps Log Job figures on tabular numerals, so credits still line up', () => {
     const css = readFileSync('app/style.css', 'utf8');
-    for (const sel of ['lj-row-credit', 'lj-chip-credit', 'lj-session-val', 'voice-item-credit', 'voice-total-val']) {
+    for (const sel of ['lj-row-credit', 'lj-chip-credit', 'lj-log-credit', 'lj-log-hrs', 'lj-strip-val',
+                      'lj-cat-count', 'voice-item-credit', 'voice-total-val']) {
       expect(css, sel).toMatch(new RegExp(`\\.${sel}\\s*\\{[^}]*tabular-nums`));
     }
   });

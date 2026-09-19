@@ -3712,8 +3712,10 @@ details[open] .info-chevron { transform: rotate(90deg); }
 .lj-day-label { font-size: 0.95rem; font-weight: 700; color: var(--fg); }
 .lj-day-label.today { color: var(--accent); }
 
-/* Day strip — the last seven days, all visible. Replaces a ‹ Today › stepper
-   that gave no indication of which day you were stepping towards. */
+/* Day strip — the CTAP week, Monday to Sunday, all seven visible. Replaces a
+   ‹ Today › stepper that gave no indication of which day you were stepping
+   towards, and then a rolling seven days that started on a different weekday
+   every day. */
 .lj-strip {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
@@ -3734,7 +3736,9 @@ details[open] .info-chevron { transform: rotate(90deg); }
   font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em;
   color: var(--muted2); text-transform: uppercase;
 }
-.lj-strip-day.today .lj-strip-dow { color: var(--accent); font-size: 0.55rem; }
+/* The cell now prints the weekday, not the word TODAY, so it needs the colour
+   but not the smaller size that word required. */
+.lj-strip-day.today .lj-strip-dow { color: var(--accent); }
 .lj-strip-val { font-size: 0.78rem; font-weight: 600; color: var(--muted2); font-variant-numeric: tabular-nums; }
 .lj-strip-day.logged .lj-strip-val { color: var(--fg); }
 /* The mark is what makes a gap findable at a glance: filled = logged,
@@ -3875,14 +3879,159 @@ details[open] .info-chevron { transform: rotate(90deg); }
   color: var(--jcpd-accent-ink);
 }
 
-.lj-session {
-  display: flex; justify-content: space-between;
-  margin-top: 20px; padding-top: 14px;
-  border-top: 0.5px solid var(--sep);
-  font-size: 0.84rem; color: var(--muted);
-}
-.lj-session-val { font-family: var(--jcpd-font-sans); font-variant-numeric: tabular-nums; font-weight: 700; color: var(--green); }
 .lj-empty { padding: 26px 0; text-align: center; font-size: 0.85rem; color: var(--muted); }
+
+/* A day that hasn't happened holds its place — the week must not reflow under
+   the engineer as it fills in — but reads as unreachable. */
+.lj-strip-day.future { opacity: 0.32; cursor: default; }
+.lj-strip-day.future .lj-strip-val { color: var(--muted2); }
+
+/* Week stepper. Only ever goes back: there is nothing to log in a week that
+   hasn't happened. */
+.lj-weeknav {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; margin-bottom: 8px;
+}
+.lj-weeknav-btn {
+  width: 34px; height: 34px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface); border: none; border-radius: 10px;
+  color: var(--fg); font-size: 1.1rem; line-height: 1;
+  cursor: pointer; font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.lj-weeknav-btn:disabled { opacity: 0.25; cursor: default; }
+.lj-weeknav-btn:active:not(:disabled) { background: var(--surface2); }
+.lj-weeknav-label {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 4px 8px; background: none; border: none;
+  color: var(--muted); font-size: 0.8rem; font-weight: 600; font-family: inherit;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.lj-weeknav-label.current { color: var(--fg); }
+.lj-weeknav-range { font-size: 0.68rem; font-weight: 500; color: var(--muted2); }
+
+/* ── The selected day's entries ──
+   Tapping a job used to give a flash of colour and nothing else: no way to tell
+   whether it landed, or on which day. This is the answer, directly under the
+   strip that chose the day. */
+.lj-log {
+  background: var(--surface);
+  border-radius: var(--jcpd-r-md);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.lj-log-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 11px 14px;
+  cursor: pointer; list-style: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.lj-log-head::-webkit-details-marker { display: none; }
+.lj-log-day { font-size: 0.86rem; font-weight: 700; color: var(--fg); }
+.lj-log-sum {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.78rem; color: var(--muted);
+}
+.lj-log-hrs {
+  font-variant-numeric: tabular-nums; font-weight: 700; color: var(--green);
+}
+.lj-log-list { border-top: 0.5px solid var(--sep); }
+.lj-log-row {
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 14px;
+  border-bottom: 0.5px solid var(--sep);
+}
+.lj-log-row:last-child { border-bottom: none; }
+.lj-log-ts {
+  flex: none; width: 38px;
+  font-size: 0.68rem; font-variant-numeric: tabular-nums; color: var(--muted2);
+}
+.lj-log-name {
+  flex: 1; min-width: 0;
+  font-size: 0.86rem; color: var(--fg);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lj-log-var { color: var(--muted); }
+.lj-log-credit {
+  flex: none;
+  font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums;
+  color: var(--green);
+}
+.lj-log-amber { color: var(--amber); }
+.lj-log-accent { color: var(--accent); }
+.lj-log-del {
+  flex: none; width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none; border-radius: 8px;
+  color: var(--muted2); font-size: 0.72rem;
+  cursor: pointer; font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.lj-log-del:active { background: var(--surface2); color: var(--red); }
+.lj-log-del-spacer { flex: none; width: 26px; }
+.lj-log-empty {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 11px 14px;
+  background: none;
+  border: 1px dashed var(--sep);
+}
+.lj-log-none { font-size: 0.76rem; color: var(--muted2); text-align: right; }
+
+/* ── Category tiles ──
+   51 jobs in one flat scroll meant scrolling past Hive and SGO to reach
+   Absence and losing your place. Four tiles, then the category full screen. */
+.lj-cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.lj-cat-tile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  padding: 13px 13px 11px;
+  background: var(--surface);
+  border: 1px solid var(--tile-border);
+  border-radius: var(--jcpd-r-md);
+  text-align: left; cursor: pointer; font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.lj-cat-tile:active { background: var(--surface2); }
+.lj-cat-name { font-size: 1rem; font-weight: 700; color: var(--fg); }
+.lj-cat-blurb {
+  font-size: 0.7rem; line-height: 1.3; color: var(--muted2);
+  min-height: 1.8em;
+}
+.lj-cat-count {
+  margin-top: 2px;
+  font-size: 0.7rem; font-weight: 600; color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A category, opened */
+.lj-cat-head {
+  display: flex; align-items: center; gap: 4px;
+  margin-bottom: 10px;
+}
+.lj-back {
+  width: 32px; height: 32px; flex: none; margin-left: -8px;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none;
+  color: var(--accent); font-size: 1.5rem; line-height: 1;
+  cursor: pointer; font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.lj-cat-title { flex: 1; font-size: 1.05rem; font-weight: 700; color: var(--fg); }
+
+/* Which day this is landing on. Tapping a job from inside a category was the
+   moment engineers lost track of where it was going. */
+.lj-cat-day {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 8px 12px; margin-bottom: 10px;
+  background: var(--surface);
+  border: none; border-radius: var(--jcpd-r-sm);
+  font-family: inherit; cursor: pointer; text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+.lj-cat-day-lbl { font-size: 0.74rem; color: var(--muted2); }
+.lj-cat-day-val { flex: 1; font-size: 0.8rem; font-weight: 700; color: var(--fg); }
+.lj-cat-day-val.today { color: var(--accent); }
+.lj-cat-day-chg { font-size: 0.7rem; font-weight: 600; color: var(--accent); }
 
 body.light .lj-sec-sticky { background: var(--bg); }
 
@@ -4234,3 +4383,12 @@ body.light .lj-sec-sticky { background: var(--bg); }
   -webkit-tap-highlight-color: transparent;
 }
 .checkin-save:active { filter: brightness(0.93); }
+
+/* The entry just written. The tapped row can't flash any more — logging
+   re-renders now, so the engineer can see what landed — so the confirmation
+   lights up where they're looking for it. */
+@keyframes lj-just-added {
+  from { background: var(--accent-dim, rgba(74,134,216,.15)); }
+  to   { background: transparent; }
+}
+.lj-log-row.just-added { animation: lj-just-added 0.9s ease-out 1; }

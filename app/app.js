@@ -14,6 +14,16 @@ let cashOutTaxRate = 'basic';
 let activeDayKey = null;
 let dayEditMode = false;
 let activeLogDay = getTodayKey();
+// The week the Log Job strip is showing. Held separately from activeLogDay so
+// the engineer can step back to a finished week and look before picking a day,
+// but the two must never drift apart — always go through setLogDay.
+let logWeekKey = getWeekKey(new Date());
+// Which of Gas / Hive / SGO / Absence is open full-screen, or null for the tiles.
+let logCategory = null;
+// The entry just written, so the day panel can flash it. The re-render wipes
+// any class put on the tapped row, and the confirmation belongs where the
+// engineer is looking for it anyway: in the list of what's on the day.
+let lastLoggedTs = null;
 let jobSearch = '';
 let logSearchOpen = false;
 let ctapProjectedMode = false;
@@ -216,6 +226,21 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ── Render ─────────────────────────────────────────────────────────────────
+// Logging a job used to skip the re-render on the Log tab, because a render
+// scrolled you back to the top of the catalogue mid-tap. That left the engineer
+// with a flash of colour and no way to tell whether the tap had landed, or on
+// which day — the single most common thing the trial engineers reported. The
+// answer is to re-render and put the scroll back, not to stay stale.
+function renderKeepingScroll() {
+  const y = window.scrollY;
+  const main = document.querySelector('.main');
+  const mainTop = main ? main.scrollTop : 0;
+  render();
+  const freshMain = document.querySelector('.main');
+  if (freshMain) freshMain.scrollTop = mainTop;
+  window.scrollTo(0, y);
+}
+
 function render() {
   try {
     document.getElementById('app').innerHTML = buildApp();
@@ -783,86 +808,203 @@ function buildDayBlock(dayKey, jobs, isToday, week) {
 }
 
 
-// The last seven days at a glance, so a day you forgot to log is visible
-// rather than something you step backwards to find. See getLogDayStrip.
-function buildLogDayStrip() {
-  const days = getLogDayStrip(state, 7);
+// Picking a day and showing its week are one act: a day off the visible week
+// would leave the strip with nothing selected.
+function setLogDay(key) {
+  activeLogDay = key;
+  logWeekKey = getWeekKey(new Date(key + 'T00:00:00'));
+}
+
+// A week at a glance, so a day you forgot to log is visible rather than
+// something you step backwards to find. Monday to Sunday, matching the CTAP
+// week the target is counted over — see getLogWeekStrip.
+function buildLogWeekStrip() {
+  const days = getLogWeekStrip(state, logWeekKey);
   const cells = days.map(d => {
     const selected = d.key === activeLogDay;
     const logged = d.count > 0;
-    // A day off and a day with nothing on it must not read the same — one is a
-    // gap worth chasing, the other isn't.
-    const mark = logged ? '&#9679;' : (d.rostered ? '&#9675;' : '&#183;');
+    // A day off, a day with nothing on it and a day that hasn't happened must
+    // not read the same — only one of them is a gap worth chasing.
+    const mark = d.isFuture ? '' : logged ? '&#9679;' : (d.rostered ? '&#9675;' : '&#183;');
     const cls = ['lj-strip-day',
       selected ? 'selected' : '',
       d.isToday ? 'today' : '',
       logged ? 'logged' : '',
+      d.isFuture ? 'future' : '',
       d.rostered ? '' : 'off'].filter(Boolean).join(' ');
-    return `<button class="${cls}" data-log-day-pick="${d.key}"
-      aria-label="${d.label}${logged ? ` — ${d.count} logged, ${d.hours.toFixed(2)} hours` : ' — nothing logged'}"
-      aria-pressed="${selected}">
-      <span class="lj-strip-dow">${d.isToday ? 'TODAY' : d.initial}</span>
+    const aria = d.isFuture ? `${d.label} — not yet`
+      : `${d.label}${logged ? ` — ${d.count} logged, ${d.hours.toFixed(2)} hours` : ' — nothing logged'}`;
+    return `<button class="${cls}" data-log-day-pick="${d.key}" ${d.isFuture ? 'disabled' : ''}
+      aria-label="${aria}" aria-pressed="${selected}">
+      <span class="lj-strip-dow">${d.initial}</span>
       <span class="lj-strip-val">${logged ? d.hours.toFixed(1) : '&mdash;'}</span>
       <span class="lj-strip-mark">${mark}</span>
     </button>`;
   }).join('');
-  return `<div class="lj-strip" role="group" aria-label="Pick a day to log into">${cells}</div>`;
+
+  const start = new Date(logWeekKey + 'T00:00:00');
+  const end = new Date(start); end.setDate(start.getDate() + 6);
+  const endStr = end.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  const range = start.getMonth() === end.getMonth()
+    ? `${start.getDate()} – ${endStr}`
+    : `${start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${endStr}`;
+  const isThisWeek = logWeekKey === getWeekKey(new Date());
+
+  return `
+    <div class="lj-weeknav">
+      <button class="lj-weeknav-btn" data-log-week="-1" aria-label="Previous week">‹</button>
+      <button class="lj-weeknav-label${isThisWeek ? ' current' : ''}" data-log-week="0">
+        ${isThisWeek ? 'This week' : range}${isThisWeek ? `<span class="lj-weeknav-range">${range}</span>` : ''}
+      </button>
+      <button class="lj-weeknav-btn" data-log-week="1" aria-label="Next week" ${isThisWeek ? 'disabled' : ''}>›</button>
+    </div>
+    <div class="lj-strip" role="group" aria-label="Pick a day to log into">${cells}</div>`;
+}
+
+// What is already on the selected day. Engineers could tap a job, get a flash
+// of colour, and have no way to tell whether it landed — or on which day. The
+// day's entries sit directly under the strip, so tapping a day answers "what
+// have I done here" without leaving the screen.
+function buildLogDayEntries() {
+  const wkKey = getWeekKey(new Date(activeLogDay + 'T00:00:00'));
+  const wk = state.weeks[wkKey] || {};
+  const jobs = (wk.days || {})[activeLogDay] || [];
+  const deds = (wk.deductionLog || [])
+    .map((d, i) => ({ ...d, logIdx: i }))
+    .filter(d => d.date === activeLogDay);
+  const mentor = (wk.mentorDays || {})[activeLogDay];
+  const isLeave = dayIsLeave(wk, activeLogDay);
+  const hours = jobs.reduce((s, j) => s + j.creditMins, 0) / 60;
+  const isToday = activeLogDay === getTodayKey();
+  const dayName = new Date(activeLogDay + 'T00:00:00')
+    .toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
+
+  if (jobs.length === 0 && deds.length === 0 && !mentor && !isLeave) {
+    return `<div class="lj-log lj-log-empty">
+      <span class="lj-log-day">${isToday ? 'Today' : dayName}</span>
+      <span class="lj-log-none">Nothing logged yet — pick a job below</span>
+    </div>`;
+  }
+
+  const rows = jobs.map((j, i) => {
+    const ts = j.ts ? new Date(j.ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '';
+    // The same short name the row carried, so the confirmation reads as the
+    // button the engineer pressed rather than the full catalogue name, which
+    // is long enough to truncate on a phone.
+    const meta = JOB_META[j.id] || {};
+    const shown = meta.short || j.name;
+    const sub = meta.sub ? ` <span class="lj-log-var">${meta.sub}</span>` : '';
+    return `<div class="lj-log-row${j.ts && j.ts === lastLoggedTs ? ' just-added' : ''}">
+      <span class="lj-log-ts">${ts}</span>
+      <span class="lj-log-name">${shown}${sub}${j.variableInput ? ` <span class="lj-log-var">(${j.variableInput})</span>` : ''}</span>
+      <span class="lj-log-credit">+${(j.creditMins / 60).toFixed(2)}h</span>
+      <button class="lj-log-del" data-lj-del-day="${activeLogDay}" data-lj-del-idx="${i}" aria-label="Remove ${escAttr(j.name)}">&#10005;</button>
+    </div>`;
+  }).join('');
+
+  const dedRows = deds.map(d => `
+    <div class="lj-log-row">
+      <span class="lj-log-ts">NPT</span>
+      <span class="lj-log-name lj-log-amber">${d.name}</span>
+      <span class="lj-log-credit lj-log-amber">−${(d.mins / 60).toFixed(2)}h</span>
+      <button class="lj-log-del" data-lj-del-day="${activeLogDay}" data-lj-del-ded="${d.logIdx}" aria-label="Remove ${escAttr(d.name)}">&#10005;</button>
+    </div>`).join('');
+
+  const mentorRow = mentor ? `
+    <div class="lj-log-row">
+      <span class="lj-log-ts">—</span>
+      <span class="lj-log-name lj-log-accent">${mentor === 'full' ? 'Mentor Support (Full Day)' : 'Mentor Support (20% Reduction)'}</span>
+      <span class="lj-log-credit lj-log-accent">${mentor === 'full' ? 'Target 0h' : '−20%'}</span>
+      <span class="lj-log-del-spacer"></span>
+    </div>` : '';
+
+  const leaveRow = isLeave ? `
+    <div class="lj-log-row">
+      <span class="lj-log-ts">—</span>
+      <span class="lj-log-name lj-log-amber">Annual Leave</span>
+      <span class="lj-log-credit lj-log-amber">Target 0h</span>
+      <span class="lj-log-del-spacer"></span>
+    </div>` : '';
+
+  const count = jobs.length + deds.length;
+  return `<details class="lj-log" open>
+    <summary class="lj-log-head">
+      <span class="lj-log-day">${isToday ? 'Today' : dayName}</span>
+      <span class="lj-log-sum">${count} logged<span class="lj-log-hrs">+${hours.toFixed(2)}h</span></span>
+    </summary>
+    <div class="lj-log-list">${leaveRow}${rows}${dedRows}${mentorRow}</div>
+  </details>`;
 }
 
 // ── Log Jobs ───────────────────────────────────────────────────────────────
+const LOG_SECTIONS = [
+  ['core',   'Gas',     'Services, repairs, certificates'],
+  ['hive',   'Hive',    'Smart controls and leads'],
+  ['sales',  'SGO',     'Sales credits and fits'],
+  ['absent', 'Absence', 'Leave, NPT, mentor days']
+];
+
 function buildLogJobs() {
-  const todayKey = getTodayKey();
-  const isLoggingToday = activeLogDay === todayKey;
-  const logDayDate = new Date(activeLogDay + 'T00:00:00');
-  const logDayLabel = isLoggingToday
-    ? 'Today'
-    : logDayDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-
-  // Session summary for the selected day
-  const wkKey = getWeekKey(new Date(activeLogDay + 'T00:00:00'));
-  const wk = state.weeks[wkKey] || { days: {} };
-  const dayJobs = (wk.days || {})[activeLogDay] || [];
-  const sessionHours = dayJobs.reduce((s, j) => s + j.creditMins, 0) / 60;
-  const sessionBarHTML = dayJobs.length > 0 ? `
-    <div class="lj-session">
-      <span>${dayJobs.length} logged ${isLoggingToday ? 'today' : 'that day'}</span>
-      <span class="lj-session-val">+${sessionHours.toFixed(2)}h</span>
-    </div>` : '';
-
-  // Search takes over the header when open; the day stepper is compact and
-  // stays out of the way, since it reads "Today" almost every time.
+  // Search takes over the header when open.
   const searching = logSearchOpen || !!jobSearch.trim();
-  const headerHTML = searching ? `
+  const searchBarHTML = `
     <div class="lj-searchbar">
       <span class="lj-search-icon">${iconSearch()}</span>
       <input type="search" id="job-search" class="lj-search-input"
-        placeholder="Search jobs…" value="${jobSearch}"
+        placeholder="Search all 51 jobs…" value="${jobSearch}"
         autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
       ${jobSearch ? `<button id="search-clear" class="lj-search-clear">&#10005;</button>` : ''}
       <button id="search-close" class="lj-search-cancel">Cancel</button>
-    </div>` : `
-    <div class="lj-head">
-      <div class="lj-day-label${isLoggingToday ? ' today' : ''}">${logDayLabel}</div>
-      <button id="log-search-open" class="lj-icon-btn" aria-label="Search jobs">${iconSearch()}</button>
-    </div>
-    ${buildLogDayStrip()}`;
+    </div>`;
+
+  const isToday = activeLogDay === getTodayKey();
+  const dayShort = new Date(activeLogDay + 'T00:00:00')
+    .toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
+
+  // A category, opened. The whole screen is that category's jobs: 20 gas jobs
+  // want the room, and there is no doubt about which list you are in. The day
+  // you are logging into comes with you — tapping a job from inside a category
+  // was the moment engineers lost track of where it was landing.
+  if (logCategory && !searching) {
+    const [, label] = LOG_SECTIONS.find(sec => sec[0] === logCategory) || [null, ''];
+    const jobs = JOB_TYPES[logCategory] || [];
+    return `
+      <div class="lj-cat-head">
+        <button class="lj-back" id="log-cat-back" aria-label="Back to all categories">‹</button>
+        <div class="lj-cat-title">${label}</div>
+        <button id="log-search-open" class="lj-icon-btn" aria-label="Search jobs">${iconSearch()}</button>
+      </div>
+      <button class="lj-cat-day" id="log-cat-day">
+        <span class="lj-cat-day-lbl">Logging into</span>
+        <span class="lj-cat-day-val${isToday ? ' today' : ''}">${isToday ? 'Today' : dayShort}</span>
+        <span class="lj-cat-day-chg">change</span>
+      </button>
+      <div class="lj-list">${jobs.map(buildJobRowHTML).join('')}</div>
+      ${buildLogDayEntries()}
+    `;
+  }
 
   // Filtered results replace everything below the search bar.
-  if (jobSearch.trim()) {
+  if (searching) {
     const q = jobSearch.trim().toLowerCase();
     const all = [...JOB_TYPES.core, ...JOB_TYPES.hive, ...JOB_TYPES.sales, ...JOB_TYPES.absent];
-    const hits = all.filter(j =>
+    const hits = q ? all.filter(j =>
       j.name.toLowerCase().includes(q) ||
       (JOB_META[j.id] && (JOB_META[j.id].short || '').toLowerCase().includes(q)) ||
       (JOB_META[j.id] && (JOB_META[j.id].sub || '').toLowerCase().includes(q)) ||
       (j.code && j.code.toLowerCase().includes(q))
-    );
+    ) : [];
     return `
-      ${headerHTML}
-      ${hits.length > 0
-        ? `<div class="lj-list">${hits.map(buildJobRowHTML).join('')}</div>`
-        : `<div class="lj-empty">No jobs match “${jobSearch}”</div>`}
-      ${sessionBarHTML}
+      ${searchBarHTML}
+      <button class="lj-cat-day" id="log-cat-day">
+        <span class="lj-cat-day-lbl">Logging into</span>
+        <span class="lj-cat-day-val${isToday ? ' today' : ''}">${isToday ? 'Today' : dayShort}</span>
+      </button>
+      ${!q
+        ? `<div class="lj-empty">Start typing to search all 51 jobs</div>`
+        : hits.length > 0
+          ? `<div class="lj-list">${hits.map(buildJobRowHTML).join('')}</div>`
+          : `<div class="lj-empty">No jobs match “${jobSearch}”</div>`}
     `;
   }
 
@@ -882,17 +1024,28 @@ function buildLogJobs() {
     <div class="lj-sec">Most used</div>
     <div class="lj-top-grid">${topJobs.map(buildJobChipHTML).join('')}</div>` : '';
 
-  const SECTIONS = [['core', 'Gas'], ['hive', 'Hive'], ['sales', 'SGO'], ['absent', 'Absence']];
-  const sectionsHTML = SECTIONS.map(([key, label]) => `
-    <div class="lj-sec lj-sec-sticky">${label}</div>
-    <div class="lj-list">${(JOB_TYPES[key] || []).map(buildJobRowHTML).join('')}</div>`).join('');
+  // The other 45 jobs live behind four tiles rather than in one flat scroll.
+  // Engineers were scrolling past Hive and SGO to reach Absence and losing
+  // their place; the categories are how they already think about the work.
+  const tilesHTML = `
+    <div class="lj-sec">Browse all</div>
+    <div class="lj-cat-grid">${LOG_SECTIONS.map(([key, label, blurb]) => `
+      <button class="lj-cat-tile" data-log-cat="${key}">
+        <span class="lj-cat-name">${label}</span>
+        <span class="lj-cat-blurb">${blurb}</span>
+        <span class="lj-cat-count">${(JOB_TYPES[key] || []).length} jobs</span>
+      </button>`).join('')}</div>`;
 
   return `
-    ${headerHTML}
-    ${searching ? '' : voiceHTML}
-    ${searching ? '' : recentHTML}
-    ${sectionsHTML}
-    ${sessionBarHTML}
+    <div class="lj-head">
+      <div class="lj-day-label${isToday ? ' today' : ''}">${isToday ? 'Today' : dayShort}</div>
+      <button id="log-search-open" class="lj-icon-btn" aria-label="Search jobs">${iconSearch()}</button>
+    </div>
+    ${buildLogWeekStrip()}
+    ${buildLogDayEntries()}
+    ${voiceHTML}
+    ${recentHTML}
+    ${tilesHTML}
   `;
 }
 
@@ -1512,7 +1665,7 @@ function handleSheetInteraction(e) {
     e.stopPropagation();
     forecastSheetOpen = false;
     weekSummaryKey = null;
-    activeLogDay = logDayBtn.dataset.logDay;
+    setLogDay(logDayBtn.dataset.logDay);
     activeTab = 'log';
     render();
     return;
@@ -2551,7 +2704,7 @@ function commitVoiceBatch() {
   showToast(`${logged} entr${logged === 1 ? 'y' : 'ies'} added · +${(creditMinsTotal / 60).toFixed(2)}h${spread}`);
 
   // Land the engineer on the last day they logged to.
-  activeLogDay = lastDay;
+  setLogDay(lastDay);
   closeVoiceSheet();
 }
 
@@ -3239,7 +3392,7 @@ function attachListeners() {
       weekSummaryKey = null;
       activeTab = tab;
       if (activeTab === 'dashboard') { currentWeekKey = getWeekKey(new Date()); ctapProjectedMode = false; }
-      if (activeTab === 'log') { activeLogDay = getTodayKey(); jobSearch = ''; logSearchOpen = false; }
+      if (activeTab === 'log') { setLogDay(getTodayKey()); logCategory = null; jobSearch = ''; logSearchOpen = false; }
       if (activeTab === 'settings') startBalSignNeg = null;   // re-derive from the stored value
       render();
     });
@@ -3314,7 +3467,68 @@ function attachListeners() {
     btn.addEventListener('click', () => {
       const key = btn.dataset.logDayPick;
       if (key > getTodayKey()) return;   // no logging into the future
-      activeLogDay = key;
+      setLogDay(key);
+      render();
+    });
+  });
+
+  // Log Job week navigation — stepping back reaches a finished week's days,
+  // which the old rolling strip only covered by accident.
+  document.querySelectorAll('[data-log-week]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const delta = parseInt(btn.dataset.logWeek, 10);
+      const todayWeek = getWeekKey(new Date());
+      if (delta === 0) { setLogDay(getTodayKey()); render(); return; }
+      const d = new Date(logWeekKey + 'T00:00:00');
+      d.setDate(d.getDate() + delta * 7);
+      const newKey = getWeekKey(d);
+      if (newKey > todayWeek) return;         // nothing has happened there yet
+      logWeekKey = newKey;
+      // Land on a day that exists on the new strip: today if it's in there,
+      // otherwise the last day of it that has actually happened.
+      const todayKey = getTodayKey();
+      const days = weekDays(newKey).filter(k => k <= todayKey);
+      activeLogDay = newKey === todayWeek ? todayKey : days[days.length - 1];
+      render();
+    });
+  });
+
+  // Category tiles — open one full screen, and come back out of it.
+  document.querySelectorAll('[data-log-cat]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      logCategory = btn.dataset.logCat;
+      render();
+      const main = document.querySelector('.main');
+      if (main) main.scrollTop = 0;
+    });
+  });
+  const catBack = document.getElementById('log-cat-back');
+  if (catBack) catBack.addEventListener('click', () => { logCategory = null; render(); });
+  const catDay = document.getElementById('log-cat-day');
+  if (catDay) catDay.addEventListener('click', () => {
+    logCategory = null; logSearchOpen = false; jobSearch = ''; render();
+  });
+
+  // Remove an entry from the day panel. It cannot reuse .del-btn: that one
+  // writes into currentWeekKey, the Dashboard's week, which is the wrong week
+  // as soon as you step the Log Job strip back.
+  document.querySelectorAll('.lj-log-del').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      e.preventDefault();
+      const dayKey = btn.dataset.ljDelDay;
+      const weekKey = getWeekKey(new Date(dayKey + 'T00:00:00'));
+      const week = getOrCreateWeek(state, weekKey);
+      if (btn.dataset.ljDelDed !== undefined) {
+        (week.deductionLog || []).splice(parseInt(btn.dataset.ljDelDed, 10), 1);
+      } else {
+        const idx = parseInt(btn.dataset.ljDelIdx, 10);
+        if (!week.days || !week.days[dayKey]) return;
+        week.days[dayKey].splice(idx, 1);
+        if (week.days[dayKey].length === 0) delete week.days[dayKey];
+      }
+      saveState(state);
+      if (window.__ctapSyncWeek) window.__ctapSyncWeek(weekKey);
       render();
     });
   });
@@ -3361,8 +3575,6 @@ function attachListeners() {
       if (job.variable) {
         openModal(job);
       } else {
-        btn.classList.add('logged');
-        setTimeout(() => btn.classList.remove('logged'), 380);
         logJob(job, null);
       }
     });
@@ -4030,7 +4242,7 @@ function logJob(job, variableValue, optionalName) {
     saveState(state);
     if (window.__ctapSyncWeek) window.__ctapSyncWeek(targetWeekKey);
     showToast('Mentor Support logged — full day');
-    if (activeTab !== 'log') render();
+    if (activeTab === 'log') renderKeepingScroll(); else render();
     return;
   }
 
@@ -4042,7 +4254,7 @@ function logJob(job, variableValue, optionalName) {
     saveState(state);
     if (window.__ctapSyncWeek) window.__ctapSyncWeek(targetWeekKey);
     showToast('Mentor Support logged — 20%');
-    if (activeTab !== 'log') render();
+    if (activeTab === 'log') renderKeepingScroll(); else render();
     return;
   }
 
@@ -4058,7 +4270,7 @@ function logJob(job, variableValue, optionalName) {
     saveState(state);
     if (window.__ctapSyncWeek) window.__ctapSyncWeek(targetWeekKey);
     showToast(label + ' — ' + mins + ' min');
-    if (activeTab !== 'log') render();
+    if (activeTab === 'log') renderKeepingScroll(); else render();
     return;
   }
 
@@ -4084,6 +4296,7 @@ function logJob(job, variableValue, optionalName) {
     variableInput: variableDisplay,
     ts: Date.now()
   };
+  lastLoggedTs = entry.ts;
 
   const week = getOrCreateWeek(state, targetWeekKey);
   const day = getOrCreateDay(week, targetDay);
@@ -4094,7 +4307,7 @@ function logJob(job, variableValue, optionalName) {
   const displayName = job.name.replace(/\s*\(.*$/, '');
   const backfillNote = targetDay !== getTodayKey() ? ' (backdated)' : '';
   showToast(displayName + ' added' + backfillNote);
-  if (activeTab !== 'log') render();
+  if (activeTab === 'log') renderKeepingScroll(); else render();
 }
 
 // ── Coach Mode ─────────────────────────────────────────────────────────────

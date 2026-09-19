@@ -12,10 +12,14 @@ const openTyped = (h, text) => {
 };
 
 describe('Log Job is the landing page', () => {
-  it('opens on Log Job with the whole catalogue ready to tap', () => {
+  it('opens on Log Job with the day, the voice button and the four categories', () => {
     const h = bootApp();
     expect(h.$('.bottom-nav button.active').textContent.trim()).toBe('Log Job');
-    expect(h.$$('.lj-row').length).toBeGreaterThan(40);   // all four categories, one list
+    // Everything that matters is on screen without scrolling past 51 rows.
+    expect(h.$('.lj-strip')).toBeTruthy();
+    expect(h.$('.lj-voice')).toBeTruthy();
+    expect(h.$$('.lj-cat-tile')).toHaveLength(4);
+    expect(h.$$('.lj-row')).toHaveLength(0);   // the catalogue is behind a tile
   });
 
   it('puts Log Job first and Dashboard second', () => {
@@ -62,13 +66,17 @@ describe('Log Job is the landing page', () => {
 });
 
 describe('Log Job — voice-first layout (ADR-0008)', () => {
+  // The catalogue lives behind a category tile now, so a test that wants rows
+  // has to open one first.
+  const openCat = (h, key) => h.click(h.$$('.lj-cat-tile').find(t => t.dataset.logCat === key));
+
   it('leads with the voice action', () => {
     const h = bootApp();
     const voice = h.$('.lj-voice');
     expect(voice).toBeTruthy();
     expect(voice.id).toBe('voice-btn');
     // Voice sits above the catalogue, not below it.
-    expect(voice.compareDocumentPosition(h.$('.lj-row')) & 4).toBeTruthy();
+    expect(voice.compareDocumentPosition(h.$('.lj-cat-tile')) & 4).toBeTruthy();
   });
 
   it('has no job-type tab bar', () => {
@@ -77,21 +85,51 @@ describe('Log Job — voice-first layout (ADR-0008)', () => {
     expect(h.$('[data-jobtab]')).toBeNull();
   });
 
-  it('groups the catalogue under section headers instead', () => {
+  // 51 jobs in one flat scroll meant scrolling past Hive and SGO to reach
+  // Absence, and losing your place doing it. Four tiles, then the category.
+  it('puts the catalogue behind four category tiles', () => {
     const h = bootApp();
-    expect(h.$$('.lj-sec-sticky').map(e => e.textContent)).toEqual(['Gas', 'Hive', 'SGO', 'Absence']);
+    const tiles = h.$$('.lj-cat-tile');
+    expect(tiles.map(t => t.dataset.logCat)).toEqual(['core', 'hive', 'sales', 'absent']);
+    expect(tiles.map(t => t.querySelector('.lj-cat-name').textContent))
+      .toEqual(['Gas', 'Hive', 'SGO', 'Absence']);
+    // Each tile says how much is behind it, so the tap is not blind.
+    tiles.forEach(t => expect(t.querySelector('.lj-cat-count').textContent).toMatch(/^\d+ jobs$/));
+  });
+
+  it('opens a category over the whole screen, and comes back out', () => {
+    const h = bootApp();
+    openCat(h, 'core');
+    expect(h.$('.lj-cat-title').textContent.trim()).toBe('Gas');
+    expect(h.$$('.lj-row').length).toBe(20);
+    expect(h.$$('.lj-cat-tile')).toHaveLength(0);   // the category has the screen
+    h.click('#log-cat-back');
+    expect(h.$$('.lj-cat-tile')).toHaveLength(4);
+    expect(h.$$('.lj-row')).toHaveLength(0);
+  });
+
+  it('carries the day being logged into inside a category', () => {
+    // Tapping a job from inside a category was where engineers lost track of
+    // which day it was landing on.
+    const h = bootApp();
+    openCat(h, 'hive');
+    expect(h.$('.lj-cat-day-val').textContent.trim()).toBe('Today');
   });
 
   it('shows no job codes on the rows', () => {
     const h = bootApp();
+    openCat(h, 'core');
     const text = h.$$('.lj-row').map(r => r.textContent).join(' ');
     expect(text).not.toContain('GS-CHB');
     expect(text).not.toContain('GR-');
-    expect(text).not.toContain('HVI-');
+    h.click('#log-cat-back');
+    openCat(h, 'hive');
+    expect(h.$$('.lj-row').map(r => r.textContent).join(' ')).not.toContain('HVI-');
   });
 
   it('keeps the subtitle, since short names alone are ambiguous', () => {
     const h = bootApp();
+    openCat(h, 'core');
     // These two are both "Gas Service" and must stay tellable apart.
     const rows = h.$$('.lj-row').map(r => r.textContent.replace(/\s+/g, ' ').trim());
     expect(rows.some(t => t.includes('Gas Service') && t.includes('CHB, CIR, WH, SWH'))).toBe(true);
@@ -100,11 +138,22 @@ describe('Log Job — voice-first layout (ADR-0008)', () => {
 
   it('gives every row a distinct label', () => {
     const h = bootApp();
-    const labels = h.$$('.lj-row').map(r => r.querySelector('.lj-row-main').textContent.replace(/\s+/g, ' ').trim());
+    const labels = [];
+    for (const cat of ['core', 'hive', 'sales', 'absent']) {
+      openCat(h, cat);
+      labels.push(...h.$$('.lj-row').map(r =>
+        r.querySelector('.lj-row-main').textContent.replace(/\s+/g, ' ').trim()));
+      h.click('#log-cat-back');
+    }
+    expect(labels).toHaveLength(51);
     expect(new Set(labels).size).toBe(labels.length);
   });
 
-  it('shows the last seven days at once, defaulted to today', () => {
+  // The strip is the CTAP week, Monday to Sunday — the week the target is
+  // counted over. It used to roll back seven days from today, which started the
+  // week on a different day every day: engineers read "Sa Su M T W T Today"
+  // and could not tell where their week began.
+  it('shows the CTAP week, Monday to Sunday, with today selected', () => {
     const h = bootApp();
     expect(h.$('.lj-day-label').textContent.trim()).toBe('Today');
     expect(h.$('.day-picker')).toBeNull();                 // old full-width picker gone
@@ -112,42 +161,96 @@ describe('Log Job — voice-first layout (ADR-0008)', () => {
 
     const days = h.$$('.lj-strip-day');
     expect(days).toHaveLength(7);
-    // Today is last on the strip and selected on arrival — the common case
-    // needs no interaction at all.
-    expect(days[6].classList.contains('today')).toBe(true);
-    expect(days[6].classList.contains('selected')).toBe(true);
-    expect(days[6].dataset.logDayPick).toBe(h.window.getTodayKey());
-    // Nothing on the strip is in the future.
-    days.forEach(d => expect(d.dataset.logDayPick <= h.window.getTodayKey()).toBe(true));
+    expect(days.map(d => d.querySelector('.lj-strip-dow').textContent.trim()))
+      .toEqual(['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']);
+    // The strip starts on the Monday of the week that holds today.
+    expect(days[0].dataset.logDayPick)
+      .toBe(h.window.getWeekKey(new Date(h.window.getTodayKey() + 'T00:00:00')));
+
+    const today = days.find(d => d.dataset.logDayPick === h.window.getTodayKey());
+    expect(today.classList.contains('today')).toBe(true);
+    expect(today.classList.contains('selected')).toBe(true);
+    expect(h.$$('.lj-strip-day.selected')).toHaveLength(1);
   });
 
-  it('backdates in one tap, and shows what is already on each day', () => {
+  it('holds a place for the rest of the week but will not log into it', () => {
     const h = bootApp();
-    // The most recent selectable day that isn't today. Picking by index would
-    // break on a Monday, when yesterday falls before the first tracked week.
-    const earlier = h.$$('.lj-strip-day')
-      .filter(d => !d.disabled && d.dataset.logDayPick !== h.window.getTodayKey())
-      .pop();
-    expect(earlier, 'a backdatable day on the strip').toBeTruthy();
-    const key = earlier.dataset.logDayPick;
-    expect(earlier.classList.contains('logged')).toBe(false);
-    expect(earlier.querySelector('.lj-strip-val').textContent.trim()).toBe('—');
+    const todayKey = h.window.getTodayKey();
+    h.$$('.lj-strip-day').forEach(d => {
+      const future = d.dataset.logDayPick > todayKey;
+      expect(d.disabled).toBe(future);
+      expect(d.classList.contains('future')).toBe(future);
+    });
+  });
 
-    h.click(earlier);
+  it('steps back a week to reach a finished one, and forward no further than this week', () => {
+    const h = bootApp();
+    const thisWeek = h.window.getWeekKey(new Date(h.window.getTodayKey() + 'T00:00:00'));
+    expect(h.$('[data-log-week="1"]').disabled).toBe(true);   // no logging into next week
+
+    h.click('[data-log-week="-1"]');
+    const days = h.$$('.lj-strip-day');
+    expect(days[0].dataset.logDayPick < thisWeek).toBe(true);
+    // Every day of a finished week is reachable, and one is selected.
+    days.forEach(d => expect(d.disabled).toBe(false));
+    expect(h.$$('.lj-strip-day.selected')).toHaveLength(1);
+    expect(h.$('[data-log-week="1"]').disabled).toBe(false);
+
+    h.click('[data-log-week="0"]');   // "This week" snaps back to today
+    expect(h.$('.lj-day-label').textContent.trim()).toBe('Today');
+  });
+
+  it('backdates in one tap, into a week that has already finished', () => {
+    const h = bootApp();
+    h.click('[data-log-week="-1"]');
+    const sunday = h.$$('.lj-strip-day')[6];
+    const key = sunday.dataset.logDayPick;
+    expect(sunday.classList.contains('logged')).toBe(false);
+
+    h.click(sunday);
     expect(h.$('.lj-day-label').textContent.trim()).not.toBe('Today');
 
     // Logging now lands on the picked day, not today.
+    openCat(h, 'core');
     h.click(h.$$('.lj-row').find(r => r.dataset.jobId === 'gas_repair'));
     const week = h.state().weeks[h.window.getWeekKey(new Date(key + 'T00:00:00'))];
     expect(week.days[key].filter(e => e.id === 'gas_repair')).toHaveLength(1);
-    expect(week.days[h.window.getTodayKey()] || []).toHaveLength(0);
+    expect((h.state().weeks[h.window.getWeekKey(new Date())] || { days: {} })
+      .days[h.window.getTodayKey()] || []).toHaveLength(0);
+  });
 
-    // And the strip now reports it, so the day reads as done.
-    const nav = (t) => h.click(h.$$('.bottom-nav button').find(b => b.dataset.tab === t));
-    nav('dashboard'); nav('log');
-    const after = h.$$('.lj-strip-day').find(d => d.dataset.logDayPick === key);
-    expect(after.classList.contains('logged')).toBe(true);
-    expect(after.querySelector('.lj-strip-val').textContent.trim()).not.toBe('—');
+  // An engineer taps a job, gets a flash of colour, and has no way to tell
+  // whether it landed or on which day. The day's entries answer both, on the
+  // screen that chose the day.
+  it('shows what is on the selected day, and lets you take it back off', () => {
+    const h = bootApp();
+    expect(h.$('.lj-log-empty')).toBeTruthy();
+    expect(h.$('.lj-log-none').textContent).toContain('Nothing logged yet');
+
+    openCat(h, 'core');
+    h.click(h.$$('.lj-row').find(r => r.dataset.jobId === 'gas_repair'));
+    h.click('#log-cat-back');
+
+    const rows = h.$$('.lj-log-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].querySelector('.lj-log-name').textContent).toContain('Gas Repair');
+    expect(rows[0].querySelector('.lj-log-credit').textContent).toBe('+0.93h');
+    expect(h.$('.lj-log-sum').textContent.replace(/\s+/g, ' ')).toContain('1 logged');
+
+    h.click('.lj-log-del');
+    const today = h.window.getTodayKey();
+    const wk = h.state().weeks[h.window.getWeekKey(new Date(today + 'T00:00:00'))];
+    expect((wk.days || {})[today]).toBeUndefined();
+    expect(h.$('.lj-log-empty')).toBeTruthy();
+  });
+
+  it('shows the selected day\'s entries inside a category too', () => {
+    const h = bootApp();
+    openCat(h, 'core');
+    h.click(h.$$('.lj-row').find(r => r.dataset.jobId === 'gas_repair'));
+    // Still in the category — the confirmation comes to the engineer.
+    expect(h.$('.lj-cat-title').textContent.trim()).toBe('Gas');
+    expect(h.$$('.lj-log-row')).toHaveLength(1);
   });
 
   it('collapses search to an icon until asked for', () => {
@@ -159,6 +262,15 @@ describe('Log Job — voice-first layout (ADR-0008)', () => {
     h.click('#search-close');
     expect(h.$('#job-search')).toBeNull();
     expect(h.$('.lj-voice')).toBeTruthy();
+  });
+
+  it('searches across every category, not just the open one', () => {
+    const h = bootApp();
+    openCat(h, 'absent');
+    h.click('#log-search-open');
+    h.setValue('#job-search', 'gas repair', 'input');
+    expect(h.$$('.lj-row').length).toBeGreaterThan(0);
+    expect(h.$$('.lj-row').map(r => r.dataset.jobId)).toContain('gas_repair');
   });
 
   it('still finds a job by its code even though codes are hidden', () => {
@@ -179,6 +291,7 @@ describe('Log Job — voice-first layout (ADR-0008)', () => {
 
   it('logs a job from a row tap', () => {
     const h = bootApp();
+    openCat(h, 'core');
     const row = h.$$('.lj-row').find(r => r.dataset.jobId === 'gas_repair');
     h.click(row);
     const today = h.window.getTodayKey();
@@ -187,13 +300,12 @@ describe('Log Job — voice-first layout (ADR-0008)', () => {
   });
 
   it('promotes what you log to the front of Most used on the next visit', () => {
-    // Logging deliberately does not re-render while you're on the Log tab —
-    // a re-render would throw you back to the top of the list mid-tap.
     const h = bootApp();
     // Seeded from the common domestic gas day, so the grid is useful on day one
     // rather than empty until the engineer has taught it something.
     expect(h.$$('.lj-top-grid .lj-chip')).toHaveLength(6);
 
+    openCat(h, 'hive');
     h.click(h.$$('.lj-row').find(r => r.dataset.jobId === 'hive_repair'));
     const nav = (t) => h.click(h.$$('.bottom-nav button').find(b => b.dataset.tab === t));
     nav('dashboard'); nav('log');

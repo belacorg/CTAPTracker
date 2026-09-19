@@ -370,41 +370,47 @@ function paceProjection(weekEarned, workedDaysSoFar, remainingDays, weekTarget) 
 // going: every day looked identical until you landed on it, so finding the day
 // you forgot to log meant walking backwards through them one at a time.
 //
-// The strip shows the last `n` days at once with what's on each, so a missed
-// day is visible rather than something you go hunting for — and reaching it is
-// one tap instead of several.
+// The strip shows a whole week at once with what's on each day, so a missed day
+// is visible rather than something you go hunting for — and reaching it is one
+// tap instead of several.
 //
-// Rolling from today rather than snapped to the current week, so yesterday is
-// always on the strip; on a Monday a Mon–Sun week view would hide it.
-// Every day on the strip is selectable. The `n`-day window is itself the
-// bound, and it matches what voice backdating already allows ("last Tuesday")
-// — the tile flow and the voice flow are the same model reached two ways, so
-// they must not disagree about which days exist. See ADR-0007.
-function getLogDayStrip(state, n, todayKey) {
+// Monday to Sunday: the **CTAP week**, the same week the **CTAP target** and
+// the **CTAP balance** are counted over. It used to roll back seven days from
+// today, which put a different week on the strip every day and left the strip
+// and the maths disagreeing about where the week started — engineers read
+// "Sa Su M T W T Today" and could not tell. A finished week's late entries are
+// reached by stepping back a week, which is why the strip takes a `weekKey`
+// rather than deriving one; the rolling window only ever covered them by
+// accident.
+//
+// Every past day on the strip is selectable, matching what voice backdating
+// already allows ("last Tuesday") — the tile flow and the voice flow are the
+// same model reached two ways, so they must not disagree about which days
+// exist. See ADR-0007. Days that have not happened yet are the one exception.
+function getLogWeekStrip(state, weekKey, todayKey) {
   const today = todayKey || getTodayKey();
-  const days = [];
-  const end = new Date(today + 'T00:00:00');
-  for (let i = n - 1; i >= 0; i--) {
-    const d = new Date(end);
-    d.setDate(end.getDate() - i);
-    const key = localDateStr(d);
-    const week = (state.weeks || {})[getWeekKey(d)] || {};
+  const week = (state.weeks || {})[weekKey] || {};
+  return weekDays(weekKey).map(function(key) {
+    const d = new Date(key + 'T00:00:00');
     const entries = (week.days || {})[key] || [];
     const hours = entries.reduce(function(s, j) { return s + (j.creditMins || 0); }, 0) / 60;
-    days.push({
+    return {
       key: key,
       isToday: key === today,
-      // Single letter, so seven fit across a phone without wrapping.
-      initial: d.toLocaleDateString('en-GB', { weekday: 'short' }).charAt(0),
+      // Nothing has been done on a day that hasn't arrived, so it can't be
+      // logged into — but it still holds its place, or the week would reflow
+      // under the engineer as the days fill in.
+      isFuture: key > today,
+      // Two letters: with one, Saturday and Sunday were both "S".
+      initial: d.toLocaleDateString('en-GB', { weekday: 'short' }).slice(0, 2),
       label: d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
       count: entries.length,
       hours: hours,
       // Not rostered is a different thing from logged nothing: one is a gap
       // worth chasing, the other is a day off. They must not look alike.
-      rostered: !dayIsLeave(week, key)
-    });
-  }
-  return days;
+      rostered: !dayIsLeave(week, key) && !isRestDay(week, key)
+    };
+  });
 }
 
 // ── Most-used jobs ─────────────────────────────────────────────────────────
@@ -1991,7 +1997,7 @@ if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     dailyRawOutputHours: dailyRawOutputHours,
     weekPFMins: weekPFMins,
     paceProjection: paceProjection,
-    getLogDayStrip: getLogDayStrip,
+    getLogWeekStrip: getLogWeekStrip,
     getTopJobs: getTopJobs,
     TOP_JOBS_SEED: TOP_JOBS_SEED,
     getElectiveJobs: getElectiveJobs,
