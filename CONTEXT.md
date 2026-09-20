@@ -106,6 +106,10 @@ _Avoid_: "actual" for any figure in this app — no number here comes from Centr
 The credit an engineer has entered for the week so far. It is what the app can vouch for and no more: it does not mean the business has agreed the figure, only that the taps were made. Paired with the **Predicted week** on the Week tile. See ADR-0023.
 _Avoid_: "actual hours", "actual credits" (claims a confirmation the app never receives)
 
+**Priced hours**:
+An arbitrary number of hours costed on the **CTAP Cash-Out** sheet — what they would be worth at the engineer's multiplier and tax band. Defaults to the **Payable balance** and can be set to anything; it is a price, never an entitlement, and the sheet marks it amber and says so the moment it differs from what is payable. Never persisted: it resets to the payable balance each time the sheet opens. See ADR-0024.
+_Avoid_: "cash-out balance" for a priced figure (only **Payable balance** can be drawn)
+
 **Banked balance**:
 The **CTAP balance** from closed weeks only — `cumulativeBalance`. What the CTAP tile shows on **Logged**, what cash-out pays against as **Payable balance**, and the debt a deficit recovery plan is written against. Distinct from the **Predicted balance** (banked plus where this week lands), which is what the tile shows by default. Any surface stating the banked figure while the tile is predicting must say *banked* or *from closed weeks*, or the two read as rival answers to one question. See ADR-0023.
 _Avoid_: a bare "CTAP balance" on the Dashboard (ambiguous between the two since ADR-0023)

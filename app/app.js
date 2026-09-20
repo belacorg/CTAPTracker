@@ -11,6 +11,11 @@ let forecastSheetOpen = false;
 let cashOutSheetOpen = false;
 let cashOutMultiplier = 1.4;
 let cashOutTaxRate = 'basic';
+// Hours the cash-out sheet is costing. null means "whatever is payable", so
+// the sheet opens on the engineer's real balance and only becomes a what-if
+// once they type. Reset every time the sheet opens — a modelled figure left
+// lying around would be read as a balance on the next visit.
+let cashOutHours = null;
 let activeDayKey = null;
 let dayEditMode = false;
 let activeLogDay = getTodayKey();
@@ -2025,12 +2030,71 @@ const CASH_OUT_TAX_BANDS = {
   higher: { label: 'Higher', deduction: 0.42, sub: '40% tax + 2% NI' },
 };
 
+// The modeller's two lines of prose. Shared, because they are written both by
+// the render and by the live patch that runs while the engineer types — two
+// copies would drift the moment either was edited.
+function clampCashOutHours(v) {
+  if (isNaN(v)) return 0;
+  return Math.max(0, Math.min(999, Math.round(v * 100) / 100));
+}
+
+function cashOutModelNote(modelHours, payableHours) {
+  const diff = modelHours - payableHours;
+  if (Math.abs(diff) <= 0.005) return '';
+  // Said plainly: this is a price, not an entitlement. The sheet's own
+  // "Payable balance" row above is the figure that can actually be drawn.
+  return diff > 0
+    ? `Pricing ${modelHours.toFixed(2)}h — ${diff.toFixed(2)}h more than you can draw today.`
+    : `Pricing ${modelHours.toFixed(2)}h — ${Math.abs(diff).toFixed(2)}h less than your ${payableHours.toFixed(2)}h balance.`;
+}
+
+function cashOutBreakdown(hours, multiplier, band) {
+  return `${hours.toFixed(2)}h × £${CASH_OUT_HOURLY_RATE.toFixed(2)} × ${multiplier}× ${band.deduction > 0 ? `− ${Math.round(band.deduction * 100)}% deductions` : ''}`;
+}
+
+// Typing has to move the money live — that is the whole point of a modeller.
+// refreshSheetInPlace rebuilds panel.innerHTML, which would blow the caret out
+// of the field on every keystroke, so the figures are patched in place instead.
+function patchCashOutFigures() {
+  const bal = cumulativeBalance(state);
+  const payableHours = Math.max(0, bal);
+  const modelHours = cashOutHours === null ? payableHours : cashOutHours;
+  const multiplier = CASH_OUT_MULTIPLIERS.includes(cashOutMultiplier) ? cashOutMultiplier : 1.4;
+  const band = CASH_OUT_TAX_BANDS[cashOutTaxRate] || CASH_OUT_TAX_BANDS.basic;
+  const gross = modelHours * CASH_OUT_HOURLY_RATE * multiplier;
+  const net = gross * (1 - band.deduction);
+  const fmt = n => n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const grossEl = document.getElementById('cashout-gross');
+  const netEl   = document.getElementById('cashout-net');
+  const brkEl   = document.getElementById('cashout-breakdown');
+  const noteEl  = document.getElementById('cashout-model-note');
+  const cardEl  = document.getElementById('cashout-result-card');
+  if (!grossEl) return;
+
+  const note = cashOutModelNote(modelHours, payableHours);
+  grossEl.textContent = '£' + fmt(gross);
+  netEl.textContent = '£' + fmt(net);
+  brkEl.textContent = cashOutBreakdown(modelHours, multiplier, band);
+  if (noteEl) {
+    noteEl.textContent = note;
+    noteEl.classList.toggle('hidden', !note);
+  }
+  if (cardEl) cardEl.classList.toggle('cashout-result-modelled', !!note);
+}
+
 function buildCashOutSheet() {
   const bal = cumulativeBalance(state);
   const payableHours = Math.max(0, bal);
+  // What the sheet is costing. Defaults to the payable balance; the engineer
+  // can price any number of hours — "what would 40h be worth?" is the question
+  // that makes a deficit worth climbing out of, and it cannot be asked of a
+  // figure locked to what they have already banked.
+  const modelHours = cashOutHours === null ? payableHours : cashOutHours;
+  const isModelled = Math.abs(modelHours - payableHours) > 0.005;
   const multiplier = CASH_OUT_MULTIPLIERS.includes(cashOutMultiplier) ? cashOutMultiplier : 1.4;
   const band = CASH_OUT_TAX_BANDS[cashOutTaxRate] || CASH_OUT_TAX_BANDS.basic;
-  const gross = payableHours * CASH_OUT_HOURLY_RATE * multiplier;
+  const gross = modelHours * CASH_OUT_HOURLY_RATE * multiplier;
   const net = gross * (1 - band.deduction);
   const fmt = n => n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -2059,7 +2123,22 @@ function buildCashOutSheet() {
             <span class="cashout-balance-label">Payable balance</span>
             <span class="cashout-balance-val">${payableHours.toFixed(2)}h</span>
           </div>
-          ${bal < 0 ? `<div class="cashout-deficit-note">Balance is ${bal.toFixed(2)}h in deficit — nothing to cash out yet.</div>` : ''}
+          ${bal < 0 ? `<div class="cashout-deficit-note">Balance is ${bal.toFixed(2)}h in deficit — nothing to cash out yet. Price any figure below to see what climbing out is worth.</div>` : ''}
+
+          <div class="cashout-section-label">Hours to price</div>
+          <div class="cashout-hours-row">
+            <button class="cashout-step-btn" id="cashout-minus" aria-label="One hour less">−</button>
+            <div class="cashout-hours-wrap">
+              <input type="number" id="cashout-hours-input" class="cashout-hours-input"
+                     value="${modelHours.toFixed(2)}" min="0" max="999" step="0.5"
+                     inputmode="decimal" aria-label="Hours to price">
+              <span class="cashout-hours-unit">h</span>
+            </div>
+            <button class="cashout-step-btn" id="cashout-plus" aria-label="One hour more">+</button>
+          </div>
+          <div class="cashout-model-note${isModelled ? '' : ' hidden'}" id="cashout-model-note">
+            ${isModelled ? cashOutModelNote(modelHours, payableHours) : ''}
+          </div>
 
           <div class="cashout-section-label">Your multiplier</div>
           <div class="cashout-mult-row">${multBtns}</div>
@@ -2067,17 +2146,17 @@ function buildCashOutSheet() {
           <div class="cashout-section-label">Tax band</div>
           <div class="cashout-tax-row">${taxBtns}</div>
 
-          <div class="cashout-result-card">
+          <div class="cashout-result-card${isModelled ? ' cashout-result-modelled' : ''}" id="cashout-result-card">
             <div class="cashout-result-row">
               <span class="cashout-result-label">Gross</span>
-              <span class="cashout-result-val">£${fmt(gross)}</span>
+              <span class="cashout-result-val" id="cashout-gross">£${fmt(gross)}</span>
             </div>
             <div class="cashout-result-row cashout-result-net">
               <span class="cashout-result-label">Take-home (${band.label})</span>
-              <span class="cashout-result-val cashout-result-net-val">£${fmt(net)}</span>
+              <span class="cashout-result-val cashout-result-net-val" id="cashout-net">£${fmt(net)}</span>
             </div>
-            <div class="cashout-result-breakdown">
-              ${payableHours.toFixed(2)}h × £${CASH_OUT_HOURLY_RATE.toFixed(2)} × ${multiplier}× ${band.deduction > 0 ? `− ${Math.round(band.deduction * 100)}% deductions` : ''}
+            <div class="cashout-result-breakdown" id="cashout-breakdown">
+              ${cashOutBreakdown(modelHours, multiplier, band)}
             </div>
           </div>
         </div>
@@ -2088,6 +2167,10 @@ function buildCashOutSheet() {
 
 function openCashOutSheet() {
   cashOutSheetOpen = true;
+  // Always open on what is actually payable. A modelled figure carried over
+  // from last time would be read as a balance.
+  cashOutHours = null;
+  refreshSheetInPlace('cashout-sheet');
   document.getElementById('cashout-sheet').classList.remove('hidden');
 }
 
@@ -4267,8 +4350,49 @@ function attachListeners() {
     if (taxBtn) {
       cashOutTaxRate = taxBtn.dataset.tax;
       refreshSheetInPlace('cashout-sheet');
+      return;
+    }
+    // Steppers. A rebuild is fine here: a tap carries no caret to lose, and
+    // the field has to pick up the new value.
+    const step = e.target.closest('#cashout-minus') ? -1
+               : e.target.closest('#cashout-plus') ? 1 : 0;
+    if (step !== 0) {
+      const bal = cumulativeBalance(state);
+      const current = cashOutHours === null ? Math.max(0, bal) : cashOutHours;
+      cashOutHours = clampCashOutHours(current + step);
+      refreshSheetInPlace('cashout-sheet');
     }
   });
+
+  // Delegated, not bound to the field itself: every multiplier tap, stepper
+  // and sheet open runs refreshSheetInPlace, which replaces panel.innerHTML
+  // and would throw away a listener attached to the input directly. The first
+  // build of this bound the element and the modeller went dead after one tap.
+  if (cashoutSheet) {
+    cashoutSheet.addEventListener('input', e => {
+      if (!e.target.closest('#cashout-hours-input')) return;
+      // An empty field is mid-edit, not zero. Hold the last figure rather than
+      // flashing £0.00 between the engineer clearing it and typing a digit.
+      if (e.target.value.trim() === '') return;
+      const v = parseFloat(e.target.value);
+      if (isNaN(v)) return;
+      cashOutHours = clampCashOutHours(v);
+      patchCashOutFigures();
+    });
+    // focusout, because blur does not bubble and there is no element to bind.
+    // Settles an emptied field back on the payable balance and tidies the
+    // figure to two decimals.
+    cashoutSheet.addEventListener('focusout', e => {
+      if (!e.target.closest('#cashout-hours-input')) return;
+      if (e.target.value.trim() === '' || isNaN(parseFloat(e.target.value))) {
+        cashOutHours = null;
+      }
+      refreshSheetInPlace('cashout-sheet');
+    });
+    cashoutSheet.addEventListener('focusin', e => {
+      if (e.target.closest('#cashout-hours-input')) e.target.select();
+    });
+  }
 
   // Modal
   const overlay = document.getElementById('modal-overlay');

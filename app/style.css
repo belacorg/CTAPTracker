@@ -1994,6 +1994,74 @@ details[open] .info-chevron { transform: rotate(90deg); }
   background: var(--surface2);
   border-radius: 8px;
 }
+/* ── Cash-out modeller ── */
+/* A big thumbable field between two steppers: the sheet is read one-handed in
+   a van, so the hours are nudged more often than they are typed. */
+.cashout-hours-row {
+  display: grid;
+  grid-template-columns: 52px 1fr 52px;
+  gap: 8px;
+  align-items: stretch;
+}
+.cashout-step-btn {
+  background: var(--surface2);
+  border: 1px solid transparent;
+  color: var(--text);
+  border-radius: 8px;
+  font-size: 1.3rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s;
+}
+.cashout-step-btn:active { background: var(--surface3); }
+.cashout-hours-wrap {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px;
+  background: var(--surface2);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px 6px;
+}
+.cashout-hours-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  text-align: right;
+  width: 5.5ch;
+  padding: 0;
+}
+/* The spinners fight the steppers for the same job and lose on a phone. */
+.cashout-hours-input::-webkit-outer-spin-button,
+.cashout-hours-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.cashout-hours-input[type=number] { -moz-appearance: textfield; }
+.cashout-hours-unit { font-size: 0.85rem; color: var(--muted); font-weight: 600; }
+/* Amber, not red: pricing hours you have not earned is the point of the tool,
+   not an error. It just must never be mistaken for the payable figure. */
+.cashout-model-note {
+  margin-top: 8px;
+  font-size: 0.7rem;
+  color: var(--amber);
+}
+.cashout-model-note.hidden { display: none; }
+.cashout-result-modelled {
+  border: 1px solid rgba(255,200,87,0.38);   /* --jcpd-amber at 38% */
+}
+.cashout-result-modelled .cashout-result-net-val { color: var(--amber); }
+/* Light mode never redefines --amber, and #ffc857 on white is unreadable at
+   this size. A darkened amber keeps the caution reading without the glare. */
+body.light .cashout-model-note { color: #8a5a00; }
+body.light .cashout-result-modelled { border-color: rgba(138,90,0,0.4); }
+body.light .cashout-result-modelled .cashout-result-net-val { color: #8a5a00; }
+
 .cashout-section-label {
   font-size: 0.62rem;
   font-weight: 700;

@@ -228,8 +228,12 @@ adjusts as completed weeks land.
 ![Cash-out sheet](screenshots/cashout-sheet.png)
 
 This is the headline feature. Pick your multiplier and tax band; see what
-your current banked balance is actually worth after deductions.
+your banked balance is actually worth after deductions — or price any other
+number of hours.
 
+- **Hours to price**: opens on your payable balance. Type over it, or nudge it
+  an hour at a time with − and +, and the money moves as you go. This is how
+  you ask "what would 40h be worth?" without having earned 40h.
 - **Multiplier**: 0×, 0.8×, 1.4×, 2× — pick yours. The multiplier is on top
   of the base hourly rate (£19.39 for a Service & Repair Engineer).
 - **Tax band**:
@@ -237,15 +241,25 @@ your current banked balance is actually worth after deductions.
   - **Basic** (28%) — 20% income tax + 8% NI
   - **Higher** (42%) — 40% income tax + 2% NI
 
-The result card shows gross, take-home (large, in green), and the breakdown
-line so you can see how the number was built.
+The result card shows gross, take-home (large), and the breakdown line so you
+can see how the number was built.
+
+#### Pricing hours you haven't earned
+
+The moment the hours differ from your payable balance, the sheet says so in
+amber — "Pricing 40.00h — 30.00h more than you can draw today" — and the
+take-home turns amber with it. That is deliberate: a priced figure is not an
+entitlement, and the **Payable balance** row at the top keeps showing the only
+number you could actually withdraw. Close the sheet and it forgets the what-if;
+reopening always starts from your real balance.
 
 #### Why no negative cash-out
 
 If your balance is in deficit, the sheet shows £0 and a small note. You
 can't cash out a deficit — you just can't withdraw — so showing a negative
 £ figure would be misleading. When you go into credit, the cash-out becomes
-live.
+live. The pricer still works from a deficit, which is the point of it: it is
+the quickest way to see what digging out is actually worth.
 
 ### Week tile (tappable)
 
