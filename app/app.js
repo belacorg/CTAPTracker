@@ -362,7 +362,7 @@ function buildDashboard() {
   const bal = cumulativeBalance(state);
   // Projected = actual + current week's contribution as if it closed now
   const projectedBal = isCurrentWeek
-    ? bal + weekCreditHours(week) - adjustedTargetHours(state, week)
+    ? bal + weekCreditHours(week) - weekTargetHours(state, currentWeekKey)
     : bal;
   const displayBal = isCurrentWeek && ctapProjectedMode ? projectedBal : bal;
   // Zero is its own state, not the bottom of "in credit". Every engineer starts
@@ -1069,11 +1069,11 @@ function buildHistory() {
   const chartWeeks = weeks.filter(wk => wk < currentWk).slice(0, 8).reverse();
   let trendHTML = '';
   if (chartWeeks.length >= 1) {
-    const hitCount = chartWeeks.filter(wk => bonusAchieved(state, state.weeks[wk])).length;
+    const hitCount = chartWeeks.filter(wk => bonusAchieved(state, wk)).length;
     const cols = chartWeeks.map(wk => {
       const week  = state.weeks[wk];
       const earned = weekCreditHours(week);
-      const bonus  = bonusAchieved(state, week);
+      const bonus  = bonusAchieved(state, wk);
       const barH   = Math.max(4, (earned / 45) * 64);
       const barCls = earned === 0 ? 'zero' : bonus ? 'green' : 'grey';
       return `<div class="trend-col" data-goto-week="${wk}"><div class="trend-bar ${barCls}" style="height:${barH.toFixed(1)}px"></div><div class="trend-wk-label${bonus ? ' green' : ''}">W${isoWkNum(wk)}</div></div>`;
@@ -1120,9 +1120,9 @@ function buildHistory() {
   const list = weeks.map(wk => {
     const week    = state.weeks[wk];
     const earned  = weekCreditHours(week);
-    const target  = adjustedTargetHours(state, week);
+    const target  = weekTargetHours(state, wk);
     const pct     = target > 0 ? (earned / target) * 100 : 0;
-    const bonus   = bonusAchieved(state, week);
+    const bonus   = bonusAchieved(state, wk);
     const colour  = pct >= 90 ? 'green' : pct >= 70 ? 'amber' : earned === 0 ? 'grey' : 'red';
     const isCurrent = wk === currentWeekKey;
     const isPast    = wk < currentWk;
@@ -1785,8 +1785,10 @@ function buildWeekForecastSheet() {
   const isFutureWeek = currentWeekKey > todayWk;
 
   const earnedHours = weekCreditHours(week);
-  const _eff = isPastWeek ? null : effectiveTargetHours(state, week, currentWeekKey);
-  const targetHours = isPastWeek ? adjustedTargetHours(state, week) : _eff.hours;
+  // A past week and the current one are asked the same question now; this used
+  // to branch, which is how the same week read hit on Monday and missed on
+  // Sunday. See weekTargetHours.
+  const targetHours = weekTargetHours(state, currentWeekKey);
   const wDays = weekDays(currentWeekKey);
 
   // Days with at least one job logged (past + today)
@@ -4322,8 +4324,7 @@ function buildCtapTrend() {
     .sort().slice(-6);
   if (pastWks.length < 3) return '';
   const netChange = pastWks.reduce((sum, wk) => {
-    const w = state.weeks[wk];
-    return sum + weekCreditHours(w) - adjustedTargetHours(state, w);
+    return sum + weekCreditHours(state.weeks[wk]) - weekTargetHours(state, wk);
   }, 0);
   const arrow = netChange > 0.3 ? '↑' : netChange < -0.3 ? '↓' : '→';
   const cls = netChange > 0.3 ? ' green' : netChange < -0.3 ? ' red' : '';
@@ -4351,8 +4352,7 @@ function buildCoachCard() {
   const week = state.weeks[todayWk] || { days: {}, shifts: {} };
   const bal = cumulativeBalance(state);
   const earnedHours = weekCreditHours(week);
-  const eff = effectiveTargetHours(state, week, todayWk);
-  const targetHours = eff.hours;
+  const targetHours = weekTargetHours(state, todayWk);
   const bonus = earnedHours >= targetHours;
   const pastWks = Object.keys(state.weeks).filter(wk => wk < todayWk).sort();
   const msgs = [];
@@ -4364,7 +4364,7 @@ function buildCoachCard() {
     const lastWkKey = pastWks.filter(wk => !state.weeks[wk].excludeFromCtap).pop();
     if (lastWkKey) {
       const lastWk = state.weeks[lastWkKey];
-      const contrib = weekCreditHours(lastWk) - adjustedTargetHours(state, lastWk);
+      const contrib = weekCreditHours(lastWk) - weekTargetHours(state, lastWkKey);
       if (contrib >= 0.05) {
         msgs.push(`Your deficit reduced by ${contrib.toFixed(2)}h last week — you're moving in the right direction.`);
       } else if (contrib < -0.05) {
@@ -4403,7 +4403,7 @@ function buildCoachCard() {
     let streak = 0;
     for (let i = pastWks.length - 1; i >= 0; i--) {
       const w = state.weeks[pastWks[i]];
-      if (!w || !bonusAchieved(state, w)) break;
+      if (!w || !bonusAchieved(state, pastWks[i])) break;
       streak++;
     }
     streak++; // include current week
@@ -4449,8 +4449,9 @@ function buildDeficitClearedCard() {
     .filter(wk => wk < todayWk && !state.weeks[wk].excludeFromCtap)
     .sort();
   if (pastWks.length < 1) return '';
-  const lastWk = state.weeks[pastWks[pastWks.length - 1]];
-  const lastContrib = weekCreditHours(lastWk) - adjustedTargetHours(state, lastWk);
+  const lastWkKey = pastWks[pastWks.length - 1];
+  const lastWk = state.weeks[lastWkKey];
+  const lastContrib = weekCreditHours(lastWk) - weekTargetHours(state, lastWkKey);
   const prevBal = bal - lastContrib;
   if (prevBal >= 0) return '';
   return `<div class="coach-card coach-card-celebration" id="deficit-cleared-card">

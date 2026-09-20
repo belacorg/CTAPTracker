@@ -33,7 +33,7 @@ _Avoid_: "SGO payment" (no longer cash); "SGO bonus" (it's a CTAP credit, not a 
 Selling a positive **CTAP balance** back to the employer in exchange for enhanced pay (e.g. double time, conditional on other monthly performance metrics). After cashing out, the engineer manually reduces their **Starting balance** in the app by the number of hours sold. Not implemented in CTAP Tracker today — recorded here because the term is part of the engineer's mental model and informs how **Starting balance** behaves.
 
 **CTAP target**:
-The hours of credited work an engineer must produce in a given week to be on track for **CTAP**. Calculated from **Rostered hours**, the **CTAP percentage**, and **NPT** logged for the week.
+The hours of credited work an engineer must produce in a given week to be on track for **CTAP**. Once four **Representative weeks** exist it is the **Rolling average target**; until then it is calculated from **Rostered hours**, the **CTAP percentage**, and **NPT** logged for the week. One week has one target — the same figure on the Dashboard, in History, in the balance and in the bonus, and the same figure before and after the week ends.
 _Avoid_: "the target", "bonus target", "weekly goal"
 
 **Rostered hours**:

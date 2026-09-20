@@ -188,7 +188,10 @@ function adjustedDailyTargetHours(state, week, dayKey) {
   const nptMins = (week.deductionLog || [])
     .filter(d => d.date === dayKey)
     .reduce((s, d) => s + d.mins, 0);
-  return Math.max(0, getDailyTarget(state, week, dayKey) * pct - nptMins / 60);
+  // The week's target may have moved onto the rolling average; the day's has to
+  // move with it or the two read differently on the same morning.
+  const scale = weekTargetScale(state, week, getWeekKey(new Date(dayKey + 'T00:00:00')));
+  return Math.max(0, getDailyTarget(state, week, dayKey) * pct * scale - nptMins / 60);
 }
 
 function weekMentorTargetReduction(state, week) {
@@ -210,7 +213,7 @@ function cumulativeBalance(state) {
   for (var wk in state.weeks) {
     if (wk < currentWk && !state.weeks[wk].excludeFromCtap) {
       var week = state.weeks[wk];
-      total += weekCreditHours(week) - adjustedTargetHours(state, week);
+      total += weekCreditHours(week) - weekTargetHours(state, wk);
     }
   }
   return total;
@@ -325,8 +328,44 @@ function effectiveTargetHours(state, week, weekKey) {
   return { hours: Math.max(0, displayTarget - npt), isRolling: false, n: 0, displayTarget };
 }
 
-function bonusAchieved(state, week) {
-  return weekCreditHours(week) >= adjustedTargetHours(state, week);
+// The one answer to "what does this week ask for". Every screen, the balance
+// and the bonus read this, so a week cannot be a hit on one and a miss on
+// another.
+//
+// It used not to exist. The Dashboard's live tile used effectiveTargetHours
+// while History, the balance and bonusAchieved used the bare formula, so a week
+// changed its target the moment it stopped being the current one: earn 32.5h
+// against a 32.83h rolling target and the week read missed on the Sunday and
+// hit on the Monday. buildWeekForecastSheet had the disagreement written into
+// it as `isPastWeek ? adjustedTargetHours(...) : _eff.hours`.
+//
+// The rolling average is the canonical figure, not the formula. ADR-0001 is
+// explicit that `pct` is the short-run UX device and the rolling average is
+// "the long-run convergence mechanism that fixes the imprecision"; ADR-0003
+// makes it how the model absorbs real travel and Performance Factor without
+// ingesting MI. The formula is the cold start, which effectiveTargetHours
+// already falls back to until four **Representative weeks** exist.
+function weekTargetHours(state, weekKey) {
+  const week = state.weeks[weekKey];
+  if (!week) return 0;
+  return effectiveTargetHours(state, week, weekKey).hours;
+}
+
+// The factor the rolling average moves a week's target by, so a day's target
+// can be moved with it and the days still sum to the week. Without it the
+// Dashboard's "still needed today" and its weekly target disagree by exactly
+// the size of the rolling adjustment.
+function weekTargetScale(state, week, weekKey) {
+  const pct = typeof state.weeklyTargetPct === 'number' ? state.weeklyTargetPct : 0.8;
+  const staticTarget = rosteredHours(state, week) * pct;
+  if (staticTarget <= 0) return 1;
+  return effectiveTargetHours(state, week, weekKey).displayTarget / staticTarget;
+}
+
+function bonusAchieved(state, weekKey) {
+  const week = state.weeks[weekKey];
+  if (!week) return false;
+  return weekCreditHours(week) >= weekTargetHours(state, weekKey);
 }
 
 function formatHM(totalMins) {
@@ -827,7 +866,7 @@ function getCoachInsights(state, weekKey, ctx) {
     }
 
     const rateWks = pastWks.slice(-10);
-    const hits = rateWks.filter(function(wk) { return bonusAchieved(state, state.weeks[wk]); }).length;
+    const hits = rateWks.filter(function(wk) { return bonusAchieved(state, wk); }).length;
     if (rateWks.length >= 3) {
       const rate = hits / rateWks.length;
       if (rate >= 0.8) {
@@ -848,7 +887,7 @@ function getCoachInsights(state, weekKey, ctx) {
     const last6 = pastWks.slice(-6).filter(function(wk) { return !state.weeks[wk].excludeFromCtap; });
     if (last6.length >= 4) {
       const change = last6.reduce(function(s, wk) {
-        return s + weekCreditHours(state.weeks[wk]) - adjustedTargetHours(state, state.weeks[wk]);
+        return s + weekCreditHours(state.weeks[wk]) - weekTargetHours(state, wk);
       }, 0);
       if (Math.abs(change) >= 0.2) {
         insights.push({ kind: 'ctap_trajectory', priority: 4, severity: change >= 0 ? 'green' : 'red',
@@ -876,7 +915,7 @@ function getCoachInsights(state, weekKey, ctx) {
 
     const last4 = pastWks.slice(-4);
     const avg4earned = last4.reduce(function(s, wk) { return s + weekCreditHours(state.weeks[wk]); }, 0) / 4;
-    const avg4target = last4.reduce(function(s, wk) { return s + adjustedTargetHours(state, state.weeks[wk]); }, 0) / 4;
+    const avg4target = last4.reduce(function(s, wk) { return s + weekTargetHours(state, wk); }, 0) / 4;
     const avgGap = avg4earned - avg4target;
     if (avgGap >= -0.6 && avgGap < -0.05) {
       insights.push({ kind: 'consistency_4_week', priority: 4, severity: 'amber',
@@ -912,8 +951,8 @@ function weekSummary(state, weekKey) {
   if (!week) return null;
 
   const earned = weekCreditHours(week);
-  const target = adjustedTargetHours(state, week);
-  const bonus  = bonusAchieved(state, week);
+  const target = weekTargetHours(state, weekKey);
+  const bonus  = bonusAchieved(state, weekKey);
   const gap    = earned - target;
   const pct    = target > 0 ? Math.min((earned / target) * 100, 100) : 0;
 
@@ -961,7 +1000,7 @@ function weekSummary(state, weekKey) {
   if (wkIdx >= 0) {
     for (let i = wkIdx; i >= 0; i--) {
       const w = state.weeks[allPastWkKeys[i]];
-      if (!w || bonusAchieved(state, w) !== bonus) break;
+      if (!w || bonusAchieved(state, allPastWkKeys[i]) !== bonus) break;
       streakCount++;
     }
   } else {
@@ -1998,6 +2037,8 @@ if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     shiftHours: shiftHours,
     dayIsLeave: dayIsLeave,
     isRestDay: isRestDay,
+    weekTargetHours: weekTargetHours,
+    weekTargetScale: weekTargetScale,
     weekIsRepresentative: weekIsRepresentative,
     MIN_WEEK_COMPLETENESS: MIN_WEEK_COMPLETENESS,
     isWorkingDay: isWorkingDay,

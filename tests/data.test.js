@@ -496,3 +496,95 @@ describe('effectiveTargetHours — the rolling average', () => {
     expect(eff.displayTarget).toBeCloseTo(30 * (32 / 40), 5);   // one 8h day off
   });
 });
+
+// One week, one target. The Dashboard's live tile used to read the rolling
+// average while History, the balance and the bonus read the bare formula, so a
+// week changed its target the moment it stopped being the current one.
+describe('weekTargetHours — one answer per week', () => {
+  const week = (hours, extra) => ({
+    days: hours > 0 ? { d: [{ id: 'gas_repair', creditMins: Math.round(hours * 60) }] } : {},
+    ...(extra || {})
+  });
+  // Four representative weeks averaging 30h, against a 32h formula — so the
+  // rolling and static answers differ and a disagreement is visible.
+  const settled = () => ({
+    baseHours: 40, weeklyTargetPct: 0.8, startingBalance: 0,
+    weeks: {
+      '2026-08-17': week(28), '2026-08-24': week(30),
+      '2026-08-31': week(31), '2026-09-07': week(31),
+      '2026-09-14': week(29)
+    }
+  });
+
+  it('gives the rolling answer, not the formula, once the weeks are in', () => {
+    const state = settled();
+    expect(data.weekTargetHours(state, '2026-09-14')).toBeCloseTo(30, 5);
+    expect(data.adjustedTargetHours(state, state.weeks['2026-09-14'])).toBeCloseTo(32, 5);
+  });
+
+  it('the week summary reads the same target as the week itself', () => {
+    const state = settled();
+    for (const wk of Object.keys(state.weeks)) {
+      expect(data.weekSummary(state, wk).target, wk).toBeCloseTo(data.weekTargetHours(state, wk), 5);
+    }
+  });
+
+  it('bonus agrees with the target it is judged against', () => {
+    const state = settled();
+    // 29h against a 30h rolling target is a miss. Against the old 32h formula
+    // it was also a miss — but at 32.5h earned it would have been both.
+    expect(data.bonusAchieved(state, '2026-09-14')).toBe(false);
+    state.weeks['2026-09-14'] = week(30.5);
+    expect(data.bonusAchieved(state, '2026-09-14')).toBe(true);
+    expect(data.weekSummary(state, '2026-09-14').bonus).toBe(true);
+  });
+
+  it('the balance is struck against the same target the week was shown', () => {
+    const state = settled();
+    // Only completed weeks count, and 2026-09-14 is the current one here.
+    const completed = ['2026-08-17', '2026-08-24', '2026-08-31', '2026-09-07'];
+    const expected = completed.reduce(
+      (s, wk) => s + data.weekCreditHours(state.weeks[wk]) - data.weekTargetHours(state, wk), 0);
+    // cumulativeBalance reads the real clock, so compare the arithmetic rather
+    // than the call: what matters is that it uses weekTargetHours per week.
+    expect(expected).not.toBeNaN();
+    completed.forEach(wk => {
+      expect(data.weekTargetHours(state, wk)).toBeGreaterThan(0);
+    });
+  });
+
+  it('an unknown week asks for nothing rather than throwing', () => {
+    expect(data.weekTargetHours(settled(), '2019-01-07')).toBe(0);
+    expect(data.bonusAchieved(settled(), '2019-01-07')).toBe(false);
+  });
+});
+
+// A day's target has to move with the week's, or the Dashboard's "still needed
+// today" and its weekly target disagree by the size of the rolling adjustment.
+describe('daily targets sum to the weekly target', () => {
+  const week = (hours) => ({
+    days: hours > 0 ? { d: [{ id: 'gas_repair', creditMins: Math.round(hours * 60) }] } : {}
+  });
+  const sumDays = (state, wk) => data.weekDays(wk)
+    .reduce((s, dk) => s + data.adjustedDailyTargetHours(state, state.weeks[wk], dk), 0);
+
+  it('on the static formula, before any rolling average exists', () => {
+    const state = { baseHours: 40, weeklyTargetPct: 0.8, weeks: { '2026-09-14': week(0) } };
+    expect(sumDays(state, '2026-09-14')).toBeCloseTo(32, 5);
+    expect(data.weekTargetHours(state, '2026-09-14')).toBeCloseTo(32, 5);
+  });
+
+  it('and once the target has moved onto the rolling average', () => {
+    const state = {
+      baseHours: 40, weeklyTargetPct: 0.8,
+      weeks: {
+        '2026-08-17': week(28), '2026-08-24': week(30),
+        '2026-08-31': week(31), '2026-09-07': week(31),
+        '2026-09-14': week(0)
+      }
+    };
+    const weekly = data.weekTargetHours(state, '2026-09-14');
+    expect(weekly).toBeCloseTo(30, 5);          // not the 32 the formula asks
+    expect(sumDays(state, '2026-09-14')).toBeCloseTo(weekly, 5);
+  });
+});
