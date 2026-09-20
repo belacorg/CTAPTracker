@@ -114,6 +114,14 @@ _Avoid_: "cash-out balance" for a priced figure (only **Payable balance** can be
 The **CTAP balance** from closed weeks only — `cumulativeBalance`. What the CTAP tile shows on **Logged**, what cash-out pays against as **Payable balance**, and the debt a deficit recovery plan is written against. Distinct from the **Predicted balance** (banked plus where this week lands), which is what the tile shows by default. Any surface stating the banked figure while the tile is predicting must say *banked* or *from closed weeks*, or the two read as rival answers to one question. See ADR-0023.
 _Avoid_: a bare "CTAP balance" on the Dashboard (ambiguous between the two since ADR-0023)
 
+**Coach window**:
+The last eight **Representative weeks** — the single span every average the Coach reports back is taken over: the **Recent average**, the **Strongest day**, the NPT comparison, the bonus hit rate and the four-week consistency line. `coachAverageWeeks` is the only way to ask for it, so a surface cannot quietly average a different stretch than the one beside it. **Excluded weeks** are dropped inside it rather than at each call site. See ADR-0025.
+_Avoid_: "all-time average", "since you started" (nothing the Coach says is measured over all history)
+
+**Strongest day**:
+The weekday an engineer's round actually pays out on, averaged over the **Coach window** — reported as "your strongest day is usually Thursday". Named only when a day has three showings in the window and averages at least 15% above the engineer's overall daily average, because a day 0.01h ahead of the others is noise, not a pattern. One computation, `getStrongestWeekday`, behind both the Coach card and the **Coach Insight**: they used to window differently and could name different days on the same screen. See ADR-0025.
+_Avoid_: "best day" (that is the **Week Summary**'s figure for one specific week, not a pattern across weeks)
+
 **Recent average**:
 The mean credit hours across an engineer's recent **Representative weeks**, reported by **Coach Insight** as context — "tracking 2.10h below your 8-week average of 29.40h". It is information about trend, never a threshold and never a target: a bar computed from what the engineer achieved is a bar they meet by construction, which froze one test engineer's **CTAP balance** at −28h while the real figure walked to −84h. See ADR-0022.
 _Avoid_: "rolling average target", "average target" (both name the superseded mechanism that set the **CTAP target**)

@@ -281,6 +281,11 @@ function adjustedTargetHours(state, week) {
 const MIN_WEEK_COMPLETENESS = 0.4;
 
 function weekIsRepresentative(state, week) {
+  // An Excluded week is one the engineer has already said should not count.
+  // CONTEXT.md has always defined a Representative week as "not an Excluded
+  // week, ..."; the check was simply missing, so a sickness week the engineer
+  // had explicitly set aside still pulled their average down.
+  if (week.excludeFromCtap) return false;
   const asked = adjustedTargetHours(state, week);
   // A week that asked for nothing — all leave, or a full mentor week — says
   // nothing about the engineer's output either way.
@@ -657,12 +662,33 @@ function getElectiveJobForGap(gapHours) {
 }
 
 // ── Historically strong weekday (Mon–Fri name, or null) ────────────────────
-function getHistoricallyStrongDay(state) {
+// The last eight weeks that count, most recent first — the window every
+// average the Coach reports back is taken over. Excluded weeks are dropped
+// here rather than at each call site, because CONTEXT.md promises they
+// contribute nothing to these averages and four separate filters is four
+// chances to forget one.
+function coachAverageWeeks(state, n) {
   const todayWk = getWeekKey(new Date());
-  const pastWks = Object.keys(state.weeks).filter(function(wk) { return wk < todayWk; }).sort().slice(-8);
-  if (pastWks.length < 3) return null;
+  return Object.keys(state.weeks)
+    .filter(function(wk) { return wk < todayWk && !state.weeks[wk].excludeFromCtap; })
+    .sort()
+    .slice(-(n || 8));
+}
+
+// Which weekday this engineer's round actually pays out on, and what it pays.
+//
+// There were two of these: the Coach card's, windowed to eight weeks, and the
+// Insights card's, which averaged every week on record. An engineer whose
+// round changed in the summer got "Monday is your strongest day" from one and
+// "Thursday" from the other, on the same screen, because a Monday-heavy
+// stretch from months earlier still outvoted the round he was driving now.
+// One function, and the window is part of the answer so the quoted average
+// belongs to the days it was measured over.
+function getStrongestWeekday(state) {
+  const wks = coachAverageWeeks(state, 8);
+  if (wks.length < 3) return null;
   const totals = [0,0,0,0,0], counts = [0,0,0,0,0];
-  pastWks.forEach(function(wkKey) {
+  wks.forEach(function(wkKey) {
     const wk = state.weeks[wkKey];
     weekDays(wkKey).slice(0,5).forEach(function(dk, i) {
       const jobs = (wk.days || {})[dk] || [];
@@ -672,14 +698,24 @@ function getHistoricallyStrongDay(state) {
       }
     });
   });
+  // Three showings before a day is allowed to be called typical.
   const avgs = totals.map(function(t, i) { return counts[i] >= 3 ? t / counts[i] : 0; });
   const maxAvg = Math.max.apply(null, avgs);
   if (maxAvg === 0) return null;
   const totalH = totals.reduce(function(s,t) { return s+t; }, 0);
   const totalC = counts.reduce(function(s,c) { return s+c; }, 0);
   const overallAvg = totalC > 0 ? totalH / totalC : 0;
+  // A day has to stand clear of the others to be worth naming. Without this a
+  // 5.01h day beats a 5.00h one and the engineer is told a pattern that is
+  // really just noise.
   if (maxAvg < overallAvg * 1.15) return null;
-  return ['Monday','Tuesday','Wednesday','Thursday','Friday'][avgs.indexOf(maxAvg)];
+  const idx = avgs.indexOf(maxAvg);
+  return { name: ['Monday','Tuesday','Wednesday','Thursday','Friday'][idx], index: idx, avgHours: maxAvg, weeks: wks.length };
+}
+
+function getHistoricallyStrongDay(state) {
+  const best = getStrongestWeekday(state);
+  return best ? best.name : null;
 }
 
 // ── Coach mode toggle (per-engineer display flag) ──────────────────────────
@@ -873,39 +909,30 @@ function getCoachInsights(state, weekKey, ctx) {
 
   // P3: Pattern insights (3+ completed weeks)
   if (nPast >= 3) {
-    const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-    const dayAvgs = [0, 1, 2, 3, 4].map(function(i) {
-      let total = 0, count = 0;
-      pastWks.forEach(function(wk) {
-        const dk = weekDays(wk)[i];
-        const w  = state.weeks[wk];
-        if (dayIsLeave(w, dk)) return;
-        const jobs = (w.days || {})[dk] || [];
-        if (jobs.length === 0) return;
-        total += jobs.reduce(function(s, j) { return s + j.creditMins; }, 0) / 60;
-        count++;
-      });
-      return count >= 2 ? total / count : null;
-    });
-    const bestIdx = dayAvgs.reduce(function(b, a, i) {
-      return a !== null && (b === -1 || a > dayAvgs[b]) ? i : b;
-    }, -1);
-    if (bestIdx >= 0) {
+    // One strongest-day answer for the whole app — see getStrongestWeekday.
+    // This used to average every week on record while the Coach card windowed
+    // to eight, so the two could name different days on the same screen.
+    const best = getStrongestWeekday(state);
+    if (best) {
+      const bestIdx = best.index;
       const todayDow = isCurrentWeek ? (new Date().getDay() + 6) % 7 : -1;
       if (todayDow === bestIdx) {
         insights.push({ kind: 'strongest_weekday', priority: 3, severity: 'green',
-          text: `${DAY_NAMES[bestIdx]} is your strongest day on average — you typically log ${dayAvgs[bestIdx].toFixed(2)}h. Make it count.` });
+          text: `${best.name} is your strongest day over the last ${best.weeks} weeks — you typically log ${best.avgHours.toFixed(2)}h. Make it count.` });
       } else {
         insights.push({ kind: 'strongest_weekday', priority: 4, severity: 'green',
-          text: `Your strongest day is usually ${DAY_NAMES[bestIdx]} — you average ${dayAvgs[bestIdx].toFixed(2)}h on that day` });
+          text: `Your strongest day is usually ${best.name} — you average ${best.avgHours.toFixed(2)}h on that day over the last ${best.weeks} weeks` });
       }
     }
 
     if (isCurrentWeek) {
       const weekNPTH = (week.deductionLog || []).reduce(function(s, d) { return s + d.mins; }, 0) / 60;
-      const avgNPTH  = pastWks.reduce(function(s, wk) {
+      // Was every week on record, under the word "recent". Two heavy weeks in
+      // the spring kept the bar high enough that a bad week now looked normal.
+      const nptWks = coachAverageWeeks(state, 8);
+      const avgNPTH = nptWks.length > 0 ? nptWks.reduce(function(s, wk) {
         return s + (state.weeks[wk].deductionLog || []).reduce(function(ds, d) { return ds + d.mins; }, 0);
-      }, 0) / nPast / 60;
+      }, 0) / nptWks.length / 60 : 0;
       if (avgNPTH > 0.1) {
         if (weekNPTH > avgNPTH * 1.3) {
           insights.push({ kind: 'npt_vs_average', priority: 3, severity: 'red',
@@ -917,7 +944,9 @@ function getCoachInsights(state, weekKey, ctx) {
       }
     }
 
-    const rateWks = pastWks.slice(-10);
+    // An Excluded week is a week the engineer set aside; counting it as a miss
+    // is exactly the reading CONTEXT.md rules out.
+    const rateWks = coachAverageWeeks(state, 10);
     const hits = rateWks.filter(function(wk) { return bonusAchieved(state, wk); }).length;
     if (rateWks.length >= 3) {
       const rate = hits / rateWks.length;
@@ -956,13 +985,22 @@ function getCoachInsights(state, weekKey, ctx) {
       const avg8  = last8.length > 0
         ? last8.reduce(function(s, wk) { return s + weekCreditHours(state.weeks[wk]); }, 0) / last8.length
         : 0;
+      // This multiplied the daily average by every working day in the week,
+      // which counts a day the engineer worked but logged nothing as though
+      // it had been earned on. With Tuesday blank it read "tracking 8.00h
+      // above your average" directly beneath a projection of 32.00h against
+      // a 32.00h average. Same counts as the projection now.
       const wkDays = weekDays(todayWk);
       const workedN = wkDays.filter(function(dk) {
         return dk <= todayKey && !dayIsLeave(week, dk) && ((week.days || {})[dk] || []).length > 0;
       }).length;
-      const workingN = wkDays.filter(function(dk) { return isWorkingDay(week, dk); }).length;
-      if (workedN >= 1 && workingN > 0 && last8.length > 0) {
-        const projFull = (weekEarned / workedN) * workingN;
+      const remainN = wkDays.filter(function(dk) {
+        if (dk < todayKey) return false;
+        if (!isWorkingDay(week, dk)) return false;
+        return ((week.days || {})[dk] || []).length === 0;
+      }).length;
+      if (workedN >= 1 && last8.length > 0) {
+        const projFull = weekEarned + (weekEarned / workedN) * remainN;
         const diff = projFull - avg8;
         if (Math.abs(diff) >= 0.3) {
           insights.push({ kind: 'tracking_vs_average', priority: 4, severity: diff >= 0 ? 'green' : 'amber',
@@ -971,14 +1009,15 @@ function getCoachInsights(state, weekKey, ctx) {
       }
     }
 
-    const last4 = pastWks.slice(-4);
-    const avg4earned = last4.reduce(function(s, wk) { return s + weekCreditHours(state.weeks[wk]); }, 0) / 4;
-    const avg4target = last4.reduce(function(s, wk) { return s + weekTargetHours(state, wk); }, 0) / 4;
+    const last4 = coachAverageWeeks(state, 4);
+    const n4 = last4.length;
+    const avg4earned = n4 > 0 ? last4.reduce(function(s, wk) { return s + weekCreditHours(state.weeks[wk]); }, 0) / n4 : 0;
+    const avg4target = n4 > 0 ? last4.reduce(function(s, wk) { return s + weekTargetHours(state, wk); }, 0) / n4 : 0;
     const avgGap = avg4earned - avg4target;
-    if (avgGap >= -0.6 && avgGap < -0.05) {
+    if (n4 >= 4 && avgGap >= -0.6 && avgGap < -0.05) {
       insights.push({ kind: 'consistency_4_week', priority: 4, severity: 'amber',
         text: `Your last 4 weeks have averaged ${avg4earned.toFixed(2)}h — just ${Math.abs(avgGap).toFixed(2)}h below target each time` });
-    } else if (avgGap >= 0.5) {
+    } else if (n4 >= 4 && avgGap >= 0.5) {
       insights.push({ kind: 'consistency_4_week', priority: 4, severity: 'green',
         text: `Your last 4 weeks have averaged ${avg4earned.toFixed(2)}h — consistently above target` });
     }
@@ -2132,6 +2171,8 @@ if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     getOfferedHiveIds: getOfferedHiveIds,
     getBestAdviceOpportunities: getBestAdviceOpportunities,
     getHistoricallyStrongDay: getHistoricallyStrongDay,
+    getStrongestWeekday: getStrongestWeekday,
+    coachAverageWeeks: coachAverageWeeks,
     isCoachModeOn: isCoachModeOn,
     getCoachInsights: getCoachInsights,
     weekSummary: weekSummary,
