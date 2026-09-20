@@ -106,6 +106,10 @@ _Avoid_: "actual" for any figure in this app — no number here comes from Centr
 The credit an engineer has entered for the week so far. It is what the app can vouch for and no more: it does not mean the business has agreed the figure, only that the taps were made. Paired with the **Predicted week** on the Week tile. See ADR-0023.
 _Avoid_: "actual hours", "actual credits" (claims a confirmation the app never receives)
 
+**Banked balance**:
+The **CTAP balance** from closed weeks only — `cumulativeBalance`. What the CTAP tile shows on **Logged**, what cash-out pays against as **Payable balance**, and the debt a deficit recovery plan is written against. Distinct from the **Predicted balance** (banked plus where this week lands), which is what the tile shows by default. Any surface stating the banked figure while the tile is predicting must say *banked* or *from closed weeks*, or the two read as rival answers to one question. See ADR-0023.
+_Avoid_: a bare "CTAP balance" on the Dashboard (ambiguous between the two since ADR-0023)
+
 **Recent average**:
 The mean credit hours across an engineer's recent **Representative weeks**, reported by **Coach Insight** as context — "tracking 2.10h below your 8-week average of 29.40h". It is information about trend, never a threshold and never a target: a bar computed from what the engineer achieved is a bar they meet by construction, which froze one test engineer's **CTAP balance** at −28h while the real figure walked to −84h. See ADR-0022.
 _Avoid_: "rolling average target", "average target" (both name the superseded mechanism that set the **CTAP target**)

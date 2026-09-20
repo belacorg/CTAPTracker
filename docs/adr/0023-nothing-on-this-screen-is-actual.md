@@ -23,3 +23,24 @@ Two guards, both hiding the toggle rather than offering a mode that would print 
 Alternative considered: drop the toggle and show the prediction alone. Rejected — the banked figure is what an engineer checks against their own notes, and it should not take a tap to reach. It is on the tile either way, as the caption under a prediction: "15.00h logged over 3 days · 1 to go".
 
 Alternative considered: keep "Actual" and add a footnote. Rejected. A label that needs a footnote to stop being untrue is the wrong label.
+
+## What the tiles then contradicted
+
+Moving the tiles to a prediction put them at odds with the Coach card sitting directly above them, which still read the banked balance and the running total. On one screen, from one set of stored jobs:
+
+> **Coach:** You're in credit — staying consistent this week protects your balance.
+> **CTAP tile:** Deficit · −20.00h · predicted balance
+
+Worse than the mismatch: at 2h a day against a 32h target, *staying consistent* is precisely what spends the credit. The reassurance was pinned to the behaviour causing the problem — a bug in the advice, not only in the arithmetic.
+
+The rule applied throughout: **Coach reads the same figures the tiles print, and where it genuinely means the banked balance it says so.** The two are different questions — what is banked from closed weeks, and where this week is heading — and naming them stops them reading as rival answers to one.
+
+- The credit line is now pace-aware: *"You're 4.00h in credit from closed weeks, but this week's pace gives 24.00h of it back."* When the pace holds the credit, the reassurance stands.
+- Deficit advice keeps the banked figure, because a banked deficit is the real debt and "clear it in 4 weeks" is advice about that debt. It says *from closed weeks*.
+- `ctap_deficit` in **Coach Insight** carries the same scoping, for the same reason.
+- Bare *"CTAP balance: +X.XXh"* became *"Banked CTAP balance"*.
+- The first-week line said the balance "moves when this week closes, not as you log". Under a predicted balance that is false — it moves with every job. It now says the balance is the pace projected forward and only *banks* when the week closes.
+
+Two counts of the same thing also disagreed on screen. Coach counted every working day from today on, including one already logged, while the Forecast sheet counted only the empty ones: *"3 remaining days"* above *"Days left 2"*. Coach takes `daysRemaining` from `weekPaceFigures` now. The bonus branch had a third copy of the projection working the same predicates out again; it takes `projected` from the same place.
+
+Cash-out was left alone. It pays out **Payable balance**, which can only ever be the banked figure, and the label already says which balance it means.

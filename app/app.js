@@ -4442,10 +4442,22 @@ function buildCoachCard() {
   const pastWks = Object.keys(state.weeks).filter(wk => wk < todayWk).sort();
   const msgs = [];
 
+  // Coach sits directly above the two tiles, and since ADR-0023 those tiles
+  // lead with the predicted week. Reading the banked balance here without
+  // saying so put "You're in credit" above a tile marked Deficit, off the same
+  // stored jobs — and the advice attached to it, "stay consistent", was the
+  // very thing spending the credit. Coach reads the same figures now, and
+  // where it does mean the banked balance it says banked.
+  const pace = weekPaceFigures(todayWk, week);
+  const canPredict = pace.projected !== null && !pace.isSettled;
+
   if (bal < -0.05) {
     const deficitH = Math.abs(bal);
     const extraPerDay = deficitH / 20;
-    msgs.push(`You're ${deficitH.toFixed(2)}h in deficit. To clear it in 4 weeks, aim for +${extraPerDay.toFixed(2)}h above target each day.`);
+    // "from closed weeks" is not padding: on a strong week the tile beside
+    // this line predicts a credit, and without it the two read as rival
+    // answers to one question rather than two different questions.
+    msgs.push(`You're ${deficitH.toFixed(2)}h in deficit from closed weeks. To clear it in 4 weeks, aim for +${extraPerDay.toFixed(2)}h above target each day.`);
     const lastWkKey = pastWks.filter(wk => !state.weeks[wk].excludeFromCtap).pop();
     if (lastWkKey) {
       const lastWk = state.weeks[lastWkKey];
@@ -4466,7 +4478,15 @@ function buildCoachCard() {
     // morning. Telling the last of those that consistency "protects your balance"
     // points at a balance that does not exist yet, and is the first thing the app
     // ever says to them.
-    if (bal > 0.05) {
+    if (bal > 0.05 && canPredict && pace.projGap < -0.05) {
+      // The old line here was "staying consistent this week protects your
+      // balance". At 2h a day against a 32h target, staying consistent is
+      // exactly what spends the credit — the reassurance was attached to the
+      // behaviour causing the problem.
+      msgs.push(`You're ${bal.toFixed(2)}h in credit from closed weeks, but this week's pace gives ${Math.abs(pace.projGap).toFixed(2)}h of it back.`);
+    } else if (bal > 0.05 && canPredict) {
+      msgs.push(`You're ${bal.toFixed(2)}h in credit from closed weeks, and this week's pace holds it. Keep going.`);
+    } else if (bal > 0.05) {
       msgs.push(`You're in credit — staying consistent this week protects your balance.`);
     } else if (!pastWks.length && earnedHours < 0.05) {
       msgs.push(`Nothing logged yet, so the balance below is still zero. It starts moving the first time you log a job.`);
@@ -4474,12 +4494,18 @@ function buildCoachCard() {
       // The balance only moves when a week completes, so an engineer in their
       // first week is looking at a zero that their logging has not failed to
       // change — it has not had the chance yet.
-      msgs.push(`First week in. The balance below moves when this week closes, not as you log.`);
+      msgs.push(canPredict
+        ? `First week in. The balance below is this week's pace projected forward — it only banks when the week closes.`
+        : `First week in. The balance below moves when this week closes, not as you log.`);
     } else {
-      msgs.push(`You're level — neither in credit nor in deficit. A week above target puts you in front.`);
+      msgs.push(canPredict
+        ? `Your banked balance is level — neither in credit nor in deficit. A week above target puts you in front.`
+        : `You're level — neither in credit nor in deficit. A week above target puts you in front.`);
     }
-    const todayKey = getTodayKey();
-    const remainDays = weekDays(todayWk).filter(dk => dk >= todayKey && isWorkingDay(week, dk)).length;
+    // This counted every working day from today on, including one already
+    // logged, while the Forecast sheet two inches below counted only the empty
+    // ones — "3 remaining days" over "Days left 2" on one screen. One count.
+    const remainDays = pace.daysRemaining;
     const needed = targetHours - earnedHours;
     if (needed > 0.05 && remainDays > 0) {
       msgs.push(`You need ${needed.toFixed(2)}h across ${remainDays} remaining day${remainDays === 1 ? '' : 's'} to hit this week's target.`);
@@ -4495,25 +4521,19 @@ function buildCoachCard() {
     if (streak >= 2) {
       msgs.push(`You've hit target ${streak} weeks in a row — great consistency.`);
     } else {
-      const todayKey = getTodayKey();
-      const wkDaysAll = weekDays(todayWk);
-      const workedDays = wkDaysAll.filter(dk => dk <= todayKey && !dayIsLeave(week, dk) && ((week.days||{})[dk]||[]).length > 0).length;
-      // Today counts while it still has nothing on it — see the same predicate
-      // in buildWeekForecastSheet and in the week_projection insight.
-      const remainDays = wkDaysAll.filter(dk =>
-        dk >= todayKey && isWorkingDay(week, dk) && ((week.days || {})[dk] || []).length === 0).length;
-      if (workedDays > 0 && remainDays > 0) {
-        const projected = earnedHours + (earnedHours / workedDays) * remainDays;
-        msgs.push(`At your current pace, you'll finish on ${projected.toFixed(2)} hours. This is ${(projected - targetHours).toFixed(2)} hours above target.`);
+      // Was a third copy of the projection, working the same predicates out
+      // again. weekPaceFigures is the one answer the tile and the sheet print.
+      if (canPredict) {
+        msgs.push(`At your current pace, you'll finish on ${pace.projected.toFixed(2)} hours. This is ${pace.projGap.toFixed(2)} hours above target.`);
       } else {
-        msgs.push(`CTAP balance: +${bal.toFixed(2)}h — you're in credit. Keep the consistency going.`);
+        msgs.push(`Banked CTAP balance: +${bal.toFixed(2)}h — you're in credit. Keep the consistency going.`);
       }
     }
     const strongDay = getHistoricallyStrongDay(state);
     if (strongDay) {
       msgs.push(`${strongDay} is typically your strongest day — a good one to push for more.`);
     } else if (bal > 0.05) {
-      msgs.push(`CTAP balance: +${bal.toFixed(2)}h in credit. Keep the consistency going.`);
+      msgs.push(`Banked CTAP balance: +${bal.toFixed(2)}h in credit. Keep the consistency going.`);
     }
   }
 

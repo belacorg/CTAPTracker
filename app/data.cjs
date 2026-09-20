@@ -762,16 +762,20 @@ function getCoachInsights(state, weekKey, ctx) {
 
   // P2: Current-week actionable
   if (isCurrentWeek) {
+    // Scoped to closed weeks in the wording, for the same reason the Coach
+    // card is: the tiles on this screen lead with the predicted week, and a
+    // bare "CTAP is 10.00h in deficit" under a tile predicting a credit reads
+    // as a second opinion rather than a different question. See ADR-0023.
     const bal = cumulativeBalance(state);
     if (bal < -0.1) {
       const surplus = weekEarned - weekTarget;
       if (surplus > 0.1) {
         const wks = Math.ceil(-bal / surplus);
         insights.push({ kind: 'ctap_deficit', priority: 2, severity: 'red',
-          text: `CTAP is ${Math.abs(bal).toFixed(2)}h in deficit — at this week's surplus you'd clear it in ~${wks} week${wks === 1 ? '' : 's'}` });
+          text: `CTAP is ${Math.abs(bal).toFixed(2)}h in deficit from closed weeks — at this week's surplus you'd clear it in ~${wks} week${wks === 1 ? '' : 's'}` });
       } else {
         insights.push({ kind: 'ctap_deficit', priority: 2, severity: 'red',
-          text: `CTAP is ${Math.abs(bal).toFixed(2)}h in deficit — you'll need a weekly surplus above target to start recovering` });
+          text: `CTAP is ${Math.abs(bal).toFixed(2)}h in deficit from closed weeks — you'll need a weekly surplus above target to start recovering` });
       }
     }
 
