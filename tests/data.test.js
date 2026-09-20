@@ -507,3 +507,64 @@ describe('daily targets sum to the weekly target', () => {
     expect(sumDays(state, '2026-09-14')).toBeCloseTo(weekly, 5);
   });
 });
+
+// "Around 7 more jobs at breakdown rate" was accurate and close to useless:
+// nobody's day is seven breakdowns. The engineer had to do the arithmetic
+// themselves to work out what would actually close the gap.
+describe('describeJobMix — a day\'s shortfall as work', () => {
+  const fresh = { baseHours: 40, weeklyTargetPct: 0.8, weeks: {} };
+  const logged = (ids) => {
+    const days = {};
+    ids.forEach((id, i) => { days['2026-08-' + String(10 + i).padStart(2, '0')] = [{ id, creditMins: 60, ts: i + 1 }]; });
+    return { baseHours: 40, weeklyTargetPct: 0.8, weeks: { '2026-08-03': { days } } };
+  };
+  const rep = (id, n) => Array(n).fill(id);
+
+  it('offers a mix rather than a pile of one job', () => {
+    const text = data.describeJobMix(fresh, 6.4);
+    expect(text).toBe('3 breakdowns, 3 services and 2 fire services');
+    expect(data.jobMixForGap(fresh, 6.4)).toHaveLength(3);
+  });
+
+  it('covers the gap, never falling short of it', () => {
+    for (const gap of [1.2, 2.1, 3.2, 4.0, 5.0, 6.4, 7.5]) {
+      const mix = data.jobMixForGap(fresh, gap);
+      const total = mix.reduce((s, e) => s + e.hours, 0);
+      expect(total, gap + 'h').toBeGreaterThanOrEqual(gap - 0.05);
+    }
+  });
+
+  it('says nothing when the gap is too big for a day, rather than suggesting a mix that misses', () => {
+    // The caller falls back to the flat count. A suggestion that quietly
+    // doesn't close the gap is worse than a blunt one that admits the size.
+    expect(data.describeJobMix(fresh, 12)).toBe('');
+    expect(data.jobMixForGap(fresh, 12)).toEqual([]);
+  });
+
+  it('describes this engineer\'s work, not a generic day', () => {
+    const hive = data.describeJobMix(logged([...rep('hvi_wls', 5), ...rep('hvi_min', 4), ...rep('hvi_trv', 3)]), 6.4);
+    expect(hive).toMatch(/Hive|TRV/);
+    expect(hive).not.toContain('breakdown');
+
+    const fires = data.describeJobMix(logged([...rep('asv_fre', 6), ...rep('asv_hob_ckr_ovn', 4), ...rep('gas_repair', 3)]), 6.4);
+    expect(fires).toContain('fire service');
+  });
+
+  it('leaves out add-ons, which ride on a visit rather than filling one', () => {
+    // Counting leads and inhibitors as the day's work would overstate what
+    // there is room for.
+    const text = data.describeJobMix(logged([...rep('hi_lead', 8), ...rep('add_inhibitor', 6), ...rep('gas_repair', 2)]), 6.4);
+    expect(text).not.toMatch(/lead|inhibitor/i);
+    expect(text).toContain('breakdown');
+  });
+
+  it('uses the words engineers say, and gets the singular right', () => {
+    expect(data.describeJobMix(fresh, 1.5)).toBe('a breakdown and a service');
+    expect(data.describeJobMix(fresh, 1.5)).not.toContain('1 breakdown');
+  });
+
+  it('offers nothing for a gap that is already closed', () => {
+    expect(data.describeJobMix(fresh, 0)).toBe('');
+    expect(data.describeJobMix(fresh, -2)).toBe('');
+  });
+});

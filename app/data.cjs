@@ -411,6 +411,109 @@ function getLogWeekStrip(state, weekKey, todayKey) {
   });
 }
 
+// ── What a day's shortfall looks like as jobs ──────────────────────────────
+//
+// "Around 7 more jobs at breakdown rate" was accurate and close to useless:
+// nobody's day is seven breakdowns. An engineer reads the hours figure and has
+// to do the arithmetic themselves to work out what would actually close it.
+//
+// The mix is built from the jobs that engineer logs most, so it describes their
+// day rather than a generic one, and round-robin rather than greedy so it stays
+// a mix instead of a pile of whichever job pays best. It is illustrative — you
+// do not choose what comes through — but it turns a number into a shape.
+//
+// Add-ons are left out. A boiler lead or an inhibitor rides on a visit rather
+// than filling one, so counting them as the day's work would overstate what
+// there is room for. Only jobs that take a slot: core and Hive.
+const MIX_NAMES = {
+  gas_repair:          ['breakdown', 'breakdowns'],
+  oow_chb:             ['warranty repair', 'warranty repairs'],
+  linked_ib:           ['linked fire repair', 'linked fire repairs'],
+  asv_chb_cir_wh_swh:  ['service', 'services'],
+  asv_fre:             ['fire service', 'fire services'],
+  asv_hob_ckr_ovn:     ['cooker service', 'cooker services'],
+  asv_bbf_wau_waw_aga: ['back boiler service', 'back boiler services'],
+  asv_mwh_wal:         ['water heater service', 'water heater services'],
+  ods_chb:             ['one-off service', 'one-off services'],
+  fv_chb:              ['first visit', 'first visits'],
+  fv_bbf_wau_waw:      ['back boiler first visit', 'back boiler first visits'],
+  ib_ff:               ['first fix', 'first fixes'],
+  remedial_safety:     ['remedial', 'remedials'],
+  ld_completed:        ['long duration', 'long durations'],
+  ld_unv:              ['unvented long duration', 'unvented long durations'],
+  oca:                 ['OCA', 'OCAs'],
+  free_gas_safety:     ['free safety check', 'free safety checks'],
+  as_inst:             ['landlord cert', 'landlord certs'],
+  hvi_hub:             ['OpenTherm upgrade', 'OpenTherm upgrades'],
+  hvi_min:             ['Hive Mini', 'Hive Minis'],
+  hvi_wls:             ['Hive install', 'Hive installs'],
+  hvi_wrd:             ['wired Hive install', 'wired Hive installs'],
+  hvi_imz:             ['extra zone', 'extra zones'],
+  hvi_trv:             ['TRV', 'TRVs'],
+  hvi_iio:             ['Hive I/O', 'Hive I/Os'],
+  hvu_the:             ['Hive upgrade', 'Hive upgrades'],
+  hive_repair:         ['Hive repair', 'Hive repairs'],
+  recall_hive:         ['Hive recall', 'Hive recalls'],
+  inshv_min:           ['Hive Mini install', 'Hive Mini installs'],
+  inshv_thr:           ['Hive thermostat install', 'Hive thermostat installs']
+};
+
+// A day nobody could fill. Past this the suggestion stops being a plan.
+const MIX_MAX_JOBS = 12;
+// Close enough: stopping a hair short beats adding a whole extra job to cover
+// four minutes.
+const MIX_TOLERANCE_H = 0.05;
+
+function jobMixForGap(state, gapHours) {
+  if (!(gapHours > 0)) return [];
+  const slotIds = {};
+  [].concat(JOB_TYPES.core || [], JOB_TYPES.hive || []).forEach(function(j) {
+    if (!j.variable && j.minutes > 0) slotIds[j.id] = true;
+  });
+  // The engineer's own most-logged work. getTopJobs seeds itself from a common
+  // domestic gas day, so a new engineer gets a sensible mix on morning one.
+  const candidates = getTopJobs(state, 8)
+    .filter(function(j) { return slotIds[j.id]; })
+    .slice(0, 3);
+  if (candidates.length === 0) return [];
+
+  const counts = candidates.map(function() { return 0; });
+  let total = 0;
+  let n = 0;
+  while (total < gapHours - MIX_TOLERANCE_H && n < MIX_MAX_JOBS) {
+    const i = n % candidates.length;
+    counts[i]++;
+    total += candidates[i].minutes / 60;
+    n++;
+  }
+  // A gap too big for a day's work hits the cap and lands short. Offering a
+  // mix that does not close it would be a suggestion that quietly doesn't
+  // work, so say nothing and let the caller fall back.
+  if (total < gapHours - MIX_TOLERANCE_H) return [];
+  return candidates.map(function(j, i) {
+    return { id: j.id, count: counts[i], hours: counts[i] * j.minutes / 60 };
+  }).filter(function(e) { return e.count > 0; });
+}
+
+function mixName(id, count) {
+  const pair = MIX_NAMES[id];
+  if (pair) return count === 1 ? pair[0] : pair[1];
+  const job = findJob(id);
+  const base = (job ? job.name : id).replace(/\s*\(.*$/, '').toLowerCase();
+  return count === 1 ? base : base + 's';
+}
+
+// "a service, 3 breakdowns and 2 fire services"
+function describeJobMix(state, gapHours) {
+  const mix = jobMixForGap(state, gapHours);
+  if (mix.length === 0) return '';
+  const parts = mix.map(function(e) {
+    return (e.count === 1 ? 'a ' : e.count + ' ') + mixName(e.id, e.count);
+  });
+  if (parts.length === 1) return parts[0];
+  return parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];
+}
+
 // ── Most-used jobs ─────────────────────────────────────────────────────────
 //
 // 51 job types is a long scroll to hit the same handful of tiles every day.
@@ -639,9 +742,14 @@ function getCoachInsights(state, weekKey, ctx) {
       insights.push({ kind: 'daily_target_status', priority: 1, severity: 'amber',
         text: `${gap.toFixed(2)}h to go today — one more job puts you there` });
     } else {
+      // What that gap looks like as work, from the jobs this engineer logs
+      // most. Falls back to the flat count when the gap is too big for a day.
+      const mix = describeJobMix(state, gap);
       const n = Math.ceil(gap / breakdownHrs);
       insights.push({ kind: 'daily_target_status', priority: 1, severity: 'amber',
-        text: `${gap.toFixed(2)}h still needed today — around ${n} more job${n === 1 ? '' : 's'} at breakdown rate` });
+        text: mix
+          ? `${gap.toFixed(2)}h still needed today — ${mix} would do it`
+          : `${gap.toFixed(2)}h still needed today — around ${n} more job${n === 1 ? '' : 's'} at breakdown rate` });
     }
 
     if (todayNPTMins > 0) {
@@ -2012,6 +2120,8 @@ if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     paceProjection: paceProjection,
     getLogWeekStrip: getLogWeekStrip,
     getTopJobs: getTopJobs,
+    jobMixForGap: jobMixForGap,
+    describeJobMix: describeJobMix,
     TOP_JOBS_SEED: TOP_JOBS_SEED,
     getElectiveJobs: getElectiveJobs,
     getElectiveJobForGap: getElectiveJobForGap,
