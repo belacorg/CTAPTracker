@@ -16,7 +16,7 @@ _Avoid_: "CTAP" (unqualified) when you mean the balance
 The engineer's CTAP position at the moment they began using CTAP Tracker — used so the app's running balance reflects reality, not zero. Positive (engineer is in surplus) or negative (engineer is in deficit and using the app to recover). Also the value the engineer manually reduces after a **Cash out** to true the app back up with their post-sale standing.
 
 **Excluded week**:
-A week marked to be ignored when computing **CTAP balance**. Used for: weeks of full sickness/absence where credit hours would be zero through no fault of the engineer; weeks during a phased return to work; and historical "warm-up" weeks added while the engineer was still figuring the app out. An **Excluded week** is still visible in history but contributes nothing to the running balance.
+A week marked to be ignored when computing **CTAP balance** *and* when computing the **Rolling average target**. Used for: weeks of full sickness/absence where credit hours would be zero through no fault of the engineer; weeks during a phased return to work; and historical "warm-up" weeks added while the engineer was still figuring the app out. An **Excluded week** is still visible in history but contributes nothing to the running balance and teaches the target nothing.
 
 **Early Finish**:
 An engineer finishing the working day before their scheduled shift end (an in-day partial holiday). Logged as an **NPT** entry so it reduces this week's **CTAP target** — the engineer isn't expected to produce credits during hours they weren't on the clock. *Additionally*, at the moment of logging, the engineer picks a disposition for those hours:
@@ -99,8 +99,12 @@ One thing worth recommending after a service or repair today — Hive, inhibitor
 A per-engineer toggle that controls whether **Coach Insight** surfaces are shown. **On by default** — the stored preference is only ever read as "off when explicitly set to off", so a fresh install sees Coach. This entry previously said off by default, which the code has never done; the behaviour is the intended one and the doc was wrong. Does not affect calculation — only display.
 
 **Rolling average target**:
-Once an engineer has 4+ completed weeks of credited work, the **CTAP target** stops using the static **CTAP percentage** and instead uses a rolling average of recent weeks (scaled by current roster).
+Once an engineer has 4+ **Representative weeks**, the **CTAP target** stops using the static **CTAP percentage** and instead uses a rolling average of those weeks (scaled by current roster).
 _Avoid_: "average target"
+
+**Representative week**:
+A completed week whose record is complete enough to teach the **Rolling average target** something: not an **Excluded week**, it asked for more than zero hours, and its credit came to at least 40% of what it asked. A week below that is not a bad week — it is a week the engineer stopped logging partway through, and averaging it in moves the **CTAP target** rather than the credit. Because the target moves silently, the Dashboard then reads "you smashed it" rather than reading as an error, which is what makes an incomplete week worse than an empty one.
+_Avoid_: "valid week", "good week" (the test is completeness of the record, not performance)
 
 **Check-in**:
 A day's turn in a coaching conversation the engineer has with themselves — one

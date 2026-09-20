@@ -266,12 +266,39 @@ function adjustedTargetHours(state, week) {
   return Math.max(0, rostered * pct - npt);
 }
 
+// A week only teaches the rolling average something if it holds a full record
+// of the work. Below this share of what the week actually asked for, it is not
+// a bad week — it is a week the engineer stopped logging partway through, and
+// averaging it in moves the target instead of the credit.
+//
+// 0.4 is deliberately generous: ADR-0003 wants the average to absorb real
+// travel and Performance Factor variation, which runs to tens of percent, not
+// to ninety. A week under 40% is missing data, not a hard week.
+const MIN_WEEK_COMPLETENESS = 0.4;
+
+function weekIsRepresentative(state, week) {
+  const asked = adjustedTargetHours(state, week);
+  // A week that asked for nothing — all leave, or a full mentor week — says
+  // nothing about the engineer's output either way.
+  if (asked <= 0) return false;
+  return weekCreditHours(week) >= asked * MIN_WEEK_COMPLETENESS;
+}
+
 // Rolling average of last 4–6 completed non-empty weeks before weekKey
 // Returns { avg, n } or null when fewer than 4 qualifying weeks exist
+//
+// An **Excluded week** is skipped here as it is everywhere else. It used not to
+// be, and that was the worst bug in the app: a week the engineer had explicitly
+// marked "ignore this, I was still working the app out" still set their **CTAP
+// target** for the following weeks. Four warm-up weeks with a job or two in
+// them put the target at 1.63h against a real 32h — and because the target had
+// moved rather than the credit, the Dashboard told them they had smashed it.
 function rollingAvgInfo(state, weekKey) {
   const cutoff = weekKey || getWeekKey(new Date());
   const qualifying = Object.keys(state.weeks)
-    .filter(wk => wk < cutoff && weekCreditHours(state.weeks[wk]) > 0)
+    .filter(wk => wk < cutoff
+      && !state.weeks[wk].excludeFromCtap
+      && weekIsRepresentative(state, state.weeks[wk]))
     .sort()
     .slice(-6);
   if (qualifying.length < 4) return null;
@@ -1971,6 +1998,8 @@ if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     shiftHours: shiftHours,
     dayIsLeave: dayIsLeave,
     isRestDay: isRestDay,
+    weekIsRepresentative: weekIsRepresentative,
+    MIN_WEEK_COMPLETENESS: MIN_WEEK_COMPLETENESS,
     isWorkingDay: isWorkingDay,
     weekLeaveHours: weekLeaveHours,
     getDailyTarget: getDailyTarget,

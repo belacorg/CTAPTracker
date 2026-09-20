@@ -519,7 +519,9 @@ function buildDashboard() {
         </div>
         <div class="split-hours">${earnedHours.toFixed(2)}<span class="split-unit">h</span></div>
         <div class="week-rostered-row">Rostered ${rosteredH.toFixed(1)}h <span class="week-rostered-sep">·</span> Target ${displayTargetH.toFixed(1)}h</div>
-        ${isRolling ? `<div class="week-target-basis">Rolling avg · last ${rollingN} weeks</div>` : ''}
+        <div class="week-target-basis">${isRolling
+          ? `Rolling avg · last ${rollingN} weeks`
+          : `${rosteredH.toFixed(1)}h rostered × ${Math.round((typeof state.weeklyTargetPct === 'number' ? state.weeklyTargetPct : 0.8) * 100)}%`}</div>
         <div class="week-chart">${weekBarsHTML}</div>
       </div>
     </div>
