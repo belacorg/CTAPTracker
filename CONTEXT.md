@@ -98,6 +98,14 @@ One thing worth recommending after a service or repair today — Hive, inhibitor
 **Coach mode**:
 A per-engineer toggle that controls whether **Coach Insight** surfaces are shown. **On by default** — the stored preference is only ever read as "off when explicitly set to off", so a fresh install sees Coach. This entry previously said off by default, which the code has never done; the behaviour is the intended one and the doc was wrong. Does not affect calculation — only display.
 
+**Predicted week**:
+Where the week lands if the engineer keeps the pace they have set: credit logged so far, plus the average of the days worked applied to the working days still to come. Shown on the Dashboard's Week tile, on the Weekly Forecast sheet and in the **CTAP balance** beside it — all three off `weekPaceFigures`, so they cannot disagree. Undefined until a day has been logged and meaningless once every working day is in; in both cases the tile shows the **Logged week** instead and offers no toggle. See ADR-0023.
+_Avoid_: "actual" for any figure in this app — no number here comes from Centrica (ADR-0023)
+
+**Logged week**:
+The credit an engineer has entered for the week so far. It is what the app can vouch for and no more: it does not mean the business has agreed the figure, only that the taps were made. Paired with the **Predicted week** on the Week tile. See ADR-0023.
+_Avoid_: "actual hours", "actual credits" (claims a confirmation the app never receives)
+
 **Recent average**:
 The mean credit hours across an engineer's recent **Representative weeks**, reported by **Coach Insight** as context — "tracking 2.10h below your 8-week average of 29.40h". It is information about trend, never a threshold and never a target: a bar computed from what the engineer achieved is a bar they meet by construction, which froze one test engineer's **CTAP balance** at −28h while the real figure walked to −84h. See ADR-0022.
 _Avoid_: "rolling average target", "average target" (both name the superseded mechanism that set the **CTAP target**)

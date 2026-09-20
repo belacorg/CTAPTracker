@@ -253,11 +253,20 @@ live.
 
 The week at a glance:
 
-- **% badge** — % of weekly target earned.
-- **Actual / Projected** toggle — flips the headline hours figure between
-  what's actually banked and what you're on pace to finish at.
+- **% badge** — % of weekly target, for whichever figure is showing.
+- **Predicted / Logged** toggle — flips the headline hours figure between
+  where your current pace lands you by Sunday and what you have entered so
+  far. It opens on **Predicted**, and it moves the CTAP balance beside it
+  too. Under a prediction the tile keeps the entered figure in small text
+  ("15.00h logged over 3 days · 1 to go"), so the two are never confused.
+  The toggle is hidden when there is nothing to predict — before your first
+  job of the week, and once every working day is logged.
 - **Daily bar chart** — quick visual of each weekday's earnings.
 - **Tap the tile** to open the Weekly Forecast sheet.
+
+Neither figure comes from Centrica. Both are built from your own taps scored
+against the job catalogue, so treat them as your reckoning of what you are owed
+— worth checking against your payslip, not a replacement for it.
 
 #### Why the % colour is pace-aware
 
@@ -272,6 +281,11 @@ Tuesday would be nonsense; they're actually doing fine.
 
 Past and future weeks fall back to absolute thresholds since pace doesn't
 apply to them.
+
+That is the colour on the **Logged** reading, where the question is "am I
+keeping up?". On **Predicted** the question has already been answered for the
+whole week, so the badge is coloured by the finish instead: green if the pace
+lands you on or above target, amber within 10% of it, red below that.
 
 ### Weekly Forecast sheet
 

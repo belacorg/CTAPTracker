@@ -26,7 +26,12 @@ let logCategory = null;
 let lastLoggedTs = null;
 let jobSearch = '';
 let logSearchOpen = false;
-let ctapProjectedMode = false;
+// The dashboard opens on the predicted end-of-week figure, not the running
+// total. Nothing in this app is a number from the business — every credit is
+// the engineer's own tap scored against the catalogue — so a tab labelled
+// "Actual" was claiming an authority it never had. The honest pair is what the
+// week is heading for (Predicted) against what has been entered (Logged).
+let ctapProjectedMode = true;
 let expandedZeroWeek = null;
 let weekendExpanded = false;
 let openSettingsInfo = null;
@@ -362,13 +367,40 @@ function buildDashboard() {
     weekColour = weekPct >= 90 ? 'green' : weekPct >= 70 ? 'amber' : 'red';
   }
 
+  // ── Predicted end of week ──
+  // The toggle used to sit on the Week tile but move only the CTAP balance
+  // beside it, so tapping "Projected" left the week's own hours sitting still
+  // and the control read as broken. It drives both tiles now, off the same
+  // figures the Weekly Forecast sheet prints — the tile is a preview of the
+  // sheet, and tapping it opens the full working.
+  const pace = weekPaceFigures(currentWeekKey, week);
+  // Nothing to predict from until a day has been logged, and nothing left to
+  // predict once every working day is in. Both cases hide the toggle rather
+  // than offer a mode that would show the same number twice.
+  const weekPredictable = isCurrentWeek && pace.projected !== null && !pace.isSettled;
+  const showPredicted = weekPredictable && ctapProjectedMode;
+  const displayWeekH = showPredicted ? pace.projected : earnedHours;
+  const displayWeekPct = targetH > 0 ? Math.min((displayWeekH / targetH) * 100, 100) : 0;
+  // In predicted mode the honest question is no longer "are you keeping pace?"
+  // but "does this pace land the bonus?", so colour by the gap at the finish.
+  const displayWeekColour = showPredicted
+    ? (pace.projGap >= 0 ? 'green' : pace.projGap >= -(targetH * 0.1) ? 'amber' : 'red')
+    : weekColour;
+
   // ── CTAP balance ──
   const bal = cumulativeBalance(state);
-  // Projected = actual + current week's contribution as if it closed now
-  const projectedBal = isCurrentWeek
-    ? bal + weekCreditHours(week) - weekTargetHours(state, currentWeekKey)
+  // The balance this week is heading for: what is banked from closed weeks,
+  // plus the surplus or shortfall this week lands on at the current pace.
+  // It used to close the week off today instead, which was defensible while
+  // the tile beside it said "Actual" — but two tiles both captioned predicted
+  // and disagreeing by a day's work is worse than either reading alone.
+  const projectedBal = isCurrentWeek && pace.projected !== null
+    ? bal + pace.projected - pace.targetHours
     : bal;
-  const displayBal = isCurrentWeek && ctapProjectedMode ? projectedBal : bal;
+  // Tied to the same switch as the Week tile, and to the same guard: with no
+  // day logged yet, "projected" would book the whole week's target as a
+  // deficit and there would be no visible toggle to get back from it.
+  const displayBal = showPredicted ? projectedBal : bal;
   // Zero is its own state, not the bottom of "in credit". Every engineer starts
   // the trial at 0.00 with nothing logged, and an app that opens by congratulating
   // them on a balance they have not earned reads as decoration rather than a
@@ -510,18 +542,20 @@ function buildDashboard() {
           <span class="status-badge ${balColour}" style="font-size:0.55rem;padding:2px 7px">${balLabel}</span>
         </div>
         <div class="split-hours" style="color:var(--${balLevel ? 'muted' : balColour})">${balSign}${balIntNum}${balDecStr}<span class="split-unit">h</span></div>
-        <div class="split-sub">balance</div>
+        <div class="split-sub">${showPredicted ? 'predicted balance' : 'balance'}</div>
         ${isCurrentWeek ? `<div class="split-pace pace-muted">Starting: ${(state.startingBalance || 0) >= 0 ? '+' : ''}${(state.startingBalance || 0).toFixed(2)}h</div>` : ''}
       </div>
       <div class="split-card" id="week-tile">
         <div class="split-card-top">
           <span class="split-card-label">Week</span>
           <div style="display:flex;align-items:center;gap:6px">
-            ${isCurrentWeek ? `<button id="ctap-proj-toggle" class="ctap-proj-btn${ctapProjectedMode ? ' active' : ''}">${ctapProjectedMode ? 'Projected' : 'Actual'}</button>` : ''}
-            <span class="pct-badge pct-badge-${weekColour}">${Math.round(weekPct)}%</span>
+            ${isCurrentWeek && weekPredictable ? `<button id="ctap-proj-toggle" class="ctap-proj-btn${ctapProjectedMode ? ' active' : ''}" aria-label="${ctapProjectedMode ? 'Showing predicted end of week. Tap to show hours logged so far.' : 'Showing hours logged so far. Tap to show predicted end of week.'}">${ctapProjectedMode ? 'Predicted' : 'Logged'}</button>` : ''}
+            <span class="pct-badge pct-badge-${displayWeekColour}">${Math.round(displayWeekPct)}%</span>
           </div>
         </div>
-        <div class="split-hours">${earnedHours.toFixed(2)}<span class="split-unit">h</span></div>
+        <div class="split-hours">${displayWeekH.toFixed(2)}<span class="split-unit">h</span></div>
+        ${weekPredictable ? `<div class="split-sub">${showPredicted ? 'predicted end of week' : 'logged so far'}</div>` : ''}
+        ${showPredicted ? `<div class="week-pred-basis">${pace.earnedHours.toFixed(2)}h logged over ${pace.daysWorked} day${pace.daysWorked === 1 ? '' : 's'} · ${pace.daysRemaining} to go</div>` : ''}
         <div class="week-rostered-row">Rostered ${rosteredH.toFixed(1)}h <span class="week-rostered-sep">·</span> Target ${displayTargetH.toFixed(1)}h</div>
         <div class="week-target-basis">${rosteredH.toFixed(1)}h rostered × ${Math.round((typeof state.weeklyTargetPct === 'number' ? state.weeklyTargetPct : 0.8) * 100)}%${weekNptH > 0.005 ? `, less ${weekNptH.toFixed(2)}h NPT` : ''}</div>
         <div class="week-chart">${weekBarsHTML}</div>
@@ -1350,6 +1384,76 @@ function buildModal() {
   `;
 }
 
+// ── Week pace figures ──────────────────────────────────────────────
+// The Week tile and the Weekly Forecast sheet both answer "where does this
+// week land?", and they used to work it out separately. They drifted — the
+// same Tuesday could read one pace on the tile and another in the sheet. One
+// function now, so the tile is a preview of the sheet rather than a rival to
+// it. Nothing here is a figure from the business: it is the engineer's own
+// logged credits, projected forward at the pace those credits set.
+function weekPaceFigures(weekKey, week) {
+  const todayKey = getTodayKey();
+  const todayWk = getWeekKey(new Date());
+  const isPastWeek = weekKey < todayWk;
+  const isFutureWeek = weekKey > todayWk;
+  const wDays = weekDays(weekKey);
+
+  const earnedHours = weekCreditHours(week);
+  const targetHours = weekTargetHours(state, weekKey);
+
+  // Days with at least one job logged (past + today).
+  const workedDayKeys = wDays.filter(dk => {
+    const jobs = (week.days || {})[dk] || [];
+    return jobs.length > 0 && (isPastWeek || dk <= todayKey);
+  });
+
+  // Remaining working days: today onwards, still empty. Leave and rest days
+  // aren't working days, so a Friday off doesn't thin the target over an
+  // extra day — see ADR-0017.
+  const remainingDayKeys = isPastWeek ? [] : wDays.filter(dk => {
+    if (dk < todayKey) return false;
+    if (!isWorkingDay(week, dk)) return false;
+    return ((week.days || {})[dk] || []).length === 0;
+  });
+
+  const daysWorked = workedDayKeys.length;
+  const daysRemaining = remainingDayKeys.length;
+
+  const dayTotals = workedDayKeys.map(dk =>
+    ((week.days || {})[dk] || []).reduce((s, j) => s + j.creditMins, 0) / 60
+  );
+
+  const dailyAvg = daysWorked > 0 ? earnedHours / daysWorked : 0;
+  const bestDay  = dayTotals.length > 0 ? Math.max(...dayTotals) : 0;
+  const worstDay = dayTotals.length > 0 ? Math.min(...dayTotals) : 0;
+
+  // paceProjection returns null once there is nothing left to project over.
+  // At that point the week has landed, so the prediction is what was logged.
+  const proj = paceProjection(earnedHours, daysWorked, daysRemaining, targetHours);
+  const projected = proj ? proj.projectedHours : (daysWorked > 0 ? earnedHours : null);
+
+  return {
+    earnedHours: earnedHours,
+    targetHours: targetHours,
+    daysWorked: daysWorked,
+    daysRemaining: daysRemaining,
+    dayTotals: dayTotals,
+    dailyAvg: dailyAvg,
+    bestDay: bestDay,
+    worstDay: worstDay,
+    projected: projected,
+    projGap: projected !== null ? projected - targetHours : null,
+    bestCase: daysWorked > 0 && daysRemaining > 0 ? earnedHours + bestDay * daysRemaining : null,
+    worstCase: daysWorked > 0 && daysRemaining > 0 ? earnedHours + worstDay * daysRemaining : null,
+    neededPer: daysRemaining > 0 ? Math.max(0, targetHours - earnedHours) / daysRemaining : 0,
+    isPastWeek: isPastWeek,
+    isFutureWeek: isFutureWeek,
+    // True once the week can no longer move: a past week, or a current week
+    // with every working day logged.
+    isSettled: isPastWeek || (!isFutureWeek && daysRemaining === 0)
+  };
+}
+
 // ── Week Forecast Sheet ────────────────────────────────────────────────────
 // ── Shift sheet ────────────────────────────────────────────────────────────
 // A day's times are set here, with a Confirm, rather than in two native time
@@ -1783,51 +1887,30 @@ function buildWeekForecastSheet() {
   const week = getOrCreateWeek(state, currentWeekKey);
   const todayKey = getTodayKey();
   const todayWk = getWeekKey(new Date());
-  const isPastWeek = currentWeekKey < todayWk;
-  const isFutureWeek = currentWeekKey > todayWk;
+  const wDays = weekDays(currentWeekKey);
 
-  const earnedHours = weekCreditHours(week);
   // A past week and the current one are asked the same question now; this used
   // to branch, which is how the same week read hit on Monday and missed on
   // Sunday. See weekTargetHours.
-  const targetHours = weekTargetHours(state, currentWeekKey);
-  const wDays = weekDays(currentWeekKey);
-
-  // Days with at least one job logged (past + today)
-  const workedDayKeys = wDays.filter(dk => {
-    const jobs = (week.days || {})[dk] || [];
-    return jobs.length > 0 && (isPastWeek || dk <= todayKey);
-  });
-
-  // Remaining working days: from today (inclusive) onwards with no jobs yet.
-  // Leave and rest days aren't working days, so a Friday off in a Monday-to-
-  // Thursday-and-Saturday rota doesn't thin the target out over an extra day.
-  const remainingDayKeys = isPastWeek ? [] : wDays.filter(dk => {
-    if (dk < todayKey) return false;
-    if (!isWorkingDay(week, dk)) return false;
-    return ((week.days || {})[dk] || []).length === 0;
-  });
-
-  const daysWorked = workedDayKeys.length;
-  const daysRemaining = remainingDayKeys.length;
-
-  const dayTotals = workedDayKeys.map(dk =>
-    ((week.days || {})[dk] || []).reduce((s, j) => s + j.creditMins, 0) / 60
-  );
-
-  const dailyAvg = daysWorked > 0 ? earnedHours / daysWorked : 0;
-  const bestDay  = dayTotals.length > 0 ? Math.max(...dayTotals) : 0;
-  const worstDay = dayTotals.length > 0 ? Math.min(...dayTotals) : 0;
-
-  const projected  = daysWorked > 0 ? earnedHours + dailyAvg * daysRemaining : null;
-  const projGap    = projected !== null ? projected - targetHours : null;
-  const bestCase   = daysWorked > 0 && daysRemaining > 0 ? earnedHours + bestDay  * daysRemaining : null;
-  const worstCase  = daysWorked > 0 && daysRemaining > 0 ? earnedHours + worstDay * daysRemaining : null;
-  const neededPer  = daysRemaining > 0 ? Math.max(0, targetHours - earnedHours) / daysRemaining : 0;
+  const f = weekPaceFigures(currentWeekKey, week);
+  const isPastWeek    = f.isPastWeek;
+  const isFutureWeek  = f.isFutureWeek;
+  const earnedHours   = f.earnedHours;
+  const targetHours   = f.targetHours;
+  const daysWorked    = f.daysWorked;
+  const daysRemaining = f.daysRemaining;
+  const dailyAvg      = f.dailyAvg;
+  const bestDay       = f.bestDay;
+  const worstDay      = f.worstDay;
+  const projected     = f.projected;
+  const projGap       = f.projGap;
+  const bestCase      = f.bestCase;
+  const worstCase     = f.worstCase;
+  const neededPer     = f.neededPer;
 
   const pct       = targetHours > 0 ? Math.min((earnedHours / targetHours) * 100, 100) : 0;
   const barColour = pct >= 90 ? 'green' : pct >= 70 ? 'amber' : 'red';
-  const isFinalTone = isPastWeek || (!isFutureWeek && daysRemaining === 0);
+  const isFinalTone = f.isSettled;
   const initDay   = (activeDayKey && wDays.includes(activeDayKey)) ? activeDayKey : wDays[0];
 
   // Plain English summary
@@ -3397,7 +3480,7 @@ function attachListeners() {
       const tab = btn.dataset.tab;
       weekSummaryKey = null;
       activeTab = tab;
-      if (activeTab === 'dashboard') { currentWeekKey = getWeekKey(new Date()); ctapProjectedMode = false; }
+      if (activeTab === 'dashboard') { currentWeekKey = getWeekKey(new Date()); ctapProjectedMode = true; }
       if (activeTab === 'log') { setLogDay(getTodayKey()); logCategory = null; jobSearch = ''; logSearchOpen = false; }
       if (activeTab === 'settings') startBalSignNeg = null;   // re-derive from the stored value
       render();

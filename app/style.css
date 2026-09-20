@@ -1529,6 +1529,22 @@ details[open] .info-chevron { transform: rotate(90deg); }
   font-style: italic;
 }
 
+/* The Week tile's caption sits tighter than the CTAP tile's, because the week
+   carries three more rows under it before the chart. */
+#week-tile .split-sub {
+  margin-bottom: 4px;
+}
+/* Keeps the banked figure on the tile while the big number is a prediction,
+   so "30.10h" is never mistaken for hours already in the bag. */
+.week-pred-basis {
+  font-size: 0.58rem;
+  color: var(--muted2);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ── Week trend badge (on weekly card) ── */
 .week-trend-badge {
   font-size: 0.6rem;
