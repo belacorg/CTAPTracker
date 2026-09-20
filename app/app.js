@@ -330,7 +330,12 @@ function buildDashboard() {
   const earnedHours = weekCreditHours(week);
   const targetH = weekTargetHours(state, currentWeekKey);
   const rosteredH = rosteredHours(state, week);
-  const displayTargetH = rosteredH * (typeof state.weeklyTargetPct === 'number' ? state.weeklyTargetPct : 0.8);
+  // The tile used to show the figure before NPT came off, while the progress
+  // bar, "still needed" and the bonus all used the figure after. An engineer
+  // with 4h of NPT read "Target 32.0h", was told they needed 21.00h having
+  // earned 7.00h, and could not make those add up. Show the number in use.
+  const weekNptH = (week.deductionMins || 0) / 60;
+  const displayTargetH = targetH;
   const weekPct = targetH > 0 ? Math.min((earnedHours / targetH) * 100, 100) : 0;
   const bonus = earnedHours >= targetH;
 
@@ -518,7 +523,7 @@ function buildDashboard() {
         </div>
         <div class="split-hours">${earnedHours.toFixed(2)}<span class="split-unit">h</span></div>
         <div class="week-rostered-row">Rostered ${rosteredH.toFixed(1)}h <span class="week-rostered-sep">·</span> Target ${displayTargetH.toFixed(1)}h</div>
-        <div class="week-target-basis">${rosteredH.toFixed(1)}h rostered × ${Math.round((typeof state.weeklyTargetPct === 'number' ? state.weeklyTargetPct : 0.8) * 100)}%</div>
+        <div class="week-target-basis">${rosteredH.toFixed(1)}h rostered × ${Math.round((typeof state.weeklyTargetPct === 'number' ? state.weeklyTargetPct : 0.8) * 100)}%${weekNptH > 0.005 ? `, less ${weekNptH.toFixed(2)}h NPT` : ''}</div>
         <div class="week-chart">${weekBarsHTML}</div>
       </div>
     </div>
@@ -4410,7 +4415,10 @@ function buildCoachCard() {
       const todayKey = getTodayKey();
       const wkDaysAll = weekDays(todayWk);
       const workedDays = wkDaysAll.filter(dk => dk <= todayKey && !dayIsLeave(week, dk) && ((week.days||{})[dk]||[]).length > 0).length;
-      const remainDays = wkDaysAll.filter(dk => dk > todayKey && isWorkingDay(week, dk)).length;
+      // Today counts while it still has nothing on it — see the same predicate
+      // in buildWeekForecastSheet and in the week_projection insight.
+      const remainDays = wkDaysAll.filter(dk =>
+        dk >= todayKey && isWorkingDay(week, dk) && ((week.days || {})[dk] || []).length === 0).length;
       if (workedDays > 0 && remainDays > 0) {
         const projected = earnedHours + (earnedHours / workedDays) * remainDays;
         msgs.push(`At your current pace, you'll finish on ${projected.toFixed(2)} hours. This is ${(projected - targetHours).toFixed(2)} hours above target.`);

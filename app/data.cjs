@@ -719,8 +719,16 @@ function getCoachInsights(state, weekKey, ctx) {
     const workedN = wkDays.filter(function(dk) {
       return dk <= todayKey && !dayIsLeave(week, dk) && ((week.days || {})[dk] || []).length > 0;
     }).length;
+    // A day the engineer has not logged on yet is still ahead of them. Today
+    // used to fall into neither bucket until the first job landed — not worked,
+    // not remaining — so the projection spent every morning assuming today
+    // would produce nothing, and said so in the discouraging direction. The
+    // Weekly Forecast sheet has always counted it correctly; this is the same
+    // definition, so the two agree on the same morning.
     const remainN = wkDays.filter(function(dk) {
-      return dk > todayKey && isWorkingDay(week, dk);
+      if (dk < todayKey) return false;
+      if (!isWorkingDay(week, dk)) return false;
+      return ((week.days || {})[dk] || []).length === 0;
     }).length;
     if (workedN >= 2 && remainN > 0 && weekTarget > 0) {
       const proj = paceProjection(weekEarned, workedN, remainN, weekTarget);
@@ -806,7 +814,7 @@ function getCoachInsights(state, weekKey, ctx) {
           text: `Hit target in ${hits} of the last ${rateWks.length} weeks — strong consistency` });
       } else if (rate < 0.5) {
         insights.push({ kind: 'bonus_hit_rate', priority: 3, severity: 'red',
-          text: `Hit target in only ${hits} of the last ${rateWks.length} weeks — worth looking at what's pulling the average down` });
+          text: `Hit target in ${hits === 0 ? 'none' : 'only ' + hits} of the last ${rateWks.length} weeks — worth looking at what's pulling the average down` });
       } else {
         insights.push({ kind: 'bonus_hit_rate', priority: 4, severity: 'amber',
           text: `Hit target in ${hits} of the last ${rateWks.length} weeks` });
