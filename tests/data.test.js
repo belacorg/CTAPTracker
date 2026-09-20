@@ -356,120 +356,40 @@ describe('getLogWeekStrip', () => {
   });
 });
 
-// The CTAP target after 4+ completed weeks stops using rostered × pct and
-// starts using the engineer's own recent output, so the model converges to the
-// real travel and Performance Factor they work under without ingesting MI.
-// See ADR-0003. What it must not do is converge onto weeks that never held a
-// full record of the work.
-describe('effectiveTargetHours — the rolling average', () => {
+// The completeness rule outlived the rolling target it was built for
+// (ADR-0022 removed that). It now guards the averages the Coach reports back:
+// "tracking 2h below your 8-week average" is a lie if half those weeks were
+// only part logged — and a lie in the direction that worries someone doing fine.
+describe('weekIsRepresentative', () => {
   const week = (hours, extra) => ({
     days: hours > 0 ? { d: [{ id: 'gas_repair', creditMins: Math.round(hours * 60) }] } : {},
     ...(extra || {})
   });
-  const base = (weeks) => ({ baseHours: 40, weeklyTargetPct: 0.8, weeks });
+  const state = { baseHours: 40, weeklyTargetPct: 0.8, weeks: {} };   // asks 32h
 
-  it('uses rostered × pct until four completed weeks exist', () => {
-    const state = base({
-      '2026-08-31': week(30), '2026-09-07': week(31), '2026-09-14': week(0)
-    });
-    const eff = data.effectiveTargetHours(state, state.weeks['2026-09-14'], '2026-09-14');
-    expect(eff.isRolling).toBe(false);
-    expect(eff.displayTarget).toBeCloseTo(32, 5);
+  it('accepts a week that holds a full record, good or bad', () => {
+    expect(data.weekIsRepresentative(state, week(30))).toBe(true);
+    expect(data.weekIsRepresentative(state, week(20))).toBe(true);   // 63% — a bad week is data
+    expect(data.weekIsRepresentative(state, week(12.8))).toBe(true); // exactly 40%
   });
 
-  it('switches to the engineer\'s own output once four weeks are in', () => {
-    const state = base({
-      '2026-08-17': week(28), '2026-08-24': week(30),
-      '2026-08-31': week(29), '2026-09-07': week(33), '2026-09-14': week(0)
-    });
-    const eff = data.effectiveTargetHours(state, state.weeks['2026-09-14'], '2026-09-14');
-    expect(eff.isRolling).toBe(true);
-    expect(eff.n).toBe(4);
-    expect(eff.displayTarget).toBeCloseTo(30, 5);
+  it('rejects a week that was clearly never finished being logged', () => {
+    expect(data.weekIsRepresentative(state, week(4))).toBe(false);   // 12%
+    expect(data.weekIsRepresentative(state, week(0))).toBe(false);
   });
 
-  // The one that bit a trial engineer in week two: a target of 2.7h.
-  it('never lets an Excluded week set the target', () => {
-    // Four warm-up weeks with a job or two in them, all marked Excluded —
-    // the engineer saying "ignore these, I was still working the app out".
-    const state = base({
-      '2026-08-17': week(0.93, { excludeFromCtap: true }),
-      '2026-08-24': week(1.86, { excludeFromCtap: true }),
-      '2026-08-31': week(2.79, { excludeFromCtap: true }),
-      '2026-09-07': week(0.93, { excludeFromCtap: true }),
-      '2026-09-14': week(0)
-    });
-    const eff = data.effectiveTargetHours(state, state.weeks['2026-09-14'], '2026-09-14');
-    // Nothing qualifies, so it falls back to the formula rather than to 1.63h.
-    expect(eff.isRolling).toBe(false);
-    expect(eff.displayTarget).toBeCloseTo(32, 5);
-  });
-
-  it('counts only the included weeks towards the four needed', () => {
-    const state = base({
-      '2026-08-10': week(30), '2026-08-17': week(2, { excludeFromCtap: true }),
-      '2026-08-24': week(30), '2026-08-31': week(30), '2026-09-14': week(0)
-    });
-    const eff = data.effectiveTargetHours(state, state.weeks['2026-09-14'], '2026-09-14');
-    expect(eff.isRolling).toBe(false);   // three real weeks is not four
-    const more = base({
-      ...state.weeks, '2026-09-07': week(30)
-    });
-    const eff2 = data.effectiveTargetHours(more, more.weeks['2026-09-14'], '2026-09-14');
-    expect(eff2.isRolling).toBe(true);
-    expect(eff2.n).toBe(4);
-    expect(eff2.displayTarget).toBeCloseTo(30, 5);   // the 2h week pulls nothing down
-  });
-
-  // A week under 40% of what it asked for is a week the engineer stopped
-  // logging partway through, not a hard week. Averaging it in moves the target
-  // instead of the credit, and a target that has quietly dropped reads as
-  // "you smashed it" rather than as an error.
-  it('ignores a week that was clearly never finished being logged', () => {
-    const state = base({
-      '2026-08-10': week(30), '2026-08-17': week(29),
-      '2026-08-24': week(4),                            // 12% of the 32h asked
-      '2026-08-31': week(31), '2026-09-07': week(30), '2026-09-14': week(0)
-    });
-    const eff = data.effectiveTargetHours(state, state.weeks['2026-09-14'], '2026-09-14');
-    expect(eff.isRolling).toBe(true);
-    expect(eff.n).toBe(4);
-    expect(eff.displayTarget).toBeCloseTo(30, 5);       // (30+29+31+30)/4, the 4h week gone
-  });
-
-  it('keeps a genuinely bad week, which is data and not a gap', () => {
-    // 60% of target is a week that went badly. That is exactly the kind of
-    // reality ADR-0003 wants the average to absorb.
-    const state = base({
-      '2026-08-17': week(20), '2026-08-24': week(30),
-      '2026-08-31': week(30), '2026-09-07': week(30), '2026-09-14': week(0)
-    });
-    const eff = data.effectiveTargetHours(state, state.weeks['2026-09-14'], '2026-09-14');
-    expect(eff.isRolling).toBe(true);
-    expect(eff.n).toBe(4);
-    expect(eff.displayTarget).toBeCloseTo(27.5, 5);
-  });
-
-  it('judges completeness against what that week asked, not a flat figure', () => {
-    // A week with three days' leave asks for much less, so a small total is a
-    // full record of a short week rather than a gap.
-    const shortWeek = {
+  it('judges against what that week asked, not a flat figure', () => {
+    // Three days' leave: the week asks 12.8h, so 11h is a full short week.
+    const short = {
       days: { d: [{ id: 'gas_repair', creditMins: 11 * 60 }] },
       shifts: {
         '2026-08-25': { leave: true }, '2026-08-26': { leave: true }, '2026-08-27': { leave: true }
       }
     };
-    const state = base({
-      '2026-08-10': week(30), '2026-08-17': week(30),
-      '2026-08-24': shortWeek,                          // asks 12.8h, logged 11h
-      '2026-08-31': week(30), '2026-09-14': week(0)
-    });
-    const eff = data.effectiveTargetHours(state, state.weeks['2026-09-14'], '2026-09-14');
-    expect(eff.isRolling).toBe(true);
-    expect(eff.n).toBe(4);                              // the short week counts
+    expect(data.weekIsRepresentative(state, short)).toBe(true);
   });
 
-  it('never learns from a week that asked for nothing at all', () => {
+  it('says nothing about a week that asked for nothing at all', () => {
     const allLeave = {
       days: { d: [{ id: 'gas_repair', creditMins: 56 }] },
       shifts: Object.fromEntries(
@@ -477,23 +397,7 @@ describe('effectiveTargetHours — the rolling average', () => {
           .map(d => [d, { leave: true }])
       )
     };
-    const state = base({
-      '2026-08-10': week(30), '2026-08-17': week(30),
-      '2026-08-24': allLeave, '2026-08-31': week(30), '2026-09-14': week(0)
-    });
-    const eff = data.effectiveTargetHours(state, state.weeks['2026-09-14'], '2026-09-14');
-    expect(eff.isRolling).toBe(false);                  // three real weeks, not four
-  });
-
-  it('scales the rolling target by the roster, so a week of leave asks less', () => {
-    const weeks = {
-      '2026-08-17': week(30), '2026-08-24': week(30),
-      '2026-08-31': week(30), '2026-09-07': week(30),
-      '2026-09-14': { days: {}, shifts: { '2026-09-15': { leave: true } } }
-    };
-    const eff = data.effectiveTargetHours(base(weeks), weeks['2026-09-14'], '2026-09-14');
-    expect(eff.isRolling).toBe(true);
-    expect(eff.displayTarget).toBeCloseTo(30 * (32 / 40), 5);   // one 8h day off
+    expect(data.weekIsRepresentative(state, allLeave)).toBe(false);
   });
 });
 
@@ -516,10 +420,27 @@ describe('weekTargetHours — one answer per week', () => {
     }
   });
 
-  it('gives the rolling answer, not the formula, once the weeks are in', () => {
+  it('is the employer bar, not the engineer\'s own recent average', () => {
     const state = settled();
-    expect(data.weekTargetHours(state, '2026-09-14')).toBeCloseTo(30, 5);
-    expect(data.adjustedTargetHours(state, state.weeks['2026-09-14'])).toBeCloseTo(32, 5);
+    // Four weeks averaging 30h sit behind this one. The target is 32h anyway.
+    expect(data.weekTargetHours(state, '2026-09-14')).toBeCloseTo(32, 5);
+  });
+
+  // A bar computed from what you achieved is a bar you meet by construction.
+  // An engineer 7h short of the employer every week was shown the bonus met
+  // every week from week five, with their balance frozen. See ADR-0022.
+  it('does not drift towards the engineer, however long they underperform', () => {
+    const keys = ['2026-06-01','2026-06-08','2026-06-15','2026-06-22',
+                  '2026-06-29','2026-07-06','2026-07-13','2026-07-20'];
+    const under = { baseHours: 40, weeklyTargetPct: 0.8, weeks: {} };
+    keys.forEach(k => { under.weeks[k] = week(25); });
+    keys.forEach(k => {
+      expect(data.weekTargetHours(under, k), k).toBeCloseTo(32, 5);
+      expect(data.bonusAchieved(under, k), k).toBe(false);
+    });
+    // And the deficit keeps accruing rather than freezing.
+    const total = keys.reduce((s, k) => s + data.weekCreditHours(under.weeks[k]) - data.weekTargetHours(under, k), 0);
+    expect(total).toBeCloseTo((25 - 32) * 8, 5);
   });
 
   it('the week summary reads the same target as the week itself', () => {
@@ -531,10 +452,8 @@ describe('weekTargetHours — one answer per week', () => {
 
   it('bonus agrees with the target it is judged against', () => {
     const state = settled();
-    // 29h against a 30h rolling target is a miss. Against the old 32h formula
-    // it was also a miss — but at 32.5h earned it would have been both.
-    expect(data.bonusAchieved(state, '2026-09-14')).toBe(false);
-    state.weeks['2026-09-14'] = week(30.5);
+    expect(data.bonusAchieved(state, '2026-09-14')).toBe(false);   // 29h of 32h
+    state.weeks['2026-09-14'] = week(32.5);
     expect(data.bonusAchieved(state, '2026-09-14')).toBe(true);
     expect(data.weekSummary(state, '2026-09-14').bonus).toBe(true);
   });
@@ -574,7 +493,7 @@ describe('daily targets sum to the weekly target', () => {
     expect(data.weekTargetHours(state, '2026-09-14')).toBeCloseTo(32, 5);
   });
 
-  it('and once the target has moved onto the rolling average', () => {
+  it('and with a settled history behind it, which must not move the bar', () => {
     const state = {
       baseHours: 40, weeklyTargetPct: 0.8,
       weeks: {
@@ -584,7 +503,7 @@ describe('daily targets sum to the weekly target', () => {
       }
     };
     const weekly = data.weekTargetHours(state, '2026-09-14');
-    expect(weekly).toBeCloseTo(30, 5);          // not the 32 the formula asks
+    expect(weekly).toBeCloseTo(32, 5);
     expect(sumDays(state, '2026-09-14')).toBeCloseTo(weekly, 5);
   });
 });

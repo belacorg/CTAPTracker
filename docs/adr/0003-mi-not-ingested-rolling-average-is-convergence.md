@@ -1,3 +1,5 @@
+> **Superseded in part by ADR-0022.** The rolling average no longer sets the CTAP target — a bar computed from the engineer's own results is one they meet by construction. What stands below is the account of MI: referenced, never ingested. The convergence mechanism it proposes does not.
+
 # MI is referenced but never ingested; the rolling average is how the model converges to reality
 
 Management Information (the employer's data feed containing real travel and Performance Factor figures, arriving ~10–14 days after the week ends) is *never* imported into CTAP Tracker. It informs the design — it's why past weeks must be editable and it justifies the CTAP percentage buffer — but the numbers themselves never flow into the app. Instead, the model converges to reality via the Rolling average target: after 4+ completed weeks, the engineer's target stops using the static `pct` formula and starts using the mean of their last 4–12 weeks of actual credit hours (scaled by current roster). Past credit hours already reflect whatever real travel/PF the engineer was working under, so the rolling average implicitly absorbs MI without ever having to ingest it.

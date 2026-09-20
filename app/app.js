@@ -324,14 +324,13 @@ function buildDashboard() {
   const week = getOrCreateWeek(state, currentWeekKey);
   const isCurrentWeek = currentWeekKey === getWeekKey(new Date());
 
-  // ── Effective weekly target (rolling avg or configured %) ──
+  // ── Weekly target ──
+  // The employer's bar, the same figure History and the balance use. The
+  // rolling average is not a target and no longer sets one — see ADR-0022.
   const earnedHours = weekCreditHours(week);
-  const effective = effectiveTargetHours(state, week, currentWeekKey);
-  const targetH = effective.hours;          // after NPT — used for progress %
-  const displayTargetH = effective.displayTarget; // pre-NPT — shown in Rostered|Target line
-  const isRolling = effective.isRolling;
-  const rollingN = effective.n;
+  const targetH = weekTargetHours(state, currentWeekKey);
   const rosteredH = rosteredHours(state, week);
+  const displayTargetH = rosteredH * (typeof state.weeklyTargetPct === 'number' ? state.weeklyTargetPct : 0.8);
   const weekPct = targetH > 0 ? Math.min((earnedHours / targetH) * 100, 100) : 0;
   const bonus = earnedHours >= targetH;
 
@@ -519,9 +518,7 @@ function buildDashboard() {
         </div>
         <div class="split-hours">${earnedHours.toFixed(2)}<span class="split-unit">h</span></div>
         <div class="week-rostered-row">Rostered ${rosteredH.toFixed(1)}h <span class="week-rostered-sep">·</span> Target ${displayTargetH.toFixed(1)}h</div>
-        <div class="week-target-basis">${isRolling
-          ? `Rolling avg · last ${rollingN} weeks`
-          : `${rosteredH.toFixed(1)}h rostered × ${Math.round((typeof state.weeklyTargetPct === 'number' ? state.weeklyTargetPct : 0.8) * 100)}%`}</div>
+        <div class="week-target-basis">${rosteredH.toFixed(1)}h rostered × ${Math.round((typeof state.weeklyTargetPct === 'number' ? state.weeklyTargetPct : 0.8) * 100)}%</div>
         <div class="week-chart">${weekBarsHTML}</div>
       </div>
     </div>
@@ -2923,7 +2920,7 @@ function buildRealityPanel(dk) {
   const wkKey = getWeekKey(new Date(dk + 'T00:00:00'));
   const week = state.weeks[wkKey] || { days: {} };
   const earned = weekCreditHours(week);
-  const target = effectiveTargetHours(state, week, wkKey).hours;
+  const target = weekTargetHours(state, wkKey);
   const gap = target - earned;
   const jobs = Object.values(week.days || {}).reduce((s, arr) => s + arr.length, 0);
   const npt = (week.deductionMins || 0) / 60;

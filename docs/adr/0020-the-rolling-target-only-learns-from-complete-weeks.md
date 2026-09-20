@@ -1,3 +1,5 @@
+> **Amended by ADR-0022.** The rolling average target this describes no longer exists. The completeness rule survives it and now guards the averages the Coach reports back; the reasoning below about why an incomplete week is not a bad week still applies.
+
 # The rolling average target only learns from weeks that hold a full record
 
 ADR-0003 makes the **Rolling average target** the mechanism by which the model converges to reality: after four completed weeks the **CTAP target** stops using rostered × **CTAP percentage** and starts using the engineer's own recent credit, which already reflects whatever real travel and **Performance Factor** they were working under. That is still the design. What it assumed, and never checked, is that a past week holds a complete record of the work done in it.

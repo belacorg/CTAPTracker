@@ -9,8 +9,8 @@
 import { describe, it, expect } from 'vitest';
 import { bootApp } from './helpers/app-harness.js';
 
-// Four representative weeks averaging 30h against a 32h formula, so the rolling
-// and static answers differ by 2h and any disagreement is visible.
+// Four weeks averaging 30h behind a 32h employer bar. Before ADR-0022 the
+// Dashboard answered 30h here and History answered 32h for the same week.
 const week = (hours) => ({
   deductionMins: 0,
   days: { '2026-01-01': [{ id: 'gas_repair', name: 'Gas Repair', creditMins: Math.round(hours * 60), ts: 1 }] }
@@ -46,8 +46,10 @@ describe('a week keeps its target when it stops being the current week', () => {
     const during = bootApp({ storage, now: '2026-09-18T09:00:00' });
     nav(during, 'dashboard');
     const shown = during.$('.week-rostered-row').textContent.match(/Target ([\d.]+)h/)[1];
-    expect(during.$('.week-target-basis').textContent).toContain('Rolling avg');
-    expect(parseFloat(shown)).toBeCloseTo(30.0, 1);
+    // The basis is always stated, and it is always the employer's bar.
+    expect(during.$('.week-target-basis').textContent).toBe('40.0h rostered × 80%');
+    expect(during.$('.week-target-basis').textContent).not.toContain('Rolling');
+    expect(parseFloat(shown)).toBeCloseTo(32.0, 1);
 
     // The Monday after. Same stored jobs, same week, now in the past.
     const after = bootApp({ storage, now: '2026-09-21T09:00:00' });
@@ -59,7 +61,7 @@ describe('a week keeps its target when it stops being the current week', () => {
     const during = bootApp({ storage, now: '2026-09-18T09:00:00' });
     nav(during, 'dashboard');
     const target = parseFloat(during.$('.week-rostered-row').textContent.match(/Target ([\d.]+)h/)[1]);
-    expect(29).toBeLessThan(target);            // 29h earned, 30h asked — a miss
+    expect(29).toBeLessThan(target);            // 29h earned, 32h asked — a miss
 
     const after = bootApp({ storage, now: '2026-09-21T09:00:00' });
     nav(after, 'history');

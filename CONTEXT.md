@@ -16,7 +16,7 @@ _Avoid_: "CTAP" (unqualified) when you mean the balance
 The engineer's CTAP position at the moment they began using CTAP Tracker — used so the app's running balance reflects reality, not zero. Positive (engineer is in surplus) or negative (engineer is in deficit and using the app to recover). Also the value the engineer manually reduces after a **Cash out** to true the app back up with their post-sale standing.
 
 **Excluded week**:
-A week marked to be ignored when computing **CTAP balance** *and* when computing the **Rolling average target**. Used for: weeks of full sickness/absence where credit hours would be zero through no fault of the engineer; weeks during a phased return to work; and historical "warm-up" weeks added while the engineer was still figuring the app out. An **Excluded week** is still visible in history but contributes nothing to the running balance and teaches the target nothing.
+A week marked to be ignored when computing **CTAP balance** *and* when computing the **Recent average**. Used for: weeks of full sickness/absence where credit hours would be zero through no fault of the engineer; weeks during a phased return to work; and historical "warm-up" weeks added while the engineer was still figuring the app out. An **Excluded week** is still visible in history but contributes nothing to the running balance and nothing to the averages the Coach reports back.
 
 **Early Finish**:
 An engineer finishing the working day before their scheduled shift end (an in-day partial holiday). Logged as an **NPT** entry so it reduces this week's **CTAP target** — the engineer isn't expected to produce credits during hours they weren't on the clock. *Additionally*, at the moment of logging, the engineer picks a disposition for those hours:
@@ -33,7 +33,7 @@ _Avoid_: "SGO payment" (no longer cash); "SGO bonus" (it's a CTAP credit, not a 
 Selling a positive **CTAP balance** back to the employer in exchange for enhanced pay (e.g. double time, conditional on other monthly performance metrics). After cashing out, the engineer manually reduces their **Starting balance** in the app by the number of hours sold. Not implemented in CTAP Tracker today — recorded here because the term is part of the engineer's mental model and informs how **Starting balance** behaves.
 
 **CTAP target**:
-The hours of credited work an engineer must produce in a given week to be on track for **CTAP**. Once four **Representative weeks** exist it is the **Rolling average target**; until then it is calculated from **Rostered hours**, the **CTAP percentage**, and **NPT** logged for the week. One week has one target — the same figure on the Dashboard, in History, in the balance and in the bonus, and the same figure before and after the week ends.
+The hours of credited work an engineer must produce in a given week to be on track for **CTAP**. Calculated from **Rostered hours**, the **CTAP percentage**, and **NPT** logged for the week — the employer's bar, never the engineer's own recent average (ADR-0022). One week has one target: the same figure on the Dashboard, in History, in the balance and in the bonus, and the same figure before and after the week ends.
 _Avoid_: "the target", "bonus target", "weekly goal"
 
 **Rostered hours**:
@@ -69,7 +69,7 @@ _Avoid_: "target percentage" alone (ambiguous with progress %), "the 80%"
 **NPT** (Non-Productive Time):
 Engineer-logged time on the clock that is **uncompensated** by the CTAP scheme — pure target deductions. In the current model this is **Early Finish** entries and a free-form "NPT Quick" minutes entry. Reduces **CTAP target** *after* **CTAP percentage** has been applied to **Rostered hours**.
 
-Travel and **Performance Factor** are conceptually similar (uncompensated non-customer time) but neither is logged in this app — they're absorbed implicitly by the **Rolling average target** once enough completed weeks exist.
+Travel and **Performance Factor** are conceptually similar (uncompensated non-customer time) but neither is logged in this app — neither is measurable in real time, which is what the **CTAP percentage** buffer exists to cover.
 _Avoid_: "deductions" (legacy spec term); "non-customer time" (overloaded — that informal phrase covers both **NPT** and **Operational credits** in the engineer's mental model; pick the right one)
 
 **Operational credits**:
@@ -77,11 +77,11 @@ Credits awarded by the CTAP scheme for necessary non-customer activities — wai
 _Avoid_: "compensated NPT" (contradiction in terms — NPT is by definition uncompensated)
 
 **Performance Factor (PF)**:
-An employer-calculated daily allowance (capped at 40 minutes) that reflects work pace; the precise value is only known once **MI** lands. CTAP Tracker shows a *daily estimated* PF figure in insights so the engineer can mentally factor it into their pace, but PF never moves the target — it's absorbed implicitly by the **Rolling average target**.
+An employer-calculated daily allowance (capped at 40 minutes) that reflects work pace; the precise value is only known once **MI** lands. CTAP Tracker shows a *daily estimated* PF figure in insights so the engineer can mentally factor it into their pace, but PF never moves the target — the **CTAP percentage** buffer is what accounts for it.
 _Avoid_: "PF allowance"
 
 **MI** (Management Information):
-The employer's data feed (travel, **Performance Factor**, etc.) for a given week, typically available ~10–14 days after the week ends. **Not ingested by CTAP Tracker** — MI is referenced as the *reason* past weeks need to be editable and as the *justification* for the **CTAP percentage** buffer, but its numbers never flow into the app. The **Rolling average target** is the convergence mechanism that absorbs real travel/PF over time.
+The employer's data feed (travel, **Performance Factor**, etc.) for a given week, typically available ~10–14 days after the week ends. **Not ingested by CTAP Tracker** — MI is referenced as the *reason* past weeks need to be editable and as the *justification* for the **CTAP percentage** buffer, but its numbers never flow into the app. Nothing in the app converges on MI: the **CTAP percentage** buffer covers travel and PF, and the engineer can adjust it (ADR-0022).
 _Avoid_: "the report", "business data"
 
 **Coach Insight**:
@@ -98,12 +98,12 @@ One thing worth recommending after a service or repair today — Hive, inhibitor
 **Coach mode**:
 A per-engineer toggle that controls whether **Coach Insight** surfaces are shown. **On by default** — the stored preference is only ever read as "off when explicitly set to off", so a fresh install sees Coach. This entry previously said off by default, which the code has never done; the behaviour is the intended one and the doc was wrong. Does not affect calculation — only display.
 
-**Rolling average target**:
-Once an engineer has 4+ **Representative weeks**, the **CTAP target** stops using the static **CTAP percentage** and instead uses a rolling average of those weeks (scaled by current roster).
-_Avoid_: "average target"
+**Recent average**:
+The mean credit hours across an engineer's recent **Representative weeks**, reported by **Coach Insight** as context — "tracking 2.10h below your 8-week average of 29.40h". It is information about trend, never a threshold and never a target: a bar computed from what the engineer achieved is a bar they meet by construction, which froze one test engineer's **CTAP balance** at −28h while the real figure walked to −84h. See ADR-0022.
+_Avoid_: "rolling average target", "average target" (both name the superseded mechanism that set the **CTAP target**)
 
 **Representative week**:
-A completed week whose record is complete enough to teach the **Rolling average target** something: not an **Excluded week**, it asked for more than zero hours, and its credit came to at least 40% of what it asked. A week below that is not a bad week — it is a week the engineer stopped logging partway through, and averaging it in moves the **CTAP target** rather than the credit. Because the target moves silently, the Dashboard then reads "you smashed it" rather than reading as an error, which is what makes an incomplete week worse than an empty one.
+A completed week whose record is complete enough to average: not an **Excluded week**, it asked for more than zero hours, and its credit came to at least 40% of what it asked. A week below that is not a bad week — it is a week the engineer stopped logging partway through. Used for the **Recent average**: an average that includes half-logged weeks reports a dip the engineer never had, in the direction that worries someone who is doing fine.
 _Avoid_: "valid week", "good week" (the test is completeness of the record, not performance)
 
 **Check-in**:

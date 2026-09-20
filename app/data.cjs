@@ -188,10 +188,7 @@ function adjustedDailyTargetHours(state, week, dayKey) {
   const nptMins = (week.deductionLog || [])
     .filter(d => d.date === dayKey)
     .reduce((s, d) => s + d.mins, 0);
-  // The week's target may have moved onto the rolling average; the day's has to
-  // move with it or the two read differently on the same morning.
-  const scale = weekTargetScale(state, week, getWeekKey(new Date(dayKey + 'T00:00:00')));
-  return Math.max(0, getDailyTarget(state, week, dayKey) * pct * scale - nptMins / 60);
+  return Math.max(0, getDailyTarget(state, week, dayKey) * pct - nptMins / 60);
 }
 
 function weekMentorTargetReduction(state, week) {
@@ -271,12 +268,16 @@ function adjustedTargetHours(state, week) {
 
 // A week only teaches the rolling average something if it holds a full record
 // of the work. Below this share of what the week actually asked for, it is not
-// a bad week — it is a week the engineer stopped logging partway through, and
-// averaging it in moves the target instead of the credit.
+// a bad week — it is a week the engineer stopped logging partway through.
 //
-// 0.4 is deliberately generous: ADR-0003 wants the average to absorb real
-// travel and Performance Factor variation, which runs to tens of percent, not
-// to ninety. A week under 40% is missing data, not a hard week.
+// This used to guard the **Rolling average target**, which no longer exists
+// (ADR-0022). It now guards the averages the Coach reports back: "tracking 2h
+// below your 8-week average" is a lie if three of those eight weeks were only
+// half logged, and it is a lie in the direction that worries someone who is
+// doing fine.
+//
+// 0.4 is deliberately generous — real week-to-week variation runs to tens of
+// percent, not to ninety. A week under 40% is missing data, not a hard week.
 const MIN_WEEK_COMPLETENESS = 0.4;
 
 function weekIsRepresentative(state, week) {
@@ -287,79 +288,10 @@ function weekIsRepresentative(state, week) {
   return weekCreditHours(week) >= asked * MIN_WEEK_COMPLETENESS;
 }
 
-// Rolling average of last 4–6 completed non-empty weeks before weekKey
-// Returns { avg, n } or null when fewer than 4 qualifying weeks exist
-//
-// An **Excluded week** is skipped here as it is everywhere else. It used not to
-// be, and that was the worst bug in the app: a week the engineer had explicitly
-// marked "ignore this, I was still working the app out" still set their **CTAP
-// target** for the following weeks. Four warm-up weeks with a job or two in
-// them put the target at 1.63h against a real 32h — and because the target had
-// moved rather than the credit, the Dashboard told them they had smashed it.
-function rollingAvgInfo(state, weekKey) {
-  const cutoff = weekKey || getWeekKey(new Date());
-  const qualifying = Object.keys(state.weeks)
-    .filter(wk => wk < cutoff
-      && !state.weeks[wk].excludeFromCtap
-      && weekIsRepresentative(state, state.weeks[wk]))
-    .sort()
-    .slice(-6);
-  if (qualifying.length < 4) return null;
-  const avg = qualifying.reduce((s, wk) => s + weekCreditHours(state.weeks[wk]), 0) / qualifying.length;
-  return { avg, n: qualifying.length };
-}
-
-// Effective target for dashboard display:
-//   • rolling average (scaled by roster ratio) when 4+ completed weeks exist
-//   • otherwise the configured % formula
-// Returns { hours, isRolling, n, displayTarget }
-//   hours        = effective target after NPT deduction (used for progress %)
-//   displayTarget = pre-NPT figure (shown in the Rostered | Target line)
-function effectiveTargetHours(state, week, weekKey) {
-  const rostered = rosteredHours(state, week);
-  const npt = (week.deductionMins || 0) / 60;
-  const rolling = rollingAvgInfo(state, weekKey);
-  if (rolling && state.baseHours > 0) {
-    const scaledAvg = rolling.avg * (rostered / state.baseHours);
-    return { hours: Math.max(0, scaledAvg - npt), isRolling: true, n: rolling.n, displayTarget: Math.max(0, scaledAvg) };
-  }
-  const pct = typeof state.weeklyTargetPct === 'number' ? state.weeklyTargetPct : 0.8;
-  const displayTarget = rostered * pct;
-  return { hours: Math.max(0, displayTarget - npt), isRolling: false, n: 0, displayTarget };
-}
-
-// The one answer to "what does this week ask for". Every screen, the balance
-// and the bonus read this, so a week cannot be a hit on one and a miss on
-// another.
-//
-// It used not to exist. The Dashboard's live tile used effectiveTargetHours
-// while History, the balance and bonusAchieved used the bare formula, so a week
-// changed its target the moment it stopped being the current one: earn 32.5h
-// against a 32.83h rolling target and the week read missed on the Sunday and
-// hit on the Monday. buildWeekForecastSheet had the disagreement written into
-// it as `isPastWeek ? adjustedTargetHours(...) : _eff.hours`.
-//
-// The rolling average is the canonical figure, not the formula. ADR-0001 is
-// explicit that `pct` is the short-run UX device and the rolling average is
-// "the long-run convergence mechanism that fixes the imprecision"; ADR-0003
-// makes it how the model absorbs real travel and Performance Factor without
-// ingesting MI. The formula is the cold start, which effectiveTargetHours
-// already falls back to until four **Representative weeks** exist.
 function weekTargetHours(state, weekKey) {
   const week = state.weeks[weekKey];
   if (!week) return 0;
-  return effectiveTargetHours(state, week, weekKey).hours;
-}
-
-// The factor the rolling average moves a week's target by, so a day's target
-// can be moved with it and the days still sum to the week. Without it the
-// Dashboard's "still needed today" and its weekly target disagree by exactly
-// the size of the rolling adjustment.
-function weekTargetScale(state, week, weekKey) {
-  const pct = typeof state.weeklyTargetPct === 'number' ? state.weeklyTargetPct : 0.8;
-  const staticTarget = rosteredHours(state, week) * pct;
-  if (staticTarget <= 0) return 1;
-  return effectiveTargetHours(state, week, weekKey).displayTarget / staticTarget;
+  return adjustedTargetHours(state, week);
 }
 
 function bonusAchieved(state, weekKey) {
@@ -896,14 +828,20 @@ function getCoachInsights(state, weekKey, ctx) {
     }
 
     if (isCurrentWeek) {
-      const last8 = pastWks.slice(-8);
-      const avg8  = last8.reduce(function(s, wk) { return s + weekCreditHours(state.weeks[wk]); }, 0) / last8.length;
+      // Only weeks holding a full record, or the average the engineer is
+      // measured against reports a dip they never had. See weekIsRepresentative.
+      const last8 = pastWks.filter(function(wk) {
+        return weekIsRepresentative(state, state.weeks[wk]);
+      }).slice(-8);
+      const avg8  = last8.length > 0
+        ? last8.reduce(function(s, wk) { return s + weekCreditHours(state.weeks[wk]); }, 0) / last8.length
+        : 0;
       const wkDays = weekDays(todayWk);
       const workedN = wkDays.filter(function(dk) {
         return dk <= todayKey && !dayIsLeave(week, dk) && ((week.days || {})[dk] || []).length > 0;
       }).length;
       const workingN = wkDays.filter(function(dk) { return isWorkingDay(week, dk); }).length;
-      if (workedN >= 1 && workingN > 0) {
+      if (workedN >= 1 && workingN > 0 && last8.length > 0) {
         const projFull = (weekEarned / workedN) * workingN;
         const diff = projFull - avg8;
         if (Math.abs(diff) >= 0.3) {
@@ -2038,7 +1976,6 @@ if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     dayIsLeave: dayIsLeave,
     isRestDay: isRestDay,
     weekTargetHours: weekTargetHours,
-    weekTargetScale: weekTargetScale,
     weekIsRepresentative: weekIsRepresentative,
     MIN_WEEK_COMPLETENESS: MIN_WEEK_COMPLETENESS,
     isWorkingDay: isWorkingDay,
@@ -2056,8 +1993,6 @@ if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     weekCreditHours: weekCreditHours,
     rosteredHours: rosteredHours,
     adjustedTargetHours: adjustedTargetHours,
-    rollingAvgInfo: rollingAvgInfo,
-    effectiveTargetHours: effectiveTargetHours,
     bonusAchieved: bonusAchieved,
     formatHM: formatHM,
     formatCredits: formatCredits,

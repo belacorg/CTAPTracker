@@ -1,3 +1,5 @@
+> **Superseded in part by ADR-0022.** One week having one target still holds, and `weekTargetHours` is still the only way to ask. Which figure it returns changed: the employer's formula, not the rolling average. The argument below for making the rolling average canonical is wrong, and ADR-0022 says why.
+
 # One week has one target
 
 The **CTAP target** was computed two different ways depending on which screen asked. The Dashboard's live week tile used the **Rolling average target**; History, the **CTAP balance**, `bonusAchieved`, the CTAP trend chart and the Coach lines used the bare `rostered × pct − NPT` formula. The Weekly Forecast sheet had the disagreement written into it as a branch: `isPastWeek ? adjustedTargetHours(...) : _eff.hours`.
