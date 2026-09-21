@@ -64,7 +64,7 @@ function freezeDate(window, iso) {
   window.Date = FakeDate;
 }
 
-export function bootApp({ speechRecognition = null, online = true, now = null, storage = null } = {}) {
+export function bootApp({ speechRecognition = null, online = true, now = null, storage = null, checkinPaused = false } = {}) {
   const dom = new JSDOM('<!DOCTYPE html><html><body><div id="app"></div></body></html>', {
     runScripts: 'dangerously',
     url: 'http://localhost:3737/',
@@ -74,6 +74,9 @@ export function bootApp({ speechRecognition = null, online = true, now = null, s
   // Mirrors index.html: local-only, so app.js renders itself off DOMContentLoaded
   // rather than waiting for a cloud bridge to hand it state. See ADR-0015.
   window.__ctapSupabaseActive = false;
+  // The check-in is paused in the shipped build (CHECKIN_PAUSED in data.cjs);
+  // its tests still exercise it, and pass checkinPaused: true to see it hidden.
+  if (!checkinPaused) window.__ctapCheckinPreview = true;
   const advance = installClock(window);
   if (speechRecognition) window.SpeechRecognition = speechRecognition;
   if (!online) Object.defineProperty(window.navigator, 'onLine', { value: false, configurable: true });

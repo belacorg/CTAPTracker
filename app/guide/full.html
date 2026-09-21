@@ -220,7 +220,6 @@
       <li><a href="#cashout">Cash-Out</a></li>
       <li><a href="#forecast">Forecast</a></li>
       <li><a href="#coach">Coach</a></li>
-      <li><a href="#checkin">Check-in</a></li>
       <li><a href="#history">History</a></li>
       <li><a href="#settings">Settings</a></li>
       <li><a href="#theme">Dark mode</a></li>
@@ -374,11 +373,10 @@
         <ol class="callouts">
           <li data-pin="1"><span class="num">1</span><span class="txt"><b>Week switcher.</b> Go back to look at or fix an earlier week.</span></li>
           <li data-pin="2"><span class="num">2</span><span class="txt"><b>Job credits.</b> <b>Earned today</b>, <b>still needed</b> to hit today's target, and the <b>week gap</b>. The bar fills towards today's target, and the line under it says what would close it. <span class="eg">“8 more Gas Service closes today's gap.”</span></span></li>
-          <li data-pin="3"><span class="num">3</span><span class="txt"><b>Daily check-in.</b> One private question a day, under a minute. Nothing to do with CTAP; more on it below.</span></li>
-          <li data-pin="4"><span class="num">4</span><span class="txt"><b>Coach.</b> Reads your own figures back: streaks, balance, what's left this week, and what the extras on a visit are worth. When it says <b>from closed weeks</b> it means the balance you've banked, not this week's prediction.</span></li>
-          <li data-pin="5"><span class="num">5</span><span class="txt"><b>CTAP balance.</b> Your credit (green) or deficit (red) in hours, starting from the balance you set. It follows the Week tile: on <b>Predicted</b> it includes where this week is heading; on <b>Logged</b> it's only what's banked from closed weeks. <b>Tap it</b> for the Cash-Out.</span></li>
-          <li data-pin="6"><span class="num">6</span><span class="txt"><b>Week.</b> Opens on <b>Predicted</b>: where your pace lands the week, with what you've logged so far underneath. <span class="eg">“21.68h logged over 4 days · 2 to go.”</span> Tap the blue pill to switch to <b>Logged</b>, and both tiles change together. The pill disappears once the week's working days are all in. A bar for each day, and your target underneath. <b>Tap the tile</b> for the Weekly Forecast.</span></li>
-          <li data-pin="7"><span class="num">7</span><span class="txt"><b>Scroll down</b> for <b>Best advice</b> (what the extras on a visit are worth, see Coach below) and <b>Today's jobs</b>: everything logged today with its credit. Tap ✕ to remove one, or <b>+ Add a job</b> at the bottom.</span></li>
+          <li data-pin="3"><span class="num">3</span><span class="txt"><b>Coach.</b> Reads your own figures back: streaks, balance, what's left this week, and what the extras on a visit are worth. When it says <b>from closed weeks</b> it means the balance you've banked, not this week's prediction.</span></li>
+          <li data-pin="4"><span class="num">4</span><span class="txt"><b>CTAP balance.</b> Your credit (green) or deficit (red) in hours, starting from the balance you set. It follows the Week tile: on <b>Predicted</b> it includes where this week is heading; on <b>Logged</b> it's only what's banked from closed weeks. <b>Tap it</b> for the Cash-Out.</span></li>
+          <li data-pin="5"><span class="num">5</span><span class="txt"><b>Week.</b> Opens on <b>Predicted</b>: where your pace lands the week, with what you've logged so far underneath. <span class="eg">“21.68h logged over 4 days · 2 to go.”</span> Tap the blue pill to switch to <b>Logged</b>, and both tiles change together. The pill disappears once the week's working days are all in. A bar for each day, and your target underneath. <b>Tap the tile</b> for the Weekly Forecast.</span></li>
+          <li data-pin="6"><span class="num">6</span><span class="txt"><b>Scroll down</b> for <b>Best advice</b> (what the extras on a visit are worth, see Coach below) and <b>Today's jobs</b>: everything logged today with its credit. Tap ✕ to remove one, or <b>+ Add a job</b> at the bottom.</span></li>
         </ol>
       </section>
 
@@ -431,20 +429,6 @@
         <p class="note">Coach only uses your own logged figures. Turn it off in Settings if you'd rather just have the numbers.</p>
       </section>
 
-      <!-- 11 Check-in -->
-      <section class="step" id="checkin" data-shot="checkin-card" data-frame="card">
-        <div class="step-head">
-          <span class="kicker">Daily check-in · on the Dashboard</span>
-          <h2>An honest diary only you can read</h2>
-          <p>One question a day, under a minute. It has nothing to do with your CTAP figures.</p>
-        </div>
-        <ol class="callouts">
-          <li class="plain"><span class="num">1</span><span class="txt"><b>Built on GROW.</b> Goal, Reality, Options, Will. Monday asks what you want to work on this week; the rest of the week asks how it's going. Five days read as one conversation.</span></li>
-          <li class="plain"><span class="num">2</span><span class="txt"><b>It's for you.</b> Where the gaps in the day were, what you're struggling with, what you'd do differently. Three answers: not really, so-so, yes. Skip it any day you like.</span></li>
-          <li class="plain"><span class="num">3</span><span class="txt"><b>Nobody else sees it.</b> No team view, no export, no comparing engineers. That's how it's built, not a setting. Off in Settings if it isn't for you.</span></li>
-        </ol>
-      </section>
-
       <!-- 12 History -->
       <section class="step" id="history" data-shot="history">
         <div class="step-head">
@@ -468,7 +452,7 @@
         </div>
         <ol class="callouts">
           <li data-pin="1"><span class="num">1</span><span class="txt"><b>Your name.</b> Only used for the greeting.</span></li>
-          <li data-pin="2"><span class="num">2</span><span class="txt"><b>Appearance.</b> Dark or light, and the switches for Coach and the daily check-in.</span></li>
+          <li data-pin="2"><span class="num">2</span><span class="txt"><b>Appearance.</b> Dark or light, and the switch for Coach.</span></li>
           <li data-pin="3"><span class="num">3</span><span class="txt"><b>Weekly hours and Target %.</b> Your rostered hours and the share of them you're aiming to credit. 80% is the default; tap the <b>i</b> for why.</span></li>
           <li data-pin="4"><span class="num">4</span><span class="txt"><b>Starting CTAP balance.</b> The same one from set-up. The <b>+/−</b> button switches it between credit and deficit.</span></li>
           <li data-pin="5"><span class="num">5</span><span class="txt"><b>How to use this app.</b> A short version of this guide, built in.</span></li>
@@ -519,18 +503,18 @@
 
 <script>
 (function () {
-  // Pin positions as a percentage of the dark 640×1385 screenshots (setup-card
-  // and checkin-card are the exceptions and have their own sizes).
+  // Pin positions as a percentage of the 640×1385 screenshots (setup-card
+  // is the exception and has its own size).
   var PINS = {
     'setup-card':    [[8.4, 44.2], [8.4, 51.3], [8.4, 57.5]],
-    'dashboard':     [[53, 2.2], [4.3, 16.3], [4.3, 35.7], [4.3, 45.4], [4.3, 65.7], [50.6, 65.7], [4.3, 90.3]],
+    'dashboard':     [[53, 2.2], [4.3, 16.3], [4.3, 35.7], [4.3, 56.1], [50.6, 56.1], [4.3, 80.7]],
     'log-job':       [[91, 9.7], [8.4, 15.5], [4.3, 29.9], [4.3, 49.2], [4.3, 56.7]],
     'log-browse':    [[13.9, 63.1], [50, 70.8], [50, 82.9]],
     'log-category':  [[6, 9.7], [4.3, 15.1], [88, 15.1], [4.3, 22]],
     'schedule':      [[4.2, 13.7], [65.6, 13.7], [18.8, 23], [76.3, 23.5], [92.2, 23.8], [64.2, 60.9], [4.2, 68.4]],
     'shift-picker':  [[5.2, 46.2], [73.4, 70.2], [3.1, 80.8], [46.9, 76.3], [5.2, 85.3], [28.9, 93.6]],
     'history':       [[4.3, 7.5], [4.3, 25.1], [8.4, 40.9], [39, 40.9]],
-    'settings':      [[4.3, 12], [4.3, 25.7], [4.3, 51.6], [53, 65.9], [4.3, 75.7], [4.3, 85.8]],
+    'settings':      [[4.3, 12], [4.3, 25.7], [4.3, 44.3], [53, 58.6], [4.3, 68.3], [4.3, 78.4]],
     'cashout-sheet': [[5.1, 46.7], [5.1, 56.7], [5.1, 66.6], [5.1, 76.4], [5.1, 88.6]],
     'forecast-sheet':[[2.6, 25.6], [2.6, 32.5], [2.6, 51.6], [2.6, 59.9], [2.6, 83.3]]
   };

@@ -1,4 +1,4 @@
-const CACHE = 'jct-v114';
+const CACHE = 'jct-v115';
 const BASE  = '/CTAPTracker';
 
 // The app holds no server-side anything (ADR-0015), so a cached copy is a

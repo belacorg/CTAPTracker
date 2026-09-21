@@ -2111,7 +2111,18 @@ function checkinNoteWarning(text) {
 }
 
 // ── Check-in display toggle (per-engineer, same shape as Coach mode) ────────
+// Paused for the start of the trial (2026-09-21): the questions are being
+// rewritten and come back in a week or two. Paused hides it everywhere — the
+// Dashboard card, the History dots and the Settings switch — but deletes
+// nothing, so any check-ins already on a phone are still there when it
+// returns. Un-pausing is this one constant. Tests opt back in with
+// window.__ctapCheckinPreview.
+const CHECKIN_PAUSED = true;
+function isCheckinPaused() {
+  return CHECKIN_PAUSED && !(typeof window !== 'undefined' && window.__ctapCheckinPreview);
+}
 function isCheckinOn() {
+  if (isCheckinPaused()) return false;
   try {
     return localStorage.getItem('jcpd_checkin_on') !== 'false';
   } catch (e) {
@@ -2219,6 +2230,7 @@ if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     checkinBand: checkinBand,
     checkinNoteWarning: checkinNoteWarning,
     isCheckinOn: isCheckinOn,
+    isCheckinPaused: isCheckinPaused,
   };
 }
 

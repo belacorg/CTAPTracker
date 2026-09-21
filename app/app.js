@@ -1261,7 +1261,7 @@ function buildSettings() {
           <span class="coach-slider"></span>
         </label>
       </div>
-      ${rowDiv()}
+      ${isCheckinPaused() ? '' : `${rowDiv()}
       <div class="st-row">
         <div style="flex:1;min-width:0">
           <span class="st-row-label">Daily check-in <span class="beta-badge">BETA</span></span>
@@ -1271,7 +1271,7 @@ function buildSettings() {
           <input type="checkbox" id="checkin-toggle"${checkinOn ? ' checked' : ''}>
           <span class="coach-slider"></span>
         </label>
-      </div>
+      </div>`}
     </div>
 
     ${sectionLabel('TARGETS')}
