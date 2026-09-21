@@ -1466,9 +1466,11 @@ details[open] .info-chevron { transform: rotate(90deg); }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 6px;
   margin-bottom: 7px;
 }
 .split-card-label {
+  flex-shrink: 0;
   font-size: 0.57rem;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -2865,9 +2867,9 @@ body.light .cashout-result-modelled .cashout-result-net-val { color: #8a5a00; }
   color: var(--muted);
   font-size: 0.58rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  padding: 3px 9px;
+  padding: 3px 7px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition: background 0.15s, color 0.15s;

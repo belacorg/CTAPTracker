@@ -1164,8 +1164,15 @@ function buildHistory() {
     const target  = weekTargetHours(state, wk);
     const pct     = target > 0 ? (earned / target) * 100 : 0;
     const bonus   = bonusAchieved(state, wk);
-    const colour  = pct >= 90 ? 'green' : pct >= 70 ? 'amber' : earned === 0 ? 'grey' : 'red';
     const isCurrent = wk === currentWeekKey;
+    // A week still being worked is graded on where it is heading, the figure
+    // the Week tile leads with (ADR-0023). Scoring the running total called
+    // every Monday "Below target" from the first job.
+    const inProgress = wk === currentWk && !bonus && earned > 0;
+    const projected  = inProgress ? weekPaceFigures(wk, week).projected : null;
+    const gradePct   = inProgress && projected != null && target > 0 ? (projected / target) * 100 : pct;
+    const colour  = gradePct >= 90 ? 'green' : gradePct >= 70 ? 'amber' : earned === 0 ? 'grey' : 'red';
+    const status  = bonus ? 'Bonus ✓' : inProgress ? 'In progress' : pct >= 90 ? 'On track' : pct >= 70 ? 'Amber zone' : 'Below target';
     const isPast    = wk < currentWk;
     const excluded  = week.excludeFromCtap || false;
     const isZero    = earned === 0 && isPast;
@@ -1175,7 +1182,7 @@ function buildHistory() {
       <div class="history-item" data-goto-week="${wk}">
         <div class="hi-left">
           <div class="hi-week">${weekLabel(wk)}${isCurrent ? ' (current)' : ''}</div>
-          <div class="hi-credits">${earned.toFixed(2)}h / ${target.toFixed(2)}h target — ${bonus ? 'Bonus ✓' : pct >= 90 ? 'On track' : pct >= 70 ? 'Amber zone' : 'Below target'}</div>
+          <div class="hi-credits">${earned.toFixed(2)}h / ${target.toFixed(2)}h target — ${status}</div>
           ${showDetails && isPast ? `<div class="hi-details-row">
             <button class="ctap-toggle-btn${excluded ? ' excluded' : ''}" data-week-key="${wk}">${excluded ? '✕ Excluded' : '✓ In CTAP'}</button>
             <div class="hi-retro-field">
