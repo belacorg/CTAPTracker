@@ -373,12 +373,12 @@
         </div>
         <ol class="callouts">
           <li data-pin="1"><span class="num">1</span><span class="txt"><b>Week switcher.</b> Go back to look at or fix an earlier week.</span></li>
-          <li data-pin="2"><span class="num">2</span><span class="txt"><b>Job credits.</b> <b>Earned today</b>, <b>still needed</b> to hit today's target, and the <b>week gap</b>. The bar fills towards today's target, and the line under it says what would close it. <span class="eg">“5 more Gas Repair closes today's gap.”</span></span></li>
+          <li data-pin="2"><span class="num">2</span><span class="txt"><b>Job credits.</b> <b>Earned today</b>, <b>still needed</b> to hit today's target, and the <b>week gap</b>. The bar fills towards today's target, and the line under it says what would close it. <span class="eg">“8 more Gas Service closes today's gap.”</span></span></li>
           <li data-pin="3"><span class="num">3</span><span class="txt"><b>Daily check-in.</b> One private question a day, under a minute. Nothing to do with CTAP; more on it below.</span></li>
-          <li data-pin="4"><span class="num">4</span><span class="txt"><b>Coach.</b> Reads your own figures back: streaks, balance, what's left this week, and what the extras on a visit are worth.</span></li>
-          <li data-pin="5"><span class="num">5</span><span class="txt"><b>CTAP balance.</b> Your running credit (green) or deficit (red) in hours, starting from the balance you set. <b>Tap it</b> for the Cash-Out.</span></li>
-          <li data-pin="6"><span class="num">6</span><span class="txt"><b>Week.</b> Hours banked against target, a bar for each day. The % goes green when you're on pace for the day you're on, not just at the end of the week. Switch between <b>Predicted</b> (where your pace lands you by Sunday, the default) and <b>Logged</b> (what you have entered so far). <b>Tap it</b> for the Weekly Forecast.</span></li>
-          <li data-pin="7"><span class="num">7</span><span class="txt"><b>Today's jobs.</b> Everything logged today with its credit. Tap ✕ to remove one, or <b>+ Add a job</b> at the bottom.</span></li>
+          <li data-pin="4"><span class="num">4</span><span class="txt"><b>Coach.</b> Reads your own figures back: streaks, balance, what's left this week, and what the extras on a visit are worth. When it says <b>from closed weeks</b> it means the balance you've banked, not this week's prediction.</span></li>
+          <li data-pin="5"><span class="num">5</span><span class="txt"><b>CTAP balance.</b> Your credit (green) or deficit (red) in hours, starting from the balance you set. It follows the Week tile: on <b>Predicted</b> it includes where this week is heading; on <b>Logged</b> it's only what's banked from closed weeks. <b>Tap it</b> for the Cash-Out.</span></li>
+          <li data-pin="6"><span class="num">6</span><span class="txt"><b>Week.</b> Opens on <b>Predicted</b>: where your pace lands the week, with what you've logged so far underneath. <span class="eg">“21.68h logged over 4 days · 2 to go.”</span> Tap the blue pill to switch to <b>Logged</b>, and both tiles change together. The pill disappears once the week's working days are all in. A bar for each day, and your target underneath. <b>Tap the tile</b> for the Weekly Forecast.</span></li>
+          <li data-pin="7"><span class="num">7</span><span class="txt"><b>Scroll down</b> for <b>Best advice</b> (what the extras on a visit are worth, see Coach below) and <b>Today's jobs</b>: everything logged today with its credit. Tap ✕ to remove one, or <b>+ Add a job</b> at the bottom.</span></li>
         </ol>
       </section>
 
@@ -390,7 +390,7 @@
           <p>Slides up from the bottom. Swipe down or tap ✕ to close.</p>
         </div>
         <ol class="callouts">
-          <li data-pin="1"><span class="num">1</span><span class="txt"><b>Payable balance.</b> Your CTAP credit in hours. In deficit it shows £0, because there's nothing to cash out yet.</span></li>
+          <li data-pin="1"><span class="num">1</span><span class="txt"><b>Payable balance.</b> Your banked CTAP credit in hours, from closed weeks only. That's why it can differ from the predicted balance on the tile. In deficit it shows £0, because there's nothing to cash out yet.</span></li>
           <li data-pin="2"><span class="num">2</span><span class="txt"><b>Hours to price.</b> Starts on your payable balance. Type over it or tap − / + and the money moves as you go — that's how you price hours you haven't earned yet. Price a figure above your balance and it says so in amber; the Payable balance above never changes. <span class="eg">Worth asking from a deficit: it shows what digging out is actually worth.</span></span></li>
           <li data-pin="3"><span class="num">3</span><span class="txt"><b>Your multiplier.</b> 0×, 0.8×, 1.4× or 2×. Pick yours.</span></li>
           <li data-pin="4"><span class="num">4</span><span class="txt"><b>Tax band.</b> Gross, Basic (20% tax + 8% NI) or Higher (40% tax + 2% NI).</span></li>
@@ -420,12 +420,12 @@
         <div class="step-head">
           <span class="kicker">Coach Mode · on the Dashboard</span>
           <h2>Coach works out the way back</h2>
-          <p>Say you're 8.40h in deficit on a Wednesday morning. This is what Coach does with that.</p>
+          <p>Say you've banked an 8.40h deficit from closed weeks, and it's Wednesday morning. This is what Coach does with that.</p>
         </div>
         <ol class="callouts">
           <li class="plain" data-shot="coach-deficit-card"><span class="num">1</span><span class="txt"><b>Your run rate.</b> It spreads the deficit over the next 20 working days, so it's a small daily top-up rather than one impossible week. <span class="eg">8.40h ÷ 20 days = +0.42h a day above target.</span> It also tells you whether last week shrank the deficit or added to it.</span></li>
           <li class="plain" data-shot="coach-hero"><span class="num">2</span><span class="txt"><b>Today, in jobs.</b> Job Credits turns what's left of today's target into jobs, using the credit of the last job you logged. <span class="eg">2.05h still needed ÷ 0.93h per Gas Repair = 3 more.</span></span></li>
-          <li class="plain" data-shot="coach-forecast"><span class="num">3</span><span class="txt"><b>The rest of the week.</b> The Forecast takes your daily average so far, shows where the week finishes at that pace, and gives you the daily rate to still make target. <span class="eg">14.94h to go ÷ 2 days left = 7.47h a day.</span></span></li>
+          <li class="plain" data-shot="coach-forecast"><span class="num">3</span><span class="txt"><b>The rest of the week.</b> The Forecast takes your daily average so far, shows where the week finishes at that pace, and gives you the daily rate to still make target. <span class="eg">14.48h to go ÷ 3 days left = 4.83h a day.</span></span></li>
           <li class="plain" data-shot="coach-best-advice"><span class="num">4</span><span class="txt"><b>What lifts the balance most.</b> After a service or repair it lists the best advice you could give on that visit, a Hive, an inhibitor, a CO alarm, a boiler lead, and what each is worth against today's gap. <b>Never dispatched work</b>: it won't suggest a service or a repair you weren't given.</span></li>
         </ol>
         <p class="note">Coach only uses your own logged figures. Turn it off in Settings if you'd rather just have the numbers.</p>
@@ -454,7 +454,7 @@
         </div>
         <ol class="callouts">
           <li data-pin="1"><span class="num">1</span><span class="txt"><b>Weekly trend.</b> The last six weeks. Green means bonus hit. <span class="eg">“4 / 6 weeks bonus.”</span></span></li>
-          <li data-pin="2"><span class="num">2</span><span class="txt"><b>Each week:</b> hours against target, with a dot for the result: green is bonus, amber is close, red is below. Tap a week to open it.</span></li>
+          <li data-pin="2"><span class="num">2</span><span class="txt"><b>Each week:</b> hours against target, with a dot for the result: green is bonus, amber is close, red is below. The week you're in says <b>In progress</b>, and its dot shows where it's heading, not how far through you are. Tap a week to open it.</span></li>
           <li data-pin="3"><span class="num">3</span><span class="txt"><b>In CTAP.</b> Had a week that wasn't a fair test? Long sickness, a phased return. Untick it and it stays out of your balance without being deleted.</span></li>
           <li data-pin="4"><span class="num">4</span><span class="txt"><b>Travel.</b> Note that week's travel hours. For now it's a record only; the 80% target already allows for travel.</span></li>
         </ol>
@@ -523,7 +523,7 @@
   // and checkin-card are the exceptions and have their own sizes).
   var PINS = {
     'setup-card':    [[8.4, 44.2], [8.4, 51.3], [8.4, 57.5]],
-    'dashboard':     [[53, 2.2], [4.3, 16.3], [4.3, 35.6], [4.3, 45.3], [4.3, 63.4], [50.6, 63.4], [4.3, 84]],
+    'dashboard':     [[53, 2.2], [4.3, 16.3], [4.3, 35.7], [4.3, 45.4], [4.3, 65.7], [50.6, 65.7], [4.3, 90.3]],
     'log-job':       [[91, 9.7], [8.4, 15.5], [4.3, 29.9], [4.3, 49.2], [4.3, 56.7]],
     'log-browse':    [[13.9, 63.1], [50, 70.8], [50, 82.9]],
     'log-category':  [[6, 9.7], [4.3, 15.1], [88, 15.1], [4.3, 22]],
@@ -532,7 +532,7 @@
     'history':       [[4.3, 7.5], [4.3, 25.1], [8.4, 40.9], [39, 40.9]],
     'settings':      [[4.3, 12], [4.3, 25.7], [4.3, 51.6], [53, 65.9], [4.3, 75.7], [4.3, 85.8]],
     'cashout-sheet': [[5.1, 46.7], [5.1, 56.7], [5.1, 66.6], [5.1, 76.4], [5.1, 88.6]],
-    'forecast-sheet':[[2.6, 25.6], [2.6, 32.5], [2.6, 51.6], [2.6, 59.5], [2.6, 80.4]]
+    'forecast-sheet':[[2.6, 25.6], [2.6, 32.5], [2.6, 51.6], [2.6, 59.9], [2.6, 83.3]]
   };
 
   var frame = document.getElementById('frame');
