@@ -4,6 +4,68 @@
 // Gas Repair is 56). See ADR-0006: this is policy, expected to drift.
 // Lines marked CARRY were not in the supplied screenshots (sheet rows 9–12 and
 // 43–47) — values preserved from the prior catalogue, pending verification.
+// ── 2026 credit changes ──────────────────────────────────────────────────────────────────────
+// From the "2026 changes — pending changes and go live dates" brief. Each is
+// keyed on the day the work was done, so a job backdated across the line is
+// credited under the rules of its own day. See ADR-0026.
+const UPGRADE_UPLIFT_FROM = '2026-02-23';  // upgrades quoted over 240 min earn +10%
+const UPGRADE_UPLIFT_OVER = 240;
+const REFLUSH_RAISED_FROM = '2026-02-23';  // HIM-HE reflush 330 → 480 min
+const SGO_RECOUPLED_FROM  = '2026-03-02';  // SGO paid into CTAP as minutes, not cash
+
+// SGO cash to CTAP conversion.
+//
+// Until March 2026 a sale paid two things: SGO cash, and a fulfilment credit
+// in minutes. From 2 March the cash stops and is paid into the CTAP bank as
+// minutes instead — "recoupled". The fulfilment credit is unchanged on every
+// row of the table, which is how you can tell it is the credit engineers were
+// already getting; the CTAP credit is the old cash converted at ~2.2 min per
+// pound, on top. A sale's total is the two together.
+//
+// Kept apart rather than summed, because they are different things: the
+// fulfilment credit is earned for the work, the CTAP credit is what used to
+// be cash. An entry records both, so the app can show how much of a week was
+// SGO, and so either can be adjusted without rewriting the other.
+//
+// ⚠ PROVISIONAL. These are the Technical Repair Engineer figures. Service &
+// Repair has its own table, to follow; when it arrives, it replaces the rows
+// below and nothing else needs to change.
+//
+// `perThousand` rows are priced on the sale's value: the CTAP credit scales per
+// £1,000 excl VAT, and the fulfilment credit stays flat per sale — the filter
+// and powerflush rows are both HIM products under £1,000 and still carry the
+// full 12 minutes, so fulfilment cannot be per £1,000.
+const SGO_TABLE = {
+  role: 'Technical Repair Engineer',
+  provisional: true,
+  rows: [
+    { id: 'hi_lead',          name: 'Boiler Lead / ASHP Lead',       short: 'Boiler / ASHP Lead', cash: 20.00, fulfilmentMins: 15, ctapMins: 44 },
+    { id: 'him_sgo',          name: 'HIM Sale (per £1,000 excl VAT)', short: 'HIM Sale',           cash: 50.00, fulfilmentMins: 12, ctapMins: 110, perThousand: true },
+    { id: 'inhibitor',        name: 'Inhibitor (SGO)',               short: 'Inhibitor',          cash: 2.04,  fulfilmentMins: 12, ctapMins: 5 },
+    { id: 'filter_sgo',       name: 'System Filter (SGO)',           short: 'System Filter',      cash: 10.25, fulfilmentMins: 12, ctapMins: 23 },
+    { id: 'powerflush_sgo',   name: 'Powerflush (SGO)',              short: 'Powerflush',         cash: 31.50, fulfilmentMins: 12, ctapMins: 70 },
+    { id: 'co_alarm_sgo',     name: 'CO Detector (SGO)',             short: 'CO Detector',        cash: 1.05,  fulfilmentMins: 5,  ctapMins: 2 },
+    { id: 'hive_sale_sgo',    name: 'Hive Thermostat (SGO)',         short: 'Hive Thermostat',    cash: 17.50, fulfilmentMins: 10, ctapMins: 39 },
+    { id: 'hive_trv_sgo',     name: 'Hive TRV (SGO, per TRV)',       short: 'Hive TRV',           cash: 2.50,  fulfilmentMins: 5,  ctapMins: 6 },
+    { id: 'hive_plus_month',  name: 'Hive Plus – Monthly (SGO)',     short: 'Hive Plus Monthly',  cash: 3.00,  fulfilmentMins: 10, ctapMins: 7 },
+    { id: 'hive_plus_annual', name: 'Hive Plus – Annual (SGO)',      short: 'Hive Plus Annual',   cash: 6.00,  fulfilmentMins: 10, ctapMins: 13 },
+    { id: 'homecare_lead',    name: 'HomeCare Lead / Smart Lead',    short: 'HomeCare / Smart Lead', cash: 8.75, fulfilmentMins: 15, ctapMins: 19 }
+  ]
+};
+
+// A table row as a catalogue job. `minutes` is the recoupled total, so every
+// reader that only wants a figure — tiles, best advice, the gap maths — sees
+// what a sale is worth today without having to know about the split.
+function sgoJob(row) {
+  const base = { id: row.id, name: row.name, sgo: row, bestAdvice: false };
+  if (row.perThousand) {
+    return Object.assign(base, { minutes: 1, credits: 0.01, variable: true, variableType: 'pounds',
+      variablePrompt: 'Sale value in £, excluding VAT' });
+  }
+  const total = row.fulfilmentMins + row.ctapMins;
+  return Object.assign(base, { minutes: total, credits: +(total / 83.58).toFixed(2), variable: false });
+}
+
 const JOB_TYPES = {
   core: [
     // ── Services (time varies by appliance) ──
@@ -56,17 +118,13 @@ const JOB_TYPES = {
   sales: [
     // ── Quotes / HIM / in-day actions (verified from sheet) ──
     { id: 'standalone_quote', code: 'GQ-INS',  name: 'Provide Quote – Gas (standalone)',       minutes: 31, credits: 0.37, variable: false },
-    { id: 'him_upgrade',      code: 'HIM',     name: 'HIM Upgrade (enter quoted minutes)',     minutes: 1,  credits: 0.01, variable: true, variableType: 'minutes', variablePrompt: 'Minutes quoted in Quote Tool' },
+    // Upgrades quoted over 240 min earn +10% from 23 Feb 2026 — see jobCredit.
+    { id: 'him_upgrade',      code: 'HIM',     name: 'HIM Upgrade (enter quoted minutes)',     minutes: 1,  credits: 0.01, variable: true, variableType: 'minutes', variablePrompt: 'Minutes quoted in Quote Tool', upgrade: true },
+    // A fixed 8 hours on completion from 23 Feb 2026, whatever was quoted (5.5h before).
+    { id: 'reflush_him_he',   code: 'HIM-HE',  name: 'S&R Reflush (on completion)',            minutes: 480, credits: 5.74, variable: false, minutesBefore: { date: REFLUSH_RAISED_FROM, minutes: 330 }, elective: false },
     { id: 'add_inhibitor',    code: 'ODC-SYS', name: 'Add Inhibitor (in-day action)',          minutes: 20, credits: 0.24, variable: false },
-    { id: 'cod_gas',          code: 'IA-COD',  name: 'COD / CO Detector (in-day action)',      minutes: 5,  credits: 0.06, variable: false },
-    // ── SGO / sale credits — CARRY rows 43–47, preserved pending verification ──
-    { id: 'hi_lead',          name: 'HI Lead (Boiler Lead)',        minutes: 58,  credits: 0.69, variable: false },
-    { id: 'inhibitor',        name: 'Inhibitor (Fit + SGO)',         minutes: 51,  credits: 0.61, variable: false },
-    { id: 'hive_sale_sgo',    name: 'Hive Sale (SGO Credit)',        minutes: 69,  credits: 0.82, variable: false },
-    { id: 'hive_sale_fit',    name: 'Hive Fit (Sale Job)',           minutes: 125, credits: 1.50, variable: false },
-    { id: 'co_alarm_sgo',     name: 'CO Alarm – Sell (SGO Credit)',  minutes: 10,  credits: 0.12, variable: false },
-    { id: 'co_alarm_fit',     name: 'CO Alarm – Fit Only',           minutes: 7,   credits: 0.08, variable: false }
-  ],
+    { id: 'cod_gas',          code: 'IA-COD',  name: 'COD / CO Detector (in-day action)',      minutes: 5,  credits: 0.06, variable: false }
+  ].concat(SGO_TABLE.rows.map(sgoJob)),
   absent: [
     { id: 'wait_work', name: 'Wait Work', minutes: 60, credits: 0.72, variable: true, variableType: 'hours', variablePrompt: 'Time in hours' },
     { id: 'early_finish', name: 'Early Finish', minutes: 0, credits: 0, variable: true, variableType: 'minutes', variablePrompt: 'How many minutes did you finish early?', isNpt: true, confirmLabel: 'Log Early Finish', skipNameField: true },
@@ -333,6 +391,63 @@ function findJob(id) {
   return null;
 }
 
+// Rows taken off the catalogue that engineers may still have in their
+// history. Deliberately outside JOB_TYPES and unreachable from findJob, so no
+// tile, search, voice match or "Most used" chip can offer them again; old
+// entries keep their own name and credit, and only need a category.
+//
+// Both were unverified CARRY rows duplicating a verified code: "Hive Fit"
+// (125) is the install, which ID1923 prices as INSHV-THR (90), and "CO Alarm
+// – Fit Only" (7) is IA-COD. Left in beside the new SGO rows they invited a
+// sale being logged as a sale, a fit and an install.
+const RETIRED_JOBS = [
+  { id: 'hive_sale_fit', name: 'Hive Fit (Sale Job)',  category: 'sales', retired: '2026-09-23' },
+  { id: 'co_alarm_fit',  name: 'CO Alarm – Fit Only', category: 'sales', retired: '2026-09-23' }
+];
+
+// What a job is worth on a given day, and what that figure is made of.
+//
+// The one place a logged entry's credit is decided — tap and voice both come
+// through here, so the 2026 rules cannot apply on one path and not the other.
+// `dayKey` is the day the work was done; without one, today's rules apply.
+//
+// Returns { creditMins, fulfilmentMins, sgoMins }. The last two are only
+// present for SGO sales, and always sum to creditMins when they are.
+function jobCredit(job, value, dayKey) {
+  const day = dayKey || getTodayKey();
+  if (!job || job.isNpt || job.isMentorFull || job.isMentorPartial) return { creditMins: 0 };
+
+  if (job.sgo) {
+    const row = job.sgo;
+    // Before 2 March the sale paid cash, which never reached the CTAP bank;
+    // only the fulfilment credit did.
+    const recoupled = day >= SGO_RECOUPLED_FROM;
+    let fulfilmentMins = row.fulfilmentMins;
+    let sgoMins = row.ctapMins;
+    if (row.perThousand) {
+      if (value === null || value === undefined || !(value > 0)) return { creditMins: 0 };
+      sgoMins = Math.round(row.ctapMins * value / 1000);
+    }
+    if (!recoupled) sgoMins = 0;
+    return { creditMins: fulfilmentMins + sgoMins, fulfilmentMins: fulfilmentMins, sgoMins: sgoMins };
+  }
+
+  if (!job.variable) {
+    const before = job.minutesBefore;
+    return { creditMins: before && day < before.date ? before.minutes : job.minutes };
+  }
+  if (value === null || value === undefined) return { creditMins: 0 };
+  if (job.variableType === 'hours') return { creditMins: job.minutes * value };
+
+  // "Upgrade job credits will be enhanced by 10% where the quoted time
+  // exceeds 240 mins" — the whole credit, not the minutes above 240; a quote of
+  // exactly 240 is not over it.
+  if (job.upgrade && value > UPGRADE_UPLIFT_OVER && day >= UPGRADE_UPLIFT_FROM) {
+    return { creditMins: Math.round(value * 1.1) };
+  }
+  return { creditMins: value };
+}
+
 // ── Performance Factor ─────────────────────────────────────────────────────
 // PF formula: raw productive output × 8.5%, capped at PF_DAY_CAP minutes/day.
 const PF_DAY_CAP = 40;
@@ -590,9 +705,16 @@ function isFixedCredit(j) {
   return !j.variable && !j.isNpt && j.minutes > 0;
 }
 
+// An elective job is one the engineer can choose to add on a visit they are
+// already making. A reflush is sold work booked in its own right — offering
+// "8.00h" as a way to close today's gap would be fiction.
+function isElective(j) {
+  return isFixedCredit(j) && j.elective !== false;
+}
+
 function getElectiveJobs() {
-  return JOB_TYPES.sales.filter(isFixedCredit)
-    .concat(JOB_TYPES.hive.filter(function(j) { return j.bestAdvice && isFixedCredit(j); }));
+  return JOB_TYPES.sales.filter(isElective)
+    .concat(JOB_TYPES.hive.filter(function(j) { return j.bestAdvice && isElective(j); }));
 }
 
 // Every job that counts as a Hive install the engineer offered — the flagged
@@ -601,6 +723,7 @@ function getElectiveJobs() {
 function getOfferedHiveIds() {
   const ids = JOB_TYPES.hive.filter(function(j) { return j.bestAdvice; })
     .map(function(j) { return j.id; });
+  // Retired, but still in engineers' history — it was a Hive they offered.
   ids.push('hive_sale_fit');
   return new Set(ids);
 }
@@ -624,24 +747,33 @@ function getBestAdviceOpportunities(todayJobIds) {
   const onVisit = Array.from(today).some(function(id) { return BEST_ADVICE_VISIT_IDS.has(id); });
   if (!onVisit) return [];
 
-  const sale = function(id) { return JOB_TYPES.sales.filter(function(j) { return j.id === id; })[0]; };
+  const job = function(id) { return findJob(id); };
   const loggedAny = function(ids) { return ids.some(function(id) { return today.has(id); }); };
-  const hiveFit = sale('hive_sale_fit'), hiveSgo = sale('hive_sale_sgo');
-  const inhibitor = sale('inhibitor'), lead = sale('hi_lead');
+  // What recommending it is worth: the sale's SGO credit plus, where the
+  // engineer fits it on the same visit, the verified fit code. This summed the
+  // unverified "Hive Fit" row (125) with the old Hive SGO (69) and told
+  // engineers a Hive was worth 3.23h; the install is INSHV-THR at 90.
+  const hiveSgo = job('hive_sale_sgo'), hiveFit = job('inshv_thr');
+  const inhibitor = job('inhibitor'), inhibitorFit = job('add_inhibitor');
+  const filter = job('filter_sgo'), lead = job('hi_lead');
   const opps = [];
 
-  if (hiveFit && hiveSgo && !loggedAny(Array.from(getOfferedHiveIds()).concat('hive_sale_sgo'))) {
-    opps.push({ id: 'hive', name: 'Hive', minutes: hiveFit.minutes + hiveSgo.minutes,
+  if (hiveSgo && hiveFit && !loggedAny(Array.from(getOfferedHiveIds()).concat('hive_sale_sgo', 'hive_trv_sgo'))) {
+    opps.push({ id: 'hive', name: 'Hive', minutes: hiveSgo.minutes + hiveFit.minutes,
       why: 'No smart controls, or faulty ones? Hive install, Hive Mini, TRVs or an OpenTherm upgrade' });
   }
-  if (inhibitor && !loggedAny(['inhibitor', 'add_inhibitor'])) {
-    opps.push({ id: 'inhibitor', name: 'Inhibitor', minutes: inhibitor.minutes,
+  if (inhibitor && inhibitorFit && !loggedAny(['inhibitor', 'add_inhibitor'])) {
+    opps.push({ id: 'inhibitor', name: 'Inhibitor', minutes: inhibitor.minutes + inhibitorFit.minutes,
       why: 'Protect the system you have just worked on' });
   }
-  opps.push({ id: 'filter_water', name: 'System filter & water quality', minutes: null,
-    why: 'Poor water, or a plate heat exchanger going on? Recommend the filter — quote it as a HIM upgrade' });
+  if (!loggedAny(['filter_sgo', 'powerflush_sgo'])) {
+    // The sale has a fixed SGO credit now; the fit is still quoted as a HIM
+    // upgrade, so only the part that is known is given a figure.
+    opps.push({ id: 'filter_water', name: 'System filter & water quality', minutes: filter ? filter.minutes : null,
+      why: 'Poor water, or a plate heat exchanger going on? Recommend the filter — plus the fit, quoted as a HIM upgrade' });
+  }
   opps.push({ id: 'upgrade', name: 'Upgrade work', minutes: null,
-    why: 'Quote it as a HIM upgrade' });
+    why: 'Quote it as a HIM upgrade — the sale earns SGO credit per £1,000 on top' });
   if (lead && !loggedAny(['hi_lead'])) {
     opps.push({ id: 'boiler_lead', name: 'Boiler lead', minutes: lead.minutes,
       why: 'Older boiler? Raise an HI lead' });
@@ -1066,7 +1198,8 @@ function weekSummary(state, weekKey) {
 
   const coreIds  = new Set(JOB_TYPES.core.map(function(j) { return j.id; }));
   const hiveIds  = new Set(JOB_TYPES.hive.map(function(j) { return j.id; }));
-  const salesIds = new Set(JOB_TYPES.sales.map(function(j) { return j.id; }));
+  const salesIds = new Set(JOB_TYPES.sales.map(function(j) { return j.id; })
+    .concat(RETIRED_JOBS.filter(function(j) { return j.category === 'sales'; }).map(function(j) { return j.id; })));
   let core = 0, hive = 0, sales = 0, absence = 0;
   Object.values(week.days || {}).forEach(function(dayJobs) {
     dayJobs.forEach(function(j) {
@@ -1088,6 +1221,18 @@ function weekSummary(state, weekKey) {
     dayJobCounts[dk] = jobs.length;
   });
   const totalJobs = allJobs.length;
+
+  // How much of the week was SGO, and what it was made of. Read off the split
+  // each entry recorded when it was logged, so a later change to the table
+  // cannot rewrite what a past week was paid. Entries from before the split
+  // existed have neither field and are simply not SGO here.
+  const sgoCredit = allJobs.reduce(function(acc, j) {
+    if (typeof j.sgoMins !== 'number' && typeof j.fulfilmentMins !== 'number') return acc;
+    acc.sgoMins += j.sgoMins || 0;
+    acc.fulfilmentMins += j.fulfilmentMins || 0;
+    acc.sales++;
+    return acc;
+  }, { sgoMins: 0, fulfilmentMins: 0, sales: 0 });
 
   // Streak — consecutive past weeks with the same hit/miss outcome, ending at weekKey
   const todayWk = getWeekKey(new Date());
@@ -1126,6 +1271,7 @@ function weekSummary(state, weekKey) {
     earned: earned, target: target, bonus: bonus, gap: gap, pct: pct,
     bestDay: bestDay,
     categoryCounts: { core: core, hive: hive, sales: sales, absence: absence },
+    sgoCredit: sgoCredit,
     ctapImpact: ctapImpact,
     totalJobs: totalJobs,
     streak: streak,
@@ -1203,19 +1349,26 @@ const VOICE_ALIASES = {
   hive_repair: ['hive repair', 'hive breakdown', 'hive fault', 'thermostat repair'],
   recall_hive: ['recall hive', 'hive recall', 'recall'],
   inshv_min: ['install hive mini', 'hive mini sold'],
-  inshv_thr: ['install hive thermostat', 'hive thermostat sold'],
+  inshv_thr: ['install hive thermostat', 'hive thermostat sold', 'hive fit', 'hive fitting', 'fitted hive'],
   inshv_trv: ['install hive trvs', 'hive trvs sold'],
   // ── Sales / SGO ──
   standalone_quote: ['standalone quote', 'provide quote', 'quote', 'quotes', 'quoted'],
   him_upgrade: ['him upgrade', 'home improvement upgrade', 'him'],
   add_inhibitor: ['add inhibitor', 'added inhibitor', 'in day inhibitor'],
-  cod_gas: ['carbon monoxide detector', 'co detector', 'cod'],
-  hi_lead: ['boiler lead', 'boiler leads', 'hi lead', 'hi leads', 'lead', 'leads'],
-  inhibitor: ['inhibitor', 'inhibitors'],
-  hive_sale_sgo: ['hive sale', 'hive sold', 'sold a hive', 'hive sgo'],
-  hive_sale_fit: ['hive fit', 'hive fitting', 'fitted hive'],
-  co_alarm_sgo: ['co alarm sale', 'co alarm sold', 'sold a co alarm', 'co alarm sgo'],
-  co_alarm_fit: ['co alarm fit', 'fitted co alarm', 'co alarm', 'co alarms'],
+  cod_gas: ['carbon monoxide detector', 'co detector', 'cod', 'co alarm fit', 'fitted co alarm', 'co alarm', 'co alarms'],
+  reflush_him_he: ['reflush', 'reflushes', 're flush', 'reflushed'],
+  hi_lead: ['boiler lead', 'boiler leads', 'hi lead', 'hi leads', 'ashp lead', 'heat pump lead', 'lead', 'leads'],
+  him_sgo: ['him sale', 'him sold', 'sold a him', 'him sgo', 'home improvement sale'],
+  inhibitor: ['inhibitor', 'inhibitors', 'inhibitor sale', 'sold an inhibitor'],
+  filter_sgo: ['filter sale', 'sold a filter', 'filter sgo', 'system filter', 'magnetic filter', 'filter', 'filters'],
+  powerflush_sgo: ['powerflush', 'powerflushes', 'power flush', 'power flushes', 'powerflush sale', 'sold a powerflush'],
+  hive_sale_sgo: ['hive sale', 'hive sold', 'sold a hive', 'hive sgo', 'hive thermostat sale'],
+  hive_trv_sgo: ['hive trv sale', 'hive trvs sale', 'sold a hive trv', 'hive trv sgo'],
+  hive_plus_month: ['hive plus monthly', 'hive plus month', 'monthly hive plus'],
+  hive_plus_annual: ['hive plus annual', 'hive plus yearly', 'annual hive plus'],
+  homecare_lead: ['homecare lead', 'home care lead', 'homecare leads', 'smart lead', 'smart leads', 'smart meter lead'],
+  // The retired fit rows' phrases now reach the verified codes they duplicated.
+  co_alarm_sgo: ['co alarm sale', 'co alarm sold', 'sold a co alarm', 'co alarm sgo', 'co detector sale', 'sold a co detector'],
   // ── Absence / NPT / operational ──
   wait_work: ['wait work', 'waiting time', 'wait time', 'waiting', 'stood down'],
   early_finish: ['early finish', 'finished early', 'finish early', 'early dart'],
@@ -1811,11 +1964,8 @@ function parseVoiceLog(transcript, refDateStr) {
 // Credit minutes one entry is worth. Mirrors the arithmetic in logJob() —
 // for variable jobs an 'hours' input scales the job's minutes, a 'minutes'
 // input *is* the credit.
-function voiceEntryCreditMins(job, value) {
-  if (!job || job.isNpt || job.isMentorFull || job.isMentorPartial) return 0;
-  if (!job.variable) return job.minutes;
-  if (value === null || value === undefined) return 0;
-  return job.variableType === 'hours' ? job.minutes * value : value;
+function voiceEntryCreditMins(job, value, dayKey) {
+  return jobCredit(job, value, dayKey).creditMins;
 }
 
 // Total credit hours a parsed batch would add. Variable entries with no value
@@ -2172,6 +2322,12 @@ if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     dailyRawOutputHours: dailyRawOutputHours,
     weekPFMins: weekPFMins,
     paceProjection: paceProjection,
+    jobCredit: jobCredit,
+    SGO_TABLE: SGO_TABLE,
+    RETIRED_JOBS: RETIRED_JOBS,
+    SGO_RECOUPLED_FROM: SGO_RECOUPLED_FROM,
+    UPGRADE_UPLIFT_FROM: UPGRADE_UPLIFT_FROM,
+    REFLUSH_RAISED_FROM: REFLUSH_RAISED_FROM,
     getLogWeekStrip: getLogWeekStrip,
     getTopJobs: getTopJobs,
     jobMixForGap: jobMixForGap,

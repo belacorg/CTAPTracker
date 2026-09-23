@@ -132,7 +132,7 @@ next to the numbers.
 ![Browse all](screenshots/log-browse.png)
 
 Below Most used, the catalogue sits behind four tiles — **Gas** (20),
-**Hive** (13), **SGO** (10) and **Absence** (8). Tapping one opens that
+**Hive** (13), **SGO** (16) and **Absence** (8). Tapping one opens that
 category over the whole screen.
 
 ![A category](screenshots/log-category.png)

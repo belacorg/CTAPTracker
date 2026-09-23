@@ -114,15 +114,11 @@ const JOB_META = {
   inshv_trv:   { short: 'Install Hive TRVs', sub: 'Variable · sold via Services' },
   // Quotes / SGO (sales)
   standalone_quote: { short: 'Provide Quote',   sub: 'Gas · standalone' },
-  him_upgrade:      { short: 'HIM Upgrade',     sub: 'Variable · quoted mins' },
+  him_upgrade:      { short: 'HIM Upgrade',     sub: 'Quoted mins · +10% over 240' },
   add_inhibitor:    { short: 'Add Inhibitor',   sub: 'In-day action' },
   cod_gas:          { short: 'COD / CO Detector', sub: 'In-day action' },
-  hi_lead:        { short: 'HI Lead',          sub: 'Boiler lead' },
-  inhibitor:      { short: 'Inhibitor',         sub: 'Fit + SGO credit' },
-  hive_sale_sgo:  { short: 'Hive Sale',         sub: 'SGO credit' },
-  hive_sale_fit:  { short: 'Hive Fit',          sub: 'Sale job' },
-  co_alarm_sgo:   { short: 'CO Alarm Sell',     sub: 'SGO credit' },
-  co_alarm_fit:   { short: 'CO Alarm Fit',      sub: 'Fit only' },
+  reflush_him_he:   { short: 'Reflush',         sub: 'HIM-HE \u00b7 8h on completion' },
+  // SGO rows are labelled from SGO_TABLE — see jobDisplay.
   // Absence
   wait_work:         { short: 'Wait Work',          sub: 'Variable · hours' },
   early_finish:      { short: 'Early Finish',        sub: 'NPT deduction' },
@@ -160,6 +156,18 @@ function localDisplayName() {
 // noise; the subtitle is the disambiguator, since short names alone give five
 // identical "Gas Service" rows. See ADR-0008.
 function jobDisplay(j) {
+  // SGO rows describe themselves from the conversion table, so the split on
+  // the tile is always the split that will be credited — and changes with the
+  // table, with nothing here to keep in step.
+  if (j.sgo) {
+    const r = j.sgo;
+    const split = `${r.fulfilmentMins} fulfilment + ${r.ctapMins} SGO min`;
+    return {
+      name: r.short || j.name,
+      sub: r.perThousand ? `Per \u00a31,000 excl VAT \u00b7 ${split}` : split,
+      credits: j.variable ? 'Variable' : `+${(j.minutes / 60).toFixed(2)}h`
+    };
+  }
   const meta = JOB_META[j.id] || {};
   return {
     name: meta.short || j.name,
@@ -580,7 +588,7 @@ function buildDashboard() {
               const ts = j.ts ? new Date(j.ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '';
               return `<div class="job-entry">
                 <span class="job-ts">${ts}</span>
-                <span class="job-name">${j.name}${j.variableInput ? ` <span style="color:var(--muted)">(${j.variableInput})</span>` : ''}</span>
+                <span class="job-name">${j.name}${j.variableInput ? ` <span style="color:var(--muted)">(${j.variableInput})</span>` : ''}${sgoSplitNote(j)}</span>
                 <span class="job-credits">+ ${(j.creditMins / 60).toFixed(2)} h</span>
                 <button class="del-btn" data-day="${todayKey}" data-idx="${i}" title="Remove">×</button>
               </div>`;
@@ -841,7 +849,7 @@ function buildDayBlock(dayKey, jobs, isToday, week) {
       ${!isLeave ? `<div class="day-jobs">
         ${jobs.map((j, i) => `
           <div class="job-entry">
-            <span class="job-name">${j.name}${j.variableInput ? ` <span style="color:var(--muted)">(${j.variableInput})</span>` : ''}</span>
+            <span class="job-name">${j.name}${j.variableInput ? ` <span style="color:var(--muted)">(${j.variableInput})</span>` : ''}${sgoSplitNote(j)}</span>
             <span class="job-credits">+ ${(j.creditMins/60).toFixed(2)} h</span>
             <button class="del-btn" data-day="${dayKey}" data-idx="${i}" title="Remove">×</button>
           </div>`).join('')}
@@ -939,7 +947,7 @@ function buildLogDayEntries() {
     const sub = meta.sub ? ` <span class="lj-log-var">${meta.sub}</span>` : '';
     return `<div class="lj-log-row${j.ts && j.ts === lastLoggedTs ? ' just-added' : ''}">
       <span class="lj-log-ts">${ts}</span>
-      <span class="lj-log-name">${shown}${sub}${j.variableInput ? ` <span class="lj-log-var">(${j.variableInput})</span>` : ''}</span>
+      <span class="lj-log-name">${shown}${sub}${j.variableInput ? ` <span class="lj-log-var">(${j.variableInput})</span>` : ''}${sgoSplitNote(j, 'lj-log-var')}</span>
       <span class="lj-log-credit">+${(j.creditMins / 60).toFixed(2)}h</span>
       <button class="lj-log-del" data-lj-del-day="${activeLogDay}" data-lj-del-idx="${i}" aria-label="Remove ${escAttr(j.name)}">&#10005;</button>
     </div>`;
@@ -1721,7 +1729,7 @@ function buildDayDetailPanel(weekKey, week, dk, editMode) {
       const dt = j.startTime ? new Date(j.startTime) : null;
       const tsVal = dt ? `${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}` : '';
       return `<div class="ddp-row ddp-row-edit">
-        <span class="ddp-name">${j.name}${j.variableInput ? ` <span class="ddp-var">(${j.variableInput})</span>` : ''}</span>
+        <span class="ddp-name">${j.name}${j.variableInput ? ` <span class="ddp-var">(${j.variableInput})</span>` : ''}${sgoSplitNote(j, 'ddp-var')}</span>
         <input type="time" class="ddp-time-input" data-job-edit-idx="${i}" value="${tsVal}">
       </div>`;
     }).join('');
@@ -1741,7 +1749,7 @@ function buildDayDetailPanel(weekKey, week, dk, editMode) {
       : '';
     return `<div class="ddp-row">
       ${tsStr ? `<span class="ddp-ts">${tsStr}</span>` : ''}
-      <span class="ddp-name">${j.name}${j.variableInput ? ` <span class="ddp-var">(${j.variableInput})</span>` : ''}</span>
+      <span class="ddp-name">${j.name}${j.variableInput ? ` <span class="ddp-var">(${j.variableInput})</span>` : ''}${sgoSplitNote(j, 'ddp-var')}</span>
       <span class="ddp-pill">+${(j.creditMins / 60).toFixed(2)}h</span>
       <button class="ddp-del" data-week-key="${weekKey}" data-day-key="${dk}" data-job-idx="${i}" title="Remove">×</button>
     </div>`;
@@ -1987,6 +1995,7 @@ function buildWeekForecastSheet() {
           <div class="forecast-summary-box">
             <div class="forecast-summary-text">${summary}</div>
           </div>
+          ${buildSgoCreditBox(currentWeekKey)}
 
           ${!isFutureWeek && daysWorked > 0 ? `
           <div class="forecast-stats">
@@ -2288,7 +2297,7 @@ function buildVoiceItemRow(item, idx) {
   const job = item.job || findJob(item.jobId);
   if (!job) return '';
   const isDayFlag = job.isMentorFull || job.isMentorPartial;
-  const creditMins = voiceEntryCreditMins(job, item.value) * item.qty;
+  const creditMins = voiceEntryCreditMins(job, item.value, item.dayKey || (voiceDraft && voiceDraft.dayKey)) * item.qty;
 
   const creditText = job.isNpt
     ? (item.value ? `−${item.value} min` : 'needs time')
@@ -2298,7 +2307,7 @@ function buildVoiceItemRow(item, idx) {
         ? 'needs time'
         : `+${(creditMins / 60).toFixed(2)}h`;
 
-  const valueUnit = job.variableType === 'hours' ? 'hrs' : 'mins';
+  const valueUnit = job.variableType === 'hours' ? 'hrs' : job.variableType === 'pounds' ? '\u00a3' : 'mins';
   const valueField = job.variable ? `
     <div class="voice-item-value">
       <input type="number" inputmode="decimal" step="any" min="0"
@@ -2855,21 +2864,12 @@ function commitVoiceBatch() {
       return;
     }
 
-    const creditMins = voiceEntryCreditMins(job, it.value);
-    const variableDisplay = job.variable && it.value !== null
-      ? (job.variableType === 'hours' ? it.value + 'h' : it.value + 'min')
-      : null;
     const day = getOrCreateDay(week, targetDay);
     for (let n = 0; n < it.qty; n++) {
-      day.push({
-        id: job.id,
-        name: job.name,
-        creditMins: creditMins,
-        variableInput: variableDisplay,
-        ts: Date.now()
-      });
+      const entry = buildJobEntry(job, job.variable ? it.value : null, targetDay);
+      day.push(entry);
       logged++;
-      creditMinsTotal += creditMins;
+      creditMinsTotal += entry.creditMins;
     }
   });
 
@@ -3479,6 +3479,7 @@ function buildWeekSummarySheet() {
               <div class="wsum-cat-label">Absence</div>
             </div>
           </div>
+          ${buildSgoCreditBox(weekSummaryKey)}
 
           <div class="wsum-streak-box">
             <span class="tip-dot ${bonus ? 'green' : 'red'}" style="flex-shrink:0;margin-top:0"></span>
@@ -4430,7 +4431,7 @@ function openModal(job) {
   document.getElementById('modal-title').textContent = job.name;
   document.getElementById('modal-desc').textContent = job.variablePrompt;
   const input = document.getElementById('modal-input');
-  input.placeholder = job.variableType === 'hours' ? 'e.g. 2.5' : 'e.g. 45';
+  input.placeholder = job.variableType === 'hours' ? 'e.g. 2.5' : job.variableType === 'pounds' ? 'e.g. 2500' : 'e.g. 45';
   input.value = '';
   const nameField = document.getElementById('modal-name');
   nameField.value = '';
@@ -4443,6 +4444,56 @@ function openModal(job) {
 function closeModal() {
   document.getElementById('modal-overlay').classList.add('hidden');
   pendingJob = null;
+}
+
+// A logged job, as stored. Tap and voice both build entries here, so the two
+// cannot drift in shape — which matters now an entry can carry the SGO split,
+// and History totals it off whatever the entry recorded at the time.
+function variableInputLabel(job, value) {
+  if (!job.variable || value === null || value === undefined) return null;
+  if (job.variableType === 'hours') return value + 'h';
+  if (job.variableType === 'pounds') return '\u00a3' + value;
+  return value + 'min';
+}
+
+// The split an entry recorded when it was logged — read off the entry, not
+// the catalogue, so a later change to the table cannot rewrite a past sale.
+function sgoSplitNote(j, cls) {
+  if (typeof j.sgoMins !== 'number') return '';
+  const style = cls ? ` class="${cls}"` : ' style="color:var(--muted)"';
+  return ` <span${style}>${j.fulfilmentMins} fulfilment + ${j.sgoMins} SGO min</span>`;
+}
+
+// A week's SGO, split. Totalled off the entries (weekSummary.sgoCredit), so it
+// is what was credited at the time. Nothing to show until a sale is logged.
+function buildSgoCreditBox(weekKey) {
+  const summary = weekSummary(state, weekKey);
+  const sgo = summary && summary.sgoCredit;
+  if (!sgo || sgo.sales === 0) return '';
+  const h = m => (m / 60).toFixed(2) + 'h';
+  return `<div class="wsum-sgo" id="sgo-credit-box">
+    <div class="wsum-sgo-head">
+      <span class="wsum-sgo-label">SGO credit</span>
+      <span class="wsum-sgo-total">${h(sgo.fulfilmentMins + sgo.sgoMins)}</span>
+    </div>
+    <div class="wsum-sgo-split">${h(sgo.fulfilmentMins)} fulfilment + ${h(sgo.sgoMins)} SGO \u00b7 ${sgo.sales} sale${sgo.sales === 1 ? '' : 's'}</div>
+  </div>`;
+}
+
+function buildJobEntry(job, value, dayKey) {
+  const c = jobCredit(job, value, dayKey);
+  const entry = {
+    id: job.id,
+    name: job.name,
+    creditMins: c.creditMins,
+    variableInput: variableInputLabel(job, value),
+    ts: Date.now()
+  };
+  if (typeof c.sgoMins === 'number') {
+    entry.fulfilmentMins = c.fulfilmentMins;
+    entry.sgoMins = c.sgoMins;
+  }
+  return entry;
 }
 
 function logJob(job, variableValue, optionalName) {
@@ -4494,28 +4545,8 @@ function logJob(job, variableValue, optionalName) {
     return;
   }
 
-  let creditMins;
-  let variableDisplay = null;
-
-  if (job.variable && variableValue !== null) {
-    if (job.variableType === 'hours') {
-      creditMins = job.minutes * variableValue;
-      variableDisplay = `${variableValue}h`;
-    } else {
-      creditMins = variableValue;
-      variableDisplay = `${variableValue}min`;
-    }
-  } else {
-    creditMins = job.minutes;
-  }
-
-  const entry = {
-    id: job.id,
-    name: job.name,
-    creditMins,
-    variableInput: variableDisplay,
-    ts: Date.now()
-  };
+  // Credited under the rules of the day the work was done — see jobCredit.
+  const entry = buildJobEntry(job, job.variable ? variableValue : null, targetDay);
   lastLoggedTs = entry.ts;
 
   const week = getOrCreateWeek(state, targetWeekKey);

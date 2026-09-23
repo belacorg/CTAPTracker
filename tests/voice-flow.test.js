@@ -145,7 +145,9 @@ describe('Log Job — voice-first layout (ADR-0008)', () => {
         r.querySelector('.lj-row-main').textContent.replace(/\s+/g, ' ').trim()));
       h.click('#log-cat-back');
     }
-    expect(labels).toHaveLength(51);
+    // 57: the six unverified sale rows became the eleven rows of the SGO
+    // conversion table, plus the HIM-HE reflush.
+    expect(labels).toHaveLength(57);
     expect(new Set(labels).size).toBe(labels.length);
   });
 
@@ -359,7 +361,8 @@ describe('voice draft → confirmed entries', () => {
     const entries = week.days[today];
     expect(entries).toHaveLength(8);
     expect(entries.filter(e => e.id === 'gas_repair')).toHaveLength(6);
-    expect(entries.reduce((s, e) => s + e.creditMins, 0)).toBe(6 * 56 + 2 * 58);
+    // Boiler lead is 59 since the SGO recoupling (15 fulfilment + 44 SGO).
+    expect(entries.reduce((s, e) => s + e.creditMins, 0)).toBe(6 * 56 + 2 * 59);
     expect(entries.every(e => e.id && e.name && typeof e.creditMins === 'number' && e.ts)).toBe(true);
     expect(h.$('#voice-sheet').classList.contains('hidden')).toBe(true);
   });

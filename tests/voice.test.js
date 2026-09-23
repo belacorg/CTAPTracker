@@ -25,8 +25,9 @@ describe('parseVoiceLog — the headline case', () => {
 
   it('totals the batch credit correctly', () => {
     const r = parseVoiceLog('six breakdowns and two boiler leads', REF);
-    // 6 × 56 + 2 × 58 = 452 mins
-    expect(voiceBatchCreditHours(r.items)).toBeCloseTo(452 / 60, 5);
+    // 6 × 56 + 2 × 59 = 454 mins. A boiler lead is 59 since SGO was
+    // recoupled: 15 fulfilment + 44 converted from the old £20 cash.
+    expect(voiceBatchCreditHours(r.items)).toBeCloseTo(454 / 60, 5);
   });
 });
 
@@ -276,7 +277,9 @@ describe('parseVoiceLog — run-on dictation', () => {
 
   it('does not flag ordinary verbs as unmatched', () => {
     const r = parseVoiceLog('sold an inhibitor and fitted a co alarm', REF);
-    expect(idsOf(r)).toEqual(['inhibitor', 'co_alarm_fit']);
+    // "co alarm" reaches IA-COD now: the unverified "CO Alarm – Fit Only"
+    // row it used to hit duplicated that code and has been retired.
+    expect(idsOf(r)).toEqual(['inhibitor', 'cod_gas']);
     expect(r.unmatched).toEqual([]);
   });
 

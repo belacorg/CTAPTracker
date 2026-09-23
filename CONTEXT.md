@@ -26,8 +26,19 @@ An engineer finishing the working day before their scheduled shift end (an in-da
 Without the disposition step, Early Finish would be cost-free; the disposition is what makes the engineer genuinely "pay" for the time off.
 
 **SGO** (Sales Growth Opportunity):
-The CTAP scheme's reward for engineer sales — historically a separate cash payment, now paid as **time credits** in the same currency as ordinary jobs. A sellable item (inhibitor, Hive product, CO alarm) attracts two distinct credit components: the **SGO credit** for *selling* it, and the **Fit credit** for *fitting* it. The same engineer doing both in one visit gets the combined credit (most common — e.g. inhibitors are nearly always sold in-day on the job); when the activities are split across engineers, each gets their portion.
-_Avoid_: "SGO payment" (no longer cash); "SGO bonus" (it's a CTAP credit, not a separate bonus)
+The CTAP scheme's reward for engineer sales. Until 2 March 2026 it was paid as cash beside the CTAP bank ("decoupled"); from that date the cash is paid into the bank as minutes ("recoupled"). A sale now carries two credits, kept apart on every entry: the **Fulfilment credit** and the **SGO credit**. Fitting the item is a third thing — the **Fit credit** — logged as its own job code. See ADR-0026.
+_Avoid_: "SGO payment", "SGO cash" for anything after 2 March 2026 (it is minutes now); "SGO bonus" (it is a CTAP credit, not a separate bonus)
+
+**Fulfilment credit**:
+The minutes a sale earns for the work of raising it, per sale and flat — 12 for a HIM item whatever its value. Unchanged by the recoupling: every row of the conversion table carries the same figure before and after 2 March, which is how it is known to be the credit engineers already had. Stored on an entry as `fulfilmentMins`.
+_Avoid_: treating it as the **Fit credit** — whether they overlap is unconfirmed. The one suspicious case is the CO detector, whose 5-minute fulfilment equals IA-COD exactly; logged together they may be counting it twice.
+
+**SGO credit**:
+The old SGO cash, converted into CTAP minutes at one rate across the table (about 2.2 min per £1 on the Technical Repair table), paid on top of the **Fulfilment credit** from 2 March 2026. For HIM work it scales with the sale's value, 110 min per £1,000 excl VAT. Zero for a sale backdated before 2 March, when it was paid as cash. Stored on an entry as `sgoMins`; a week's total is shown split on the Weekly Forecast and the Week Summary.
+_Avoid_: "SGO time", "sales time" (say which credit)
+
+**Fit credit**:
+The job code for fitting what was sold — a Hive install (INSHV-THR), adding an inhibitor (ODC-SYS), a CO detector (IA-COD). Logged separately from the sale. The Best advice strip prices a recommendation as sale plus fit, since the engineer recommending it usually fits it on the same visit.
 
 **Cash out**:
 Selling a positive **CTAP balance** back to the employer in exchange for enhanced pay (e.g. double time, conditional on other monthly performance metrics). After cashing out, the engineer manually reduces their **Starting balance** in the app by the number of hours sold. Not implemented in CTAP Tracker today — recorded here because the term is part of the engineer's mental model and informs how **Starting balance** behaves.

@@ -27,7 +27,9 @@ describe('the elective set', () => {
 
   it('is the sales section plus the Hive work an engineer offers', () => {
     const ids = getElectiveJobs().map(j => j.id).sort();
-    const fixed = j => !j.variable && !j.isNpt && j.minutes > 0;
+    // A reflush is sold work booked in its own right, not something added on
+    // a visit to close a gap, so it is marked out of the elective set.
+    const fixed = j => !j.variable && !j.isNpt && j.minutes > 0 && j.elective !== false;
     const expected = [
       ...JOB_TYPES.sales.filter(fixed),
       ...JOB_TYPES.hive.filter(j => j.bestAdvice && fixed(j)),
@@ -63,8 +65,8 @@ describe('the elective set', () => {
 
 describe('matching a job to a gap', () => {
   it('offers an elective job when one genuinely fits', () => {
-    // Inhibitor (Fit + SGO) is 51 mins — 0.85h.
-    const job = getElectiveJobForGap(0.85);
+    // A Hive Thermostat sale is 49 mins — 0.82h.
+    const job = getElectiveJobForGap(0.82);
     expect(job).toBeTruthy();
     expect(getElectiveJobs().map(j => j.id)).toContain(job.id);
   });
@@ -239,8 +241,9 @@ describe('the Best advice strip', () => {
   });
 
   it('shows credit in hours, the unit the rest of the app uses', () => {
-    // Inhibitor (Fit + SGO) is 51 credit minutes: 0.85h, not 0.61 "credits".
-    expect(dashboardWith([service]).$('[data-opp-row="inhibitor"]').textContent).toContain('0.85h');
+    // Selling an inhibitor (17: 12 fulfilment + 5 SGO) and fitting it on the
+    // visit (ODC-SYS, 20) is 37 credit minutes: 0.62h, not 0.44 "credits".
+    expect(dashboardWith([service]).$('[data-opp-row="inhibitor"]').textContent).toContain('0.62h');
   });
 });
 
