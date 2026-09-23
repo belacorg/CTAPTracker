@@ -2335,6 +2335,33 @@ body.light .cashout-result-modelled .cashout-result-net-val { color: #8a5a00; }
   line-height: 1.3;
 }
 
+/* ── What's new ── */
+.whatsnew-running { font-size: 0.8rem; color: var(--muted); margin-bottom: 14px; }
+.whatsnew-entry { padding: 12px 0; border-top: 0.5px solid var(--sep); }
+.whatsnew-build { font-size: 0.82rem; font-weight: 700; margin-bottom: 6px; }
+.whatsnew-date { font-weight: 500; color: var(--muted); }
+.whatsnew-current {
+  display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 99px;
+  font-size: 0.6rem; font-weight: 700; letter-spacing: 0.04em;
+  background: var(--accent); color: #fff; vertical-align: middle;
+}
+.whatsnew-items { margin: 0; padding-left: 18px; }
+.whatsnew-items li { font-size: 0.8rem; line-height: 1.45; margin-bottom: 6px; }
+.whatsnew-done {
+  width: 100%; margin-top: 14px; padding: 13px; border: 0; border-radius: 12px;
+  background: var(--accent); color: #fff; font: inherit; font-weight: 700; font-size: 0.9rem;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Unreadable data ── */
+/* Deliberately loud and deliberately not dismissible: while it shows, nothing
+   the engineer logs is being saved. */
+.data-rescue-banner {
+  margin: 10px 16px 0; padding: 12px 14px; border-radius: 12px;
+  background: rgba(255,112,96,0.14); border: 1px solid rgba(255,112,96,0.5);
+  color: var(--text); font-size: 0.78rem; line-height: 1.45;
+}
+
 /* ── SGO credit, split ── */
 /* Fulfilment and the converted cash are shown apart because they are apart:
    one is earned for the work, the other is what used to be paid in cash. */

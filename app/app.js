@@ -51,6 +51,47 @@ let scheduleNoteOpenDay = null;
 let shiftSheet = null;   // { dk, start: 'HH:MM', end: 'HH:MM', applyTo: [dayKey] } | null
 let eraseDataStep = 'idle';
 let howToExpanded = false;
+// The "What's new" sheet. 'update' opens by itself after an update, showing
+// only what this phone hasn't seen; 'all' is the full history from Settings.
+let whatsNewMode = null;
+let whatsNewEntries = [];
+
+function readSeenBuild() {
+  try {
+    const v = localStorage.getItem('jcpd_seen_build');
+    return v === null ? null : parseInt(v, 10);
+  } catch { return null; }
+}
+
+function markChangesSeen() {
+  try { localStorage.setItem('jcpd_seen_build', String(APP_BUILD)); } catch {}
+}
+
+// Decided once, as the app opens. An engineer who already has data — weeks
+// logged, or the first-run card dismissed — upgraded; anyone else is new.
+function checkForUnseenChanges() {
+  let dismissedSetup = false;
+  try { dismissedSetup = localStorage.getItem('jcpd_setup_dismissed') === 'true'; } catch {}
+  const existing = Object.keys((state && state.weeks) || {}).length > 0 || dismissedSetup;
+  const seen = readSeenBuild();
+  whatsNewEntries = unseenChanges(seen, existing);
+  if (whatsNewEntries.length > 0) {
+    whatsNewMode = 'update';
+  } else if (seen === null || seen < APP_BUILD) {
+    markChangesSeen();                         // nothing to say, so don't ask again
+  }
+}
+
+// A save that didn't land has to be said out loud: the job is on screen, and
+// without this it would silently be gone the next time the app opened. Not a
+// toast — the first build of this used one, and the "added" toast that follows
+// every log wrote straight over it, telling the engineer the opposite. A
+// banner that stays until a save succeeds cannot be talked over.
+let lastSaveFailed = false;
+if (typeof window !== 'undefined') {
+  window.__ctapOnSaveFailed = function() { lastSaveFailed = true; };
+  window.__ctapOnSaveOk = function() { lastSaveFailed = false; };
+}
 let graphWeekKey = getWeekKey(new Date());
 let graphSelectedDay = null;
 // ── Daily check-in ──
@@ -237,6 +278,7 @@ document.addEventListener('DOMContentLoaded', function() {
   if (localStorage.getItem('jcpd_theme') === 'light') document.body.classList.add('light');
   // When Supabase is active, __ctapInit drives rendering. Skip auto-render.
   if (window.__ctapSupabaseActive) return;
+  checkForUnseenChanges();
   render();
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(function() {});
@@ -271,6 +313,12 @@ function render() {
 function buildApp() {
   return `
     ${buildTopBar()}
+    ${lastSaveFailed && !isStateUnreadable() ? `<div class="data-rescue-banner" role="alert" id="save-failed-banner">
+      <b>Your last change wasn\u2019t saved.</b> Your phone\u2019s storage may be full. Everything saved before it is safe, but this change will be lost if you close the app.
+    </div>` : ''}
+    ${isStateUnreadable() ? `<div class="data-rescue-banner" role="alert" id="data-rescue-banner">
+      <b>Your saved data couldn\u2019t be read.</b> Nothing has been deleted \u2014 it\u2019s been kept safe, and this app won\u2019t save anything over it. Please contact Jake before logging anything else.
+    </div>` : ''}
     <main class="main" id="main">${buildMain()}</main>
     ${buildBottomNav()}
     ${buildModal()}
@@ -280,6 +328,7 @@ function buildApp() {
     ${buildVoiceSheet()}
     ${buildCheckinSheet()}
     ${buildShiftSheet()}
+    ${buildWhatsNewSheet()}
     <div class="toast" id="toast"></div>
   `;
 }
@@ -1336,8 +1385,16 @@ function buildSettings() {
     <div class="st-card">
       <div class="st-row">
         <span class="st-row-label">Version</span>
-        <span class="st-row-value">v0.8.0 · on-device</span>
+        <div class="st-row-value-stack">
+          <span class="st-row-value" id="app-build">Build ${APP_BUILD}</span>
+          <span class="st-row-value-sub">Updated ${formatChangeDate(CHANGELOG[0].date)}</span>
+        </div>
       </div>
+      ${rowDiv()}
+      <button class="st-nav-row" id="open-changelog">
+        <span class="st-row-label">What\u2019s new</span>
+        <span class="st-chevron">\u203a</span>
+      </button>
       ${rowDiv()}
       <button class="st-nav-row" id="toggle-legal-info">
         <span class="st-row-label">Legal &amp; data</span>
@@ -2179,6 +2236,44 @@ function buildCashOutSheet() {
       </div>
     </div>
   `;
+}
+
+// ── What's new ────────────────────────────────────────────────────────────────
+function formatChangeDate(iso) {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function buildWhatsNewSheet() {
+  if (!whatsNewMode) return '<div class="forecast-sheet hidden" id="whatsnew-sheet"></div>';
+  const entries = whatsNewMode === 'all' ? CHANGELOG : whatsNewEntries;
+  const title = whatsNewMode === 'all' ? 'Updates' : 'What\u2019s new';
+  const blocks = entries.map(e => `
+    <div class="whatsnew-entry">
+      <div class="whatsnew-build">Build ${e.build} <span class="whatsnew-date">\u00b7 ${formatChangeDate(e.date)}</span>${e.build === APP_BUILD ? ' <span class="whatsnew-current">This phone</span>' : ''}</div>
+      <ul class="whatsnew-items">${e.items.map(i => `<li>${i}</li>`).join('')}</ul>
+    </div>`).join('');
+  return `
+    <div class="forecast-sheet" id="whatsnew-sheet">
+      <div class="forecast-backdrop" id="whatsnew-backdrop"></div>
+      <div class="forecast-panel" role="dialog" aria-modal="true" aria-labelledby="whatsnew-title">
+        <div class="forecast-handle"></div>
+        <div class="forecast-header">
+          <span class="forecast-title" id="whatsnew-title">${title}</span>
+          <button class="forecast-close" id="whatsnew-close" aria-label="Close">\u2715</button>
+        </div>
+        <div class="forecast-body">
+          <div class="whatsnew-running">You\u2019re on <b>build ${APP_BUILD}</b>.</div>
+          ${blocks}
+          <button class="whatsnew-done" id="whatsnew-done">Got it</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function closeWhatsNew() {
+  markChangesSeen();
+  whatsNewMode = null;
+  render();
 }
 
 function openCashOutSheet() {
@@ -3998,8 +4093,10 @@ function attachListeners() {
     deleteConfirmBtn.disabled = true;
     try {
       localStorage.removeItem('jct_state');
+      // Rescue copies (see loadState) are this engineer's data too, and
+      // "erase all data" has to mean all of it.
       Object.keys(localStorage)
-        .filter(k => k.startsWith('jcpd_'))
+        .filter(k => k.startsWith('jcpd_') || k.startsWith('jct_state_rescue_'))
         .forEach(k => localStorage.removeItem(k));
     } catch {}
     location.reload();
@@ -4318,6 +4415,13 @@ function attachListeners() {
   addSheetSwipe(cashoutPanel,  closeCashOutSheet);
   addSheetSwipe(voicePanel,    closeVoiceSheet);
   addSheetSwipe(checkinPanel,  closeCheckinSheet);
+  addSheetSwipe(document.querySelector('#whatsnew-sheet .forecast-panel'), closeWhatsNew);
+  ['whatsnew-close', 'whatsnew-done', 'whatsnew-backdrop'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('click', closeWhatsNew);
+  });
+  const openChangelog = document.getElementById('open-changelog');
+  if (openChangelog) openChangelog.addEventListener('click', () => { whatsNewMode = 'all'; render(); });
 
   // Voice logging
   const voiceBtn = document.getElementById('voice-btn');
@@ -4552,12 +4656,12 @@ function logJob(job, variableValue, optionalName) {
   const week = getOrCreateWeek(state, targetWeekKey);
   const day = getOrCreateDay(week, targetDay);
   day.push(entry);
-  saveState(state);
+  const saved = saveState(state);
   if (window.__ctapSyncWeek) window.__ctapSyncWeek(targetWeekKey);
 
   const displayName = job.name.replace(/\s*\(.*$/, '');
   const backfillNote = targetDay !== getTodayKey() ? ' (backdated)' : '';
-  showToast(displayName + ' added' + backfillNote);
+  if (saved) showToast(displayName + ' added' + backfillNote);
   if (activeTab === 'log') renderKeepingScroll(); else render();
 }
 

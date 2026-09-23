@@ -282,20 +282,94 @@ function cumulativeBalance(state) {
   return total;
 }
 
+// Everything an engineer has logged lives in this one localStorage key and
+// nowhere else — there is no server copy (ADR-0015). So the rule here is
+// simple: never write over data we could not read.
+//
+// This used to fall back to an empty state whenever the stored value failed
+// to parse, and the very next save — any tap — then wrote that empty state
+// over the top. Unlikely, but permanent: a damaged save that might have been
+// recovered by hand was destroyed by the app itself. Now the raw value is
+// copied aside, and saving is refused until someone looks at it.
+let STATE_UNREADABLE = false;
+
 function loadState() {
+  let raw;
   try {
-    return JSON.parse(localStorage.getItem('jct_state') || 'null') || defaultState();
+    raw = localStorage.getItem('jct_state');
   } catch {
+    return defaultState();                     // storage unavailable, nothing to protect
+  }
+  if (raw === null || raw === 'null') return defaultState();
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch { parsed = undefined; }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    STATE_UNREADABLE = true;
+    try { localStorage.setItem('jct_state_rescue_' + Date.now(), raw); } catch {}
     return defaultState();
   }
+  return parsed;
+}
+
+function isStateUnreadable() {
+  return STATE_UNREADABLE;
 }
 
 function defaultState() {
   return { baseHours: 40, weeks: {}, checkins: {}, coachGoals: {} };
 }
 
+// Returns whether the save landed. A full or unavailable store used to throw
+// out of here mid-tap, leaving a job on screen that was never written — gone
+// on the next open with no sign anything had failed. The app is told instead.
 function saveState(state) {
-  localStorage.setItem('jct_state', JSON.stringify(state));
+  if (STATE_UNREADABLE) return false;          // see loadState
+  try {
+    localStorage.setItem('jct_state', JSON.stringify(state));
+    if (typeof window !== 'undefined' && typeof window.__ctapOnSaveOk === 'function') {
+      window.__ctapOnSaveOk();
+    }
+    return true;
+  } catch (e) {
+    if (typeof window !== 'undefined' && typeof window.__ctapOnSaveFailed === 'function') {
+      window.__ctapOnSaveFailed(e);
+    }
+    return false;
+  }
+}
+
+// ── Version and what changed ─────────────────────────────────────────────────────────
+// The build number is the one the phone actually loaded, because it is the
+// same number as the ?v= on index.html that makes a phone fetch new code — a
+// test holds the two together. Settings used to say "v0.8.0" and never
+// changed, so no one could tell whether a phone had the latest.
+//
+// A new CHANGELOG entry is what makes the "What's new" sheet appear after an
+// update. Builds that change nothing an engineer would notice get no entry,
+// and so no popup. Newest first; written for engineers, not for us.
+const APP_BUILD = 200;
+const CHANGELOG = [
+  { build: 200, date: '2026-09-24', items: [
+    'You can now see which version you\u2019re on in Settings \u2192 About, and what changed in each update.',
+    'Extra protection for your data: if your saved data ever can\u2019t be read, the app keeps it safe and won\u2019t save over it.'
+  ] },
+  { build: 199, date: '2026-09-23', items: [
+    'SGO sales now count as fulfilment plus SGO credit, the way CTAP has paid them since March. Each sale shows its split, and the Weekly Forecast shows your week\u2019s SGO total.',
+    'A reflush (HIM-HE) is credited at 8 hours, and upgrades quoted over 240 minutes get +10%.',
+    'The duplicate \u201cHive Fit\u201d and \u201cCO Alarm Fit\u201d tiles are gone. Anything you logged with them is kept.'
+  ] }
+];
+
+// Which changes this phone hasn't been shown yet.
+//
+// `seenBuild` is null the first time a build with this sheet runs. Someone who
+// already has data has been using the app all along, so they upgraded and are
+// shown everything on the list; a fresh install has nothing to catch up on.
+function unseenChanges(seenBuild, isExistingUser) {
+  if (seenBuild === null || seenBuild === undefined || isNaN(seenBuild)) {
+    return isExistingUser ? CHANGELOG.slice() : [];
+  }
+  return CHANGELOG.filter(function(e) { return e.build > seenBuild && e.build <= APP_BUILD; });
 }
 
 function getOrCreateWeek(state, weekKey) {
@@ -2330,6 +2404,10 @@ if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     dailyRawOutputHours: dailyRawOutputHours,
     weekPFMins: weekPFMins,
     paceProjection: paceProjection,
+    isStateUnreadable: isStateUnreadable,
+    APP_BUILD: APP_BUILD,
+    CHANGELOG: CHANGELOG,
+    unseenChanges: unseenChanges,
     jobCredit: jobCredit,
     SGO_TABLE: SGO_TABLE,
     RETIRED_JOBS: RETIRED_JOBS,
