@@ -26,6 +26,13 @@ describe('an SGO sale is fulfilment plus the converted cash', () => {
     expect(c).toEqual({ creditMins: 10, fulfilmentMins: 10, sgoMins: 0 });
   });
 
+  it('credits a boiler lead at 59, as a Service & Repair CTAP update does', () => {
+    // The one figure checked against a real statement (2026-09-23). If a new
+    // table ever changes it, that table disagrees with what engineers are paid.
+    expect(jobCredit(findJob('hi_lead'), null, AFTER).creditMins).toBe(59);
+    expect(SGO_TABLE.rows.find(r => r.id === 'hi_lead').checked).toBe('2026-09-23');
+  });
+
   it('always splits into parts that sum to the credit', () => {
     SGO_TABLE.rows.filter(r => !r.perThousand).forEach(r => {
       const c = jobCredit(findJob(r.id), null, AFTER);

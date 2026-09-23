@@ -29,7 +29,9 @@ const SGO_RECOUPLED_FROM  = '2026-03-02';  // SGO paid into CTAP as minutes, not
 //
 // ⚠ PROVISIONAL. These are the Technical Repair Engineer figures. Service &
 // Repair has its own table, to follow; when it arrives, it replaces the rows
-// below and nothing else needs to change.
+// below and nothing else needs to change. A row marked `checked` has been
+// matched against a real S&R CTAP update — so far only the boiler lead, which
+// matched exactly, so the S&R table may turn out to be this one.
 //
 // `perThousand` rows are priced on the sale's value: the CTAP credit scales per
 // £1,000 excl VAT, and the fulfilment credit stays flat per sale — the filter
@@ -39,7 +41,10 @@ const SGO_TABLE = {
   role: 'Technical Repair Engineer',
   provisional: true,
   rows: [
-    { id: 'hi_lead',          name: 'Boiler Lead / ASHP Lead',       short: 'Boiler / ASHP Lead', cash: 20.00, fulfilmentMins: 15, ctapMins: 44 },
+    // Checked 2026-09-23: a Service & Repair engineer's CTAP update credited a
+    // boiler lead at 59 — this row's total to the minute. The first evidence
+    // that the S&R figures may simply be these.
+    { id: 'hi_lead',          name: 'Boiler Lead / ASHP Lead',       short: 'Boiler / ASHP Lead', cash: 20.00, fulfilmentMins: 15, ctapMins: 44, checked: '2026-09-23' },
     { id: 'him_sgo',          name: 'HIM Sale (per £1,000 excl VAT)', short: 'HIM Sale',           cash: 50.00, fulfilmentMins: 12, ctapMins: 110, perThousand: true },
     { id: 'inhibitor',        name: 'Inhibitor (SGO)',               short: 'Inhibitor',          cash: 2.04,  fulfilmentMins: 12, ctapMins: 5 },
     { id: 'filter_sgo',       name: 'System Filter (SGO)',           short: 'System Filter',      cash: 10.25, fulfilmentMins: 12, ctapMins: 23 },

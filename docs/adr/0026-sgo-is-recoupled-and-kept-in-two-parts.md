@@ -40,6 +40,8 @@ They live in `RETIRED_JOBS`, outside the catalogue and unreachable from `findJob
 
 ## Open
 
+**Checked against a real statement: the boiler lead.** On 2026-09-23 a Service & Repair engineer's CTAP update showed a boiler lead credited at 59 — the Technical Repair row's 15 + 44, to the minute. That confirms the recoupled minutes reach engineers as the table says, and is the first evidence that the S&R table may be this one: the conversion is the cash at one rate, and a lead's cash is the same for both roles. The row is marked `checked`, and a test pins it at 59.
+
 **The table is provisional.** It is the Technical Repair Engineer table. Service & Repair has its own, to follow. It replaces `SGO_TABLE.rows` and nothing else; a test checks every row's CTAP credit against the cash at the table's own rate, so a digit that slips on the way in fails before it reaches anyone's balance.
 
 **Fulfilment may overlap a fit code.** The CO detector's 5-minute fulfilment equals IA-COD exactly. If IA-COD *is* the fulfilment, an engineer logging both counts 5 minutes twice. Unconfirmed, so both stay and the tiles show their figures side by side, where a double count is at least visible. Settling it is one line per item.
