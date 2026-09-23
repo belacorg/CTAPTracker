@@ -196,6 +196,15 @@ function localDisplayName() {
 // A job as a list row. The code (GS-CHB) is deliberately absent — it was the
 // noise; the subtitle is the disambiguator, since short names alone give five
 // identical "Gas Service" rows. See ADR-0008.
+// CTAP pays in minutes — a gas repair is "56" to every engineer — but the
+// tiles only showed hours (+0.93h), a figure nobody quotes. Fixed-credit jobs
+// now carry their minutes too, shown quietly under the hours. Variable jobs
+// have no fixed figure to show, and mentor days and NPT are not credits.
+function tileMinutes(j) {
+  return !j.variable && !j.isNpt && !j.isMentorFull && !j.isMentorPartial && j.minutes > 0
+    ? j.minutes : null;
+}
+
 function jobDisplay(j) {
   // SGO rows describe themselves from the conversion table, so the split on
   // the tile is always the split that will be credited — and changes with the
@@ -206,7 +215,8 @@ function jobDisplay(j) {
     return {
       name: r.short || j.name,
       sub: r.perThousand ? `Per \u00a31,000 excl VAT \u00b7 ${split}` : split,
-      credits: j.variable ? 'Variable' : `+${(j.minutes / 60).toFixed(2)}h`
+      credits: j.variable ? 'Variable' : `+${(j.minutes / 60).toFixed(2)}h`,
+      mins: tileMinutes(j)
     };
   }
   const meta = JOB_META[j.id] || {};
@@ -216,7 +226,8 @@ function jobDisplay(j) {
     credits: j.variable ? 'Variable'
       : j.isMentorFull ? 'Full day'
       : j.isMentorPartial ? '−20% target'
-      : `+${(j.minutes / 60).toFixed(2)}h`
+      : `+${(j.minutes / 60).toFixed(2)}h`,
+    mins: tileMinutes(j)
   };
 }
 
@@ -224,7 +235,7 @@ function buildJobRowHTML(j) {
   const d = jobDisplay(j);
   return `<button class="lj-row${j.variable ? ' variable' : ''}" data-job-id="${j.id}">
     <span class="lj-row-main"><span class="lj-row-name">${d.name}</span>${d.sub ? `<span class="lj-row-sub">${d.sub}</span>` : ''}</span>
-    <span class="lj-row-credit">${d.credits}</span>
+    <span class="lj-row-credit">${d.credits}${d.mins ? `<span class="lj-row-mins">${d.mins} min</span>` : ''}</span>
   </button>`;
 }
 
@@ -232,7 +243,7 @@ function buildJobChipHTML(j) {
   const d = jobDisplay(j);
   return `<button class="lj-chip${j.variable ? ' variable' : ''}" data-job-id="${j.id}">
     <span class="lj-chip-name">${d.name}</span>${d.sub ? `<span class="lj-chip-sub">${d.sub}</span>` : ''}
-    <span class="lj-chip-credit">${d.credits}</span>
+    <span class="lj-chip-credit">${d.credits}${d.mins ? `<span class="lj-chip-mins"> \u00b7 ${d.mins} min</span>` : ''}</span>
   </button>`;
 }
 

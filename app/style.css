@@ -4008,11 +4008,17 @@ body.light .cashout-result-modelled .cashout-result-net-val { color: #8a5a00; }
   color: var(--green); white-space: nowrap;
 }
 .lj-row.variable .lj-row-credit { color: var(--amber); }
+/* The minutes CTAP actually pays, under the hours. Quiet on purpose: the
+   hours are what the week is counted in; the minutes are what engineers
+   recognise ("a repair's 56"). */
+.lj-row-credit { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.lj-row-mins, .lj-chip-mins { font-size: 0.68rem; font-weight: 500; color: var(--muted2); }
 
 /* Tap confirmation — mirrors the old tile flash */
 .lj-row.logged, .lj-chip.logged { background: var(--accent); transition: background 0.07s; }
 .lj-row.logged .lj-row-name, .lj-row.logged .lj-row-sub, .lj-row.logged .lj-row-credit,
-.lj-chip.logged .lj-chip-name, .lj-chip.logged .lj-chip-sub, .lj-chip.logged .lj-chip-credit {
+.lj-chip.logged .lj-chip-name, .lj-chip.logged .lj-chip-sub, .lj-chip.logged .lj-chip-credit,
+.lj-row.logged .lj-row-mins, .lj-chip.logged .lj-chip-mins {
   color: var(--jcpd-accent-ink);
 }
 

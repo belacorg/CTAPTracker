@@ -350,6 +350,7 @@ function saveState(state) {
 const APP_BUILD = 200;
 const CHANGELOG = [
   { build: 200, date: '2026-09-24', items: [
+    'Every job now shows the minutes it\u2019s worth as well as the hours \u2014 a gas repair is 56 min, a CHB service 40.',
     'You can now see which version you\u2019re on in Settings \u2192 About, and what changed in each update.',
     'Extra protection for your data: if your saved data ever can\u2019t be read, the app keeps it safe and won\u2019t save over it.'
   ] },
