@@ -31,7 +31,7 @@ _Avoid_: "SGO payment", "SGO cash" for anything after 2 March 2026 (it is minute
 
 **Fulfilment credit**:
 The minutes a sale earns for the work of raising it, per sale and flat — 12 for a HIM item whatever its value. Unchanged by the recoupling: every row of the conversion table carries the same figure before and after 2 March, which is how it is known to be the credit engineers already had. Stored on an entry as `fulfilmentMins`.
-_Avoid_: treating it as the **Fit credit** — whether they overlap is unconfirmed. The one suspicious case is the CO detector, whose 5-minute fulfilment equals IA-COD exactly; logged together they may be counting it twice.
+_Avoid_: treating it as the **Fit credit**. They are separate and both are paid — confirmed on a CTAP update, where a CO detector sold and fitted was credited 12 (IA-COD 5 + fulfilment 5 + SGO 2), not 7, even though its fulfilment equals IA-COD's 5 exactly.
 
 **SGO credit**:
 The old SGO cash, converted into CTAP minutes at one rate across the table (about 2.2 min per £1 on the Technical Repair table), paid on top of the **Fulfilment credit** from 2 March 2026. For HIM work it scales with the sale's value, 110 min per £1,000 excl VAT. Zero for a sale backdated before 2 March, when it was paid as cash. Stored on an entry as `sgoMins`; a week's total is shown split on the Weekly Forecast and the Week Summary.

@@ -30,8 +30,8 @@ const SGO_RECOUPLED_FROM  = '2026-03-02';  // SGO paid into CTAP as minutes, not
 // ⚠ PROVISIONAL. These are the Technical Repair Engineer figures. Service &
 // Repair has its own table, to follow; when it arrives, it replaces the rows
 // below and nothing else needs to change. A row marked `checked` has been
-// matched against a real S&R CTAP update — so far only the boiler lead, which
-// matched exactly, so the S&R table may turn out to be this one.
+// matched against a real S&R CTAP update — so far the boiler lead and the CO
+// detector, both to the minute, so the S&R table may turn out to be this one.
 //
 // `perThousand` rows are priced on the sale's value: the CTAP credit scales per
 // £1,000 excl VAT, and the fulfilment credit stays flat per sale — the filter
@@ -49,7 +49,10 @@ const SGO_TABLE = {
     { id: 'inhibitor',        name: 'Inhibitor (SGO)',               short: 'Inhibitor',          cash: 2.04,  fulfilmentMins: 12, ctapMins: 5 },
     { id: 'filter_sgo',       name: 'System Filter (SGO)',           short: 'System Filter',      cash: 10.25, fulfilmentMins: 12, ctapMins: 23 },
     { id: 'powerflush_sgo',   name: 'Powerflush (SGO)',              short: 'Powerflush',         cash: 31.50, fulfilmentMins: 12, ctapMins: 70 },
-    { id: 'co_alarm_sgo',     name: 'CO Detector (SGO)',             short: 'CO Detector',        cash: 1.05,  fulfilmentMins: 5,  ctapMins: 2 },
+    // Checked 2026-09-23: selling and fitting one was credited 12 on an S&R
+    // CTAP update — IA-COD's 5 for the fit, plus this row's 5 + 2. So the fit
+    // code and the fulfilment credit are separate, and both are paid.
+    { id: 'co_alarm_sgo',     name: 'CO Detector (SGO)',             short: 'CO Detector',        cash: 1.05,  fulfilmentMins: 5,  ctapMins: 2, checked: '2026-09-23' },
     { id: 'hive_sale_sgo',    name: 'Hive Thermostat (SGO)',         short: 'Hive Thermostat',    cash: 17.50, fulfilmentMins: 10, ctapMins: 39 },
     { id: 'hive_trv_sgo',     name: 'Hive TRV (SGO, per TRV)',       short: 'Hive TRV',           cash: 2.50,  fulfilmentMins: 5,  ctapMins: 6 },
     { id: 'hive_plus_month',  name: 'Hive Plus – Monthly (SGO)',     short: 'Hive Plus Monthly',  cash: 3.00,  fulfilmentMins: 10, ctapMins: 7 },

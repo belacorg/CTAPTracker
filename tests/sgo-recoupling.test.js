@@ -33,6 +33,15 @@ describe('an SGO sale is fulfilment plus the converted cash', () => {
     expect(SGO_TABLE.rows.find(r => r.id === 'hi_lead').checked).toBe('2026-09-23');
   });
 
+  it('credits a CO detector sold and fitted at 12, as a Service & Repair CTAP update does', () => {
+    // Checked 2026-09-23. IA-COD's 5 is the fit; the SGO row adds its own 5
+    // fulfilment and 2 SGO. They are separate credits — had the fit code been
+    // the fulfilment, the statement would have read 7.
+    const fit = jobCredit(findJob('cod_gas'), null, AFTER).creditMins;
+    const sale = jobCredit(findJob('co_alarm_sgo'), null, AFTER).creditMins;
+    expect(fit + sale).toBe(12);
+  });
+
   it('always splits into parts that sum to the credit', () => {
     SGO_TABLE.rows.filter(r => !r.perThousand).forEach(r => {
       const c = jobCredit(findJob(r.id), null, AFTER);
