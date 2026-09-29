@@ -102,7 +102,7 @@ describe('parsing a week in one go', () => {
     const d = parse('on wednesday a service and two hours wait work thursday three breakdowns');
     const wait = d.items.find(it => it.jobId === 'wait_work');
     expect(wait.dayKey).toBe(WED);
-    expect(wait.value).toBe(2);
+    expect(wait.value).toBe(120);
     expect(onDay(d, THU)).toEqual({ gas_repair: 3 });
   });
 

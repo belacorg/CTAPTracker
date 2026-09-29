@@ -46,6 +46,9 @@ let openSettingsInfo = null;
 let startBalSignNeg = null;
 let legalInfoExpanded = false;
 let scheduleNoteOpenDay = null;
+// The day whose note is open for typing on Log Job (the same day note the
+// Schedule's + edits — one note per day, reachable from both).
+let logNoteOpenDay = null;
 // The day whose times are being set in the shift sheet, with the times and the
 // other days to apply them to, as picked so far. Nothing is saved until Confirm.
 let shiftSheet = null;   // { dk, start: 'HH:MM', end: 'HH:MM', applyTo: [dayKey] } | null
@@ -161,7 +164,7 @@ const JOB_META = {
   reflush_him_he:   { short: 'Reflush',         sub: 'HIM-HE \u00b7 8h on completion' },
   // SGO rows are labelled from SGO_TABLE — see jobDisplay.
   // Absence
-  wait_work:         { short: 'Wait Work',          sub: 'Variable · hours' },
+  wait_work:         { short: 'Wait Work',          sub: 'Variable · minutes' },
   early_finish:      { short: 'Early Finish',        sub: 'NPT deduction' },
   mentor_full:       { short: 'Mentor Support',      sub: 'Full day' },
   mentor_partial:    { short: 'Mentor Support',      sub: '20% target reduction' },
@@ -705,13 +708,14 @@ function buildSchedule() {
     const s = shifts[dk] || {};
     const hrs = shiftHours(s);
     const isLeave = !!(s.leave);
+    const isRest = isRestDay(week, dk);
     const d = new Date(dk + 'T00:00:00');
     const dayNum = d.getDate();
     const isToday = dk === todayKey;
     const note = (s.note || '').trim();
     const hasNote = note.length > 0;
     const isNoteOpen = scheduleNoteOpenDay === dk;
-    const rowHtml = `<div class="shift-row${isToday ? ' shift-today' : ''}${isLeave ? ' shift-leave' : ''}"><div class="sched-day-col${isToday ? ' is-today' : ''}"><span class="sched-day-abbr">${DAY_ABBR[i]}</span><span class="sched-day-num">${dayNum}</span></div>${isLeave ? `<div class="sched-leave-label">Annual leave</div>` : `<button type="button" class="sched-time-wrap sched-time-btn" data-action="edit-shift" data-day="${dk}" aria-label="Set ${d.toLocaleDateString('en-GB', { weekday: 'long' })}'s shift times"><span class="sched-time-val">${s.start || '--:--'}</span><span class="shift-sep">–</span><span class="sched-time-val">${s.end || '--:--'}</span></button>`}<span class="sched-hrs${isToday ? ' is-today' : ''}">${isLeave ? 'AL' : hrs !== null ? hrs.toFixed(1) + 'h' : isRestDay(week, dk) ? 'Rest' : '—'}</span><button class="al-btn${isLeave ? ' active' : ''}" data-day="${dk}" data-action="toggle-leave">${isLeave ? '✓ Leave' : 'Leave'}</button><button class="sched-note-btn${hasNote ? ' has-note' : ''}${isNoteOpen ? ' is-open' : ''}" data-day="${dk}" data-action="toggle-note" title="Day note" aria-label="Day note">${hasNote ? '●' : '+'}</button></div>`;
+    const rowHtml = `<div class="shift-row${isToday ? ' shift-today' : ''}${isLeave ? ' shift-leave' : ''}"><div class="sched-day-col${isToday ? ' is-today' : ''}"><span class="sched-day-abbr">${DAY_ABBR[i]}</span><span class="sched-day-num">${dayNum}</span></div>${isLeave ? `<div class="sched-leave-label">Annual leave</div>` : `<button type="button" class="sched-time-wrap sched-time-btn${isRest ? ' is-rest' : ''}" data-action="edit-shift" data-day="${dk}" aria-label="Set ${d.toLocaleDateString('en-GB', { weekday: 'long' })}'s shift times">${isRest ? `<span class="sched-rest-label">Rest day</span>` : `<span class="sched-time-val">${s.start || '--:--'}</span><span class="shift-sep">–</span><span class="sched-time-val">${s.end || '--:--'}</span>`}</button>`}<span class="sched-hrs${isToday ? ' is-today' : ''}">${isLeave ? 'AL' : hrs !== null ? hrs.toFixed(1) + 'h' : '—'}</span><div class="sched-day-btns"><button class="al-btn rest-btn${isRest ? ' active' : ''}" data-day="${dk}" data-action="toggle-rest" aria-pressed="${isRest}">${isRest ? '✓ Rest' : 'Rest'}</button><button class="al-btn${isLeave ? ' active' : ''}" data-day="${dk}" data-action="toggle-leave">${isLeave ? '✓ Leave' : 'Leave'}</button></div><button class="sched-note-btn${hasNote ? ' has-note' : ''}${isNoteOpen ? ' is-open' : ''}" data-day="${dk}" data-action="toggle-note" title="Day note" aria-label="Day note">${hasNote ? '●' : '+'}</button></div>`;
     const notePanel = isNoteOpen
       ? `<div class="sched-note-panel"><textarea class="sched-note-input" data-day="${dk}" rows="2" placeholder="What happened today? Stuck in traffic, customer reschedule, training…">${note.replace(/</g, '&lt;')}</textarea><p class="sched-note-hint">Saves automatically</p></div>`
       : '';
@@ -990,11 +994,29 @@ function buildLogDayEntries() {
   const dayName = new Date(activeLogDay + 'T00:00:00')
     .toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
 
-  if (jobs.length === 0 && deds.length === 0 && !mentor && !isLeave) {
+  // The day note sits after the jobs, so logging as you go reads in order:
+  // the job, then what happened on it.
+  const note = (((wk.shifts || {})[activeLogDay] || {}).note || '').trim();
+  const noteOpen = logNoteOpenDay === activeLogDay;
+  const noteRow = noteOpen
+    ? `<div class="lj-note-panel">
+        <textarea class="lj-note-input sched-note-input" data-lj-note-day="${activeLogDay}" rows="2" placeholder="What happened? Stuck in traffic, customer reschedule, parts…">${escAttr(note)}</textarea>
+        <div class="lj-note-foot"><span class="sched-note-hint">Saves as you type · also on the Schedule</span><button type="button" class="lj-note-done" data-lj-note-done>Done</button></div>
+      </div>`
+    : note
+      ? `<button type="button" class="lj-log-row lj-note-row" data-lj-note-open aria-label="Edit the note for this day">
+          <span class="lj-log-ts">Note</span>
+          <span class="lj-note-text">${escAttr(note)}</span>
+          <span class="lj-note-edit">Edit</span>
+        </button>`
+      : `<button type="button" class="lj-note-add" data-lj-note-open>+ Add a note</button>`;
+
+  if (jobs.length === 0 && deds.length === 0 && !mentor && !isLeave && !note && !noteOpen) {
     return `<div class="lj-log lj-log-empty">
       <span class="lj-log-day">${isToday ? 'Today' : dayName}</span>
       <span class="lj-log-none">Nothing logged yet — pick a job below</span>
-    </div>`;
+    </div>
+    <button type="button" class="lj-note-add lj-note-add-solo" data-lj-note-open>+ Add a note</button>`;
   }
 
   const rows = jobs.map((j, i) => {
@@ -1043,7 +1065,7 @@ function buildLogDayEntries() {
       <span class="lj-log-day">${isToday ? 'Today' : dayName}</span>
       <span class="lj-log-sum">${count} logged<span class="lj-log-hrs">+${hours.toFixed(2)}h</span></span>
     </summary>
-    <div class="lj-log-list">${leaveRow}${rows}${dedRows}${mentorRow}</div>
+    <div class="lj-log-list">${leaveRow}${rows}${dedRows}${mentorRow}${noteRow}</div>
   </details>`;
 }
 
@@ -1382,7 +1404,7 @@ function buildSettings() {
       </button>
       ${howToExpanded ? `<div class="st-how-to-body">
         <ol class="info-steps">
-          <li><div><span class="info-step-title">Set up your schedule</span>Go to the <b>Schedule</b> tab and tap a day's times to set them, then <b>Confirm</b>. <b>Also apply to</b> puts the same times on other days. Tap <b>Standard week</b> for Mon–Fri 08:00–16:30 with default lunch. Tap <b>Leave</b> on any day to mark annual leave. Saves automatically.</div></li>
+          <li><div><span class="info-step-title">Set up your schedule</span>Go to the <b>Schedule</b> tab and tap a day's times to set them, then <b>Confirm</b>. <b>Also apply to</b> puts the same times on other days. Tap <b>Standard week</b> for Mon–Fri 08:00–16:30 with default lunch. Tap <b>Rest</b> for a day off in your rota, or <b>Leave</b> for annual leave. Saves automatically.</div></li>
           <li><div><span class="info-step-title">Log your jobs</span>Tap <b>Log Job</b> and pick a category — Core, Hive, Sales, or Absence. Tap a tile to log instantly; dashed tiles ask for extra input. You can also tap <b>+ Add a job</b> at the bottom of <b>Today's Jobs</b> on the Dashboard.</div></li>
           <li><div><span class="info-step-title">Track on the Dashboard</span>See today's credit hours, the week's progress and a day-by-day chart. Tap the <b>CTAP</b> tile to open the cash-out sheet (what your balance is worth after tax). Tap the <b>Week</b> tile for the full weekly forecast with per-day detail.</div></li>
           <li><div><span class="info-step-title">Understand your CTAP balance</span>CTAP is your running credit or deficit. It starts from your starting balance, then each completed week's surplus or shortfall is added. Green = in credit. You can only cash out when in credit.</div></li>
@@ -1664,7 +1686,7 @@ function buildShiftSheetFoot() {
       <div class="shift-apply-days">${chips}</div>
     </div>
     <button type="button" class="shift-confirm-btn" id="shift-confirm"${valid ? '' : ' disabled'}>${count === 1 ? 'Confirm' : `Confirm for ${count} days`}</button>
-    <button type="button" class="shift-clear-btn" id="shift-clear">Clear this day's times</button>`;
+    <button type="button" class="shift-clear-btn" id="shift-clear">Not working — make it a rest day</button>`;
 }
 
 // "Rest of week" is the weekdays after the day being set; "Whole week" is every
@@ -1732,6 +1754,7 @@ function confirmShiftSheet() {
   [dk, ...applyTo].forEach(d => {
     if (dayIsLeave(week, d)) return;
     const s = week.shifts[d] || (week.shifts[d] = {});
+    delete s.rest;
     s.start = start;
     s.end = end;
     s.lunch = shiftSheetLunch(s);
@@ -1742,14 +1765,18 @@ function confirmShiftSheet() {
   showToast(applyTo.length ? `Shift set for ${applyTo.length + 1} days` : 'Shift saved');
 }
 
+// Not working this day: the times go and it is marked a rest day.
 function clearShiftSheetDay() {
   if (!shiftSheet) return;
-  const s = (getOrCreateWeek(state, currentWeekKey).shifts || {})[shiftSheet.dk];
-  if (s) { delete s.start; delete s.end; delete s.lunch; }
+  const week = getOrCreateWeek(state, currentWeekKey);
+  if (!week.shifts) week.shifts = {};
+  const s = week.shifts[shiftSheet.dk] || (week.shifts[shiftSheet.dk] = {});
+  delete s.start; delete s.end; delete s.lunch;
+  s.rest = true;
   shiftSheet = null;
   saveState(state);
   render();
-  showToast('Times cleared');
+  showToast('Rest day');
 }
 
 // ── Day strip + detail panel (shared by forecast & summary sheets) ──────────
@@ -2362,7 +2389,7 @@ const VOICE_TIPS = [
   { say: 'six breakdowns, two boiler leads', why: 'String jobs together, count first' },
   { say: 'a cooker service and two fires', why: '“a” counts as one' },
   { say: 'trace and repair forty five minutes', why: 'Give a time for min-for-min jobs' },
-  { say: 'two hours wait work', why: 'Wait work and NPT take a time too' },
+  { say: 'twenty minutes wait work', why: 'Wait work and NPT take a time too' },
   { say: 'yesterday I did four services', why: 'Backdate by saying the day' },
   { say: 'Monday six breakdowns, Tuesday three services', why: 'Do a whole week in one go' }
 ];
@@ -3819,6 +3846,36 @@ function attachListeners() {
     });
   });
 
+  // Day note on Log Job. Saved on every keystroke without a redraw, so the
+  // keyboard stays up and nothing is lost if the phone locks mid-sentence.
+  document.querySelectorAll('[data-lj-note-open]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      logNoteOpenDay = activeLogDay;
+      renderKeepingScroll();
+      const inp = document.querySelector('.lj-note-input');
+      if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+    });
+  });
+  const ljNoteInput = document.querySelector('.lj-note-input');
+  if (ljNoteInput) ljNoteInput.addEventListener('input', () => {
+    const dk = ljNoteInput.dataset.ljNoteDay;
+    const weekKey = getWeekKey(new Date(dk + 'T00:00:00'));
+    const wk = getOrCreateWeek(state, weekKey);
+    if (!wk.shifts) wk.shifts = {};
+    if (!wk.shifts[dk]) wk.shifts[dk] = {};
+    const val = ljNoteInput.value.trim();
+    if (val) wk.shifts[dk].note = val; else delete wk.shifts[dk].note;
+    saveState(state);
+    if (window.__ctapSyncWeek) window.__ctapSyncWeek(weekKey);
+  });
+  const ljNoteDone = document.querySelector('[data-lj-note-done]');
+  if (ljNoteDone) ljNoteDone.addEventListener('click', e => {
+    e.preventDefault();
+    logNoteOpenDay = null;
+    renderKeepingScroll();
+  });
+
   // Job search
   const searchInput = document.getElementById('job-search');
   const searchClear = document.getElementById('search-clear');
@@ -3958,12 +4015,39 @@ function attachListeners() {
         delete s.leave;
       } else {
         s.leave = true;
+        delete s.rest;
         delete s.start;
         delete s.end;
         delete s.lunch;
       }
       saveState(state);
       render();
+    });
+  });
+
+  // Rest day: one tap marks a day off. Tapping it again when the rest of the
+  // week has times opens the day's times — a working day needs a shift.
+  document.querySelectorAll('[data-action="toggle-rest"]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const dk = btn.dataset.day;
+      const week = getOrCreateWeek(state, currentWeekKey);
+      if (!week.shifts) week.shifts = {};
+      const s = week.shifts[dk] || (week.shifts[dk] = {});
+      if (!isRestDay(week, dk)) {
+        s.rest = true;
+        delete s.leave;
+        delete s.start;
+        delete s.end;
+        delete s.lunch;
+        saveState(state);
+        render();
+        showToast('Rest day');
+        return;
+      }
+      delete s.rest;
+      saveState(state);
+      if (isRestDay(week, dk)) openShiftSheet(dk); else render();
     });
   });
 

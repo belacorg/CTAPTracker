@@ -393,7 +393,7 @@ describe('voice draft — absence and NPT', () => {
   it('sends NPT to the deduction log, not to credits', () => {
     const h = bootApp();
     openTyped(h, 'two hours wait work and forty minutes npt');
-    expect(h.$$('.voice-value-input').map(i => i.value)).toEqual(['2', '40']);
+    expect(h.$$('.voice-value-input').map(i => i.value)).toEqual(['120', '40']);
     h.click('#voice-commit');
 
     const today = h.window.getTodayKey();

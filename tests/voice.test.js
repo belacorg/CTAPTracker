@@ -154,11 +154,16 @@ describe('parseVoiceLog — alias matching', () => {
 });
 
 describe('parseVoiceLog — absence and NPT', () => {
-  it('parses wait work with an hours value', () => {
-    const r = parseVoiceLog('two hours wait work', REF);
+  it('parses wait work in minutes', () => {
+    const r = parseVoiceLog('twenty minutes wait work', REF);
     expect(idsOf(r)).toEqual(['wait_work']);
-    expect(r.items[0].value).toBe(2);       // wait_work is variableType 'hours'
+    expect(r.items[0].value).toBe(20);      // wait_work is variableType 'minutes'
     expect(r.items[0].needsValue).toBe(false);
+  });
+
+  it('turns spoken hours of wait work into minutes', () => {
+    const r = parseVoiceLog('two hours wait work', REF);
+    expect(r.items[0].value).toBe(120);
   });
 
   it('parses an early finish in minutes', () => {

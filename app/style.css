@@ -1054,6 +1054,8 @@ body {
 }
 .sched-hrs.is-today { color: var(--accent); }
 .sched-leave-label { flex: 1; font-size: 0.8rem; color: var(--amber); font-style: italic; }
+.sched-leave-label, .sched-rest-label { white-space: nowrap; }
+.sched-rest-label { flex: 1; font-size: 0.8rem; color: var(--muted); font-style: italic; text-align: left; }
 
 /* Keep legacy .shift-input for any direct uses */
 .shift-input {
@@ -1080,7 +1082,9 @@ body {
   text-align: right;
 }
 
-/* ── Annual Leave button ── */
+/* ── Rest / Annual Leave buttons, stacked so the times keep their room ── */
+.sched-day-btns { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+.sched-day-btns .al-btn { min-width: 58px; padding: 3px 8px; }
 .al-btn {
   padding: 2px 8px;
   font-size: 0.64rem;
@@ -1096,6 +1100,11 @@ body {
 .al-btn.active {
   border-color: var(--amber);
   color: var(--amber);
+  background: var(--jcpd-accent-dim);
+}
+.rest-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
   background: var(--jcpd-accent-dim);
 }
 
@@ -4120,6 +4129,39 @@ body.light .cashout-result-modelled .cashout-result-net-val { color: #8a5a00; }
   border: 1px dashed var(--sep);
 }
 .lj-log-none { font-size: 0.76rem; color: var(--muted2); text-align: right; }
+
+/* ── Day note on Log Job, after the day's jobs ── */
+.lj-note-add {
+  display: block; width: 100%;
+  padding: 10px 14px;
+  background: none; border: none;
+  font: inherit; font-size: 0.8rem; font-weight: 600;
+  color: var(--accent); text-align: left;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.lj-note-add-solo { width: auto; padding: 8px 2px 0; }
+.lj-note-row {
+  width: 100%; background: none; border: none; border-bottom: none;
+  font: inherit; text-align: left; cursor: pointer;
+  align-items: flex-start;
+  -webkit-tap-highlight-color: transparent;
+}
+.lj-note-row .lj-log-ts { padding-top: 2px; color: var(--accent); }
+.lj-note-text {
+  flex: 1; min-width: 0;
+  font-size: 0.84rem; color: var(--fg);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.lj-note-edit { flex: none; font-size: 0.72rem; font-weight: 600; color: var(--accent); padding-top: 2px; }
+.lj-note-panel { padding: 8px 14px 10px; }
+.lj-note-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
+.lj-note-done {
+  flex: none; padding: 5px 14px;
+  border-radius: 99px; border: none;
+  background: var(--accent); color: #fff;
+  font: inherit; font-size: 0.76rem; font-weight: 600;
+  cursor: pointer;
+}
 
 /* ── Category tiles ──
    51 jobs in one flat scroll meant scrolling past Hive and SGO to reach

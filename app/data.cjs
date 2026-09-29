@@ -134,7 +134,9 @@ const JOB_TYPES = {
     { id: 'cod_gas',          code: 'IA-COD',  name: 'COD / CO Detector (in-day action)',      minutes: 5,  credits: 0.06, variable: false }
   ].concat(SGO_TABLE.rows.map(sgoJob)),
   absent: [
-    { id: 'wait_work', name: 'Wait Work', minutes: 60, credits: 0.72, variable: true, variableType: 'hours', variablePrompt: 'Time in hours' },
+    // Min-for-min, entered in minutes: most waits are 10–30 min, rarely an
+    // hour. Entries logged in hours before this kept their creditMins.
+    { id: 'wait_work', name: 'Wait Work', minutes: 1, credits: 0.01, variable: true, variableType: 'minutes', variablePrompt: 'Time in minutes' },
     { id: 'early_finish', name: 'Early Finish', minutes: 0, credits: 0, variable: true, variableType: 'minutes', variablePrompt: 'How many minutes did you finish early?', isNpt: true, confirmLabel: 'Log Early Finish', skipNameField: true },
     { id: 'mentor_full', name: 'Mentor Support (Full Day)', minutes: 0, credits: 0, variable: false, isMentorFull: true },
     { id: 'mentor_partial', name: 'Mentor Support (20% Reduction)', minutes: 0, credits: 0, variable: false, isMentorPartial: true },
@@ -204,11 +206,14 @@ function dayIsLeave(week, dayKey) {
 // left to work. Once any day in the week has shift times, a day without them is
 // a rest day. A week with no times at all reads as Monday to Friday, which is how
 // the app worked before rotas. See ADR-0017.
+// A day can also be marked a rest day outright (`rest: true`, the Schedule's
+// Rest button), so a Wednesday off doesn't wait on the rest of the week's times.
 function isRestDay(week, dayKey) {
   if (dayIsLeave(week, dayKey)) return false;
   const shifts = week.shifts || {};
   const hasTimes = s => !!(s && (s.start || s.end));
   if (hasTimes(shifts[dayKey])) return false;
+  if (shifts[dayKey] && shifts[dayKey].rest) return true;
   if (Object.values(shifts).some(hasTimes)) return true;
   const dow = new Date(dayKey + 'T00:00:00').getDay();
   return dow === 0 || dow === 6;
@@ -347,8 +352,13 @@ function saveState(state) {
 // A new CHANGELOG entry is what makes the "What's new" sheet appear after an
 // update. Builds that change nothing an engineer would notice get no entry,
 // and so no popup. Newest first; written for engineers, not for us.
-const APP_BUILD = 200;
+const APP_BUILD = 201;
 const CHANGELOG = [
+  { build: 201, date: '2026-09-29', items: [
+    'Wait Work is now entered in minutes \u2014 11, 20, 30 \u2014 instead of hours. Anything you logged before is unchanged.',
+    'Rest days: tap Rest on any day in the Schedule. A rest day keeps your week\u2019s hours; Leave is still for annual leave.',
+    'Add a note straight after a job on Log Job. It\u2019s the same day note as the Schedule, so you can write it in either place.'
+  ] },
   { build: 200, date: '2026-09-23', items: [
     'Every job now shows the minutes it\u2019s worth as well as the hours \u2014 a gas repair is 56 min, a CHB service 40.',
     'You can now see which version you\u2019re on in Settings \u2192 About, and what changed in each update.',
@@ -1919,7 +1929,7 @@ function findVoiceAliasMatches(text) {
 // Returns { dayKey, dayPhrase, items: [...], unmatched: [...] }.
 // Each item: { jobId, job, qty, value, needsValue, phrase }
 //   `value`      — variable-job input, already in the job's own unit
-//                  (hours for wait work, minutes for NPT/trace & repair)
+//                  (minutes for wait work, NPT, trace & repair)
 //   `needsValue` — variable job with no duration spoken; the confirm sheet
 //                  must collect one before it can be logged.
 // Pull the jobs out of one day's worth of speech. Knows nothing about dates —

@@ -60,7 +60,7 @@ A whole-day flag on a **Shift** indicating the engineer was not on the roster �
 _Avoid_: "absence" (overloaded with NPT in the UI; in the domain, **Leave** is specifically the whole-day Workday-style absence)
 
 **Rest day**:
-A normal non-working day in the engineer's rota — Friday off in a Monday-to-Thursday-and-Saturday week, or an ordinary weekend. Not **Leave**: it does *not* reduce **Rostered hours**, and it carries no daily target. Once any day in a week has **Shift** times, every day without times is a rest day; a week with no times at all reads as Monday to Friday worked and the weekend as rest days. Shown as "Rest" on the Schedule and in the Weekly Forecast. See ADR-0017.
+A normal non-working day in the engineer's rota — Friday off in a Monday-to-Thursday-and-Saturday week, or an ordinary weekend. Not **Leave**: it does *not* reduce **Rostered hours**, and it carries no daily target. Once any day in a week has **Shift** times, every day without times is a rest day; a week with no times at all reads as Monday to Friday worked and the weekend as rest days. Can also be marked outright with the Schedule's **Rest** button (stored as `rest: true` on the day). Shown as "Rest day" on the Schedule and "Rest" in the Weekly Forecast. See ADR-0017.
 _Avoid_: "day off" (ambiguous with **Leave**)
 
 **Mentor Day**:

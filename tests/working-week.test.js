@@ -224,7 +224,8 @@ describe('rest days', () => {
   it('shows a rest day as Rest on the Schedule and in the Forecast strip', () => {
     const h = schedule(rota);
     const row = h.$(`[data-action="edit-shift"][data-day="${FRI}"]`).closest('.shift-row');
-    expect(row.querySelector('.sched-hrs').textContent.trim()).toBe('Rest');
+    expect(row.querySelector('.sched-rest-label').textContent.trim()).toBe('Rest day');
+    expect(row.querySelector('[data-action="toggle-rest"]').getAttribute('aria-pressed')).toBe('true');
     tab(h, 'dashboard');
     h.click('#week-tile');
     expect(h.$(`#forecast-sheet [data-strip-day="${FRI}"] .dsp-hrs`).textContent.trim()).toBe('Rest');

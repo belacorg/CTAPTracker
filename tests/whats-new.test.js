@@ -47,7 +47,8 @@ describe('what the phone has not seen yet', () => {
     expect(unseenChanges(null, false)).toEqual([]);
   });
   it('shows only what came after the last update seen', () => {
-    expect(unseenChanges(199, true).map(e => e.build)).toEqual([200]);
+    expect(unseenChanges(199, true).map(e => e.build)).toEqual([201, 200]);
+    expect(unseenChanges(200, true).map(e => e.build)).toEqual([201]);
   });
   it('shows nothing once the latest has been seen', () => {
     expect(unseenChanges(APP_BUILD, true)).toEqual([]);
