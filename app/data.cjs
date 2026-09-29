@@ -157,6 +157,49 @@ function calcVariableCredits(mins) {
   return +(mins / 83.58).toFixed(4);
 }
 
+// ── Flags ──────────────────────────────────────────────────────────────────
+// A **Flag** marks a day, or a whole week, where something out of the ordinary
+// happened — systems down, laptop broken, a morning of downtime — so it can be
+// checked against the CTAP update when that comes in. It changes no numbers.
+// Stored beside the day note: week.shifts[day].flag, or week.flag for a week,
+// as { reason, checked }. Ticked off as checked, never deleted by checking.
+const FLAG_REASONS = [
+  { id: 'systems',  label: 'Systems down' },
+  { id: 'kit',      label: 'Laptop / kit' },
+  { id: 'van',      label: 'Van' },
+  { id: 'downtime', label: 'Downtime' },
+  { id: 'other',    label: 'Other' }
+];
+
+function flagReasonLabel(id) {
+  const r = FLAG_REASONS.filter(function(x) { return x.id === id; })[0];
+  return r ? r.label : 'Flagged';
+}
+
+// Every flag on the phone, oldest first. A week's flag sorts as its Monday.
+//   { kind: 'day'|'week', weekKey, dayKey, reason, checked, note }
+function listFlags(state) {
+  const out = [];
+  Object.keys(state.weeks || {}).forEach(function(wk) {
+    const week = state.weeks[wk] || {};
+    if (week.flag && week.flag.reason) {
+      out.push({ kind: 'week', weekKey: wk, dayKey: wk, reason: week.flag.reason,
+        checked: !!week.flag.checked, note: '' });
+    }
+    const shifts = week.shifts || {};
+    Object.keys(shifts).forEach(function(dk) {
+      const f = shifts[dk] && shifts[dk].flag;
+      if (f && f.reason) {
+        out.push({ kind: 'day', weekKey: wk, dayKey: dk, reason: f.reason,
+          checked: !!f.checked, note: (shifts[dk].note || '').trim() });
+      }
+    });
+  });
+  return out.sort(function(a, b) {
+    return a.dayKey < b.dayKey ? -1 : a.dayKey > b.dayKey ? 1 : (a.kind === 'week' ? -1 : 1);
+  });
+}
+
 // The ISO week number — "Week 40" — the same one the Dashboard header shows.
 function weekNumber(date) {
   const d = new Date(date); d.setHours(0, 0, 0, 0);
@@ -372,6 +415,8 @@ const CHANGELOG = [
     'Wait Work is now entered in minutes \u2014 11, 20, 30 \u2014 instead of hours. Anything you logged before is unchanged.',
     'Rest days: tap Rest on any day in the Shift tab. A rest day keeps your week\u2019s hours; Leave is still for annual leave.',
     'Add a note straight after a job on Log Job. It\u2019s the same day note as the Shift tab, so you can write it in either place.',
+    'Flag a day, or a whole week, when something out of the ordinary happens \u2014 systems down, laptop broken, downtime. Tap \u2691 Flag this day on Log Job, or use the + on any day in the Shift tab.',
+    'When your CTAP update comes in, tap \u2691 Flagged on the Shift tab: a calendar of your flagged days and a list of what\u2019s still to check. Tick each one off as you check it.',
     'The Schedule tab is now called Shift, and the week number shows on Log Job and Shift.',
     'The app now shows its version number (this is 0.8.3) instead of a build number.'
   ] },
@@ -2435,6 +2480,9 @@ if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     APP_BUILD: APP_BUILD,
     APP_VERSION: APP_VERSION,
     weekNumber: weekNumber,
+    FLAG_REASONS: FLAG_REASONS,
+    flagReasonLabel: flagReasonLabel,
+    listFlags: listFlags,
     CHANGELOG: CHANGELOG,
     unseenChanges: unseenChanges,
     jobCredit: jobCredit,

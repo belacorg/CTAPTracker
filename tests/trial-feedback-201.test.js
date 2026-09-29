@@ -125,7 +125,9 @@ describe('a note after the job on Log Job', () => {
     expect(shift(h, WED).note).toBe('Customer not in, carded');
     h.click('[data-lj-note-done]');
     const rows = h.$$('.lj-log-list > *');
-    expect(rows.at(-1).textContent).toContain('Customer not in, carded');   // after the job
+    const at = rows.findIndex(r => r.classList.contains('lj-note-row'));
+    expect(rows[at].textContent).toContain('Customer not in, carded');
+    expect(rows[at - 1].textContent).toContain('Gas Repair');              // straight after the job
   });
 
   it('is the same note the Schedule shows for that day', () => {

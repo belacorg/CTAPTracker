@@ -49,6 +49,10 @@ let scheduleNoteOpenDay = null;
 // The day whose note is open for typing on Log Job (the same day note the
 // Schedule's + edits — one note per day, reachable from both).
 let logNoteOpenDay = null;
+// Which flag's reason chips are open: 'day:YYYY-MM-DD' or 'week:YYYY-MM-DD'.
+let flagPickerFor = null;
+// The Flagged calendar on the Shift tab: { month: 'YYYY-MM' } while open.
+let flagSheet = null;
 // The day whose times are being set in the shift sheet, with the times and the
 // other days to apply them to, as picked so far. Nothing is saved until Confirm.
 let shiftSheet = null;   // { dk, start: 'HH:MM', end: 'HH:MM', applyTo: [dayKey] } | null
@@ -342,6 +346,7 @@ function buildApp() {
     ${buildVoiceSheet()}
     ${buildCheckinSheet()}
     ${buildShiftSheet()}
+    ${buildFlagSheet()}
     ${buildWhatsNewSheet()}
     <div class="toast" id="toast"></div>
   `;
@@ -709,9 +714,11 @@ function buildSchedule() {
     const note = (s.note || '').trim();
     const hasNote = note.length > 0;
     const isNoteOpen = scheduleNoteOpenDay === dk;
-    const rowHtml = `<div class="shift-row${isToday ? ' shift-today' : ''}${isLeave ? ' shift-leave' : ''}"><div class="sched-day-col${isToday ? ' is-today' : ''}"><span class="sched-day-abbr">${DAY_ABBR[i]}</span><span class="sched-day-num">${dayNum}</span></div>${isLeave ? `<div class="sched-leave-label">Annual leave</div>` : `<button type="button" class="sched-time-wrap sched-time-btn${isRest ? ' is-rest' : ''}" data-action="edit-shift" data-day="${dk}" aria-label="Set ${d.toLocaleDateString('en-GB', { weekday: 'long' })}'s shift times">${isRest ? `<span class="sched-rest-label">Rest day</span>` : `<span class="sched-time-val">${s.start || '--:--'}</span><span class="shift-sep">–</span><span class="sched-time-val">${s.end || '--:--'}</span>`}</button>`}<span class="sched-hrs${isToday ? ' is-today' : ''}">${isLeave ? 'AL' : hrs !== null ? hrs.toFixed(1) + 'h' : '—'}</span><div class="sched-day-btns"><button class="al-btn rest-btn${isRest ? ' active' : ''}" data-day="${dk}" data-action="toggle-rest" aria-pressed="${isRest}">${isRest ? '✓ Rest' : 'Rest'}</button><button class="al-btn${isLeave ? ' active' : ''}" data-day="${dk}" data-action="toggle-leave">${isLeave ? '✓ Leave' : 'Leave'}</button></div><button class="sched-note-btn${hasNote ? ' has-note' : ''}${isNoteOpen ? ' is-open' : ''}" data-day="${dk}" data-action="toggle-note" title="Day note" aria-label="Day note">${hasNote ? '●' : '+'}</button></div>`;
+    const dayFlag = s.flag && s.flag.reason ? s.flag : null;
+    const dayFlagMark = dayFlag ? `<span class="sched-flag${dayFlag.checked ? ' is-checked' : ''}" title="${flagReasonLabel(dayFlag.reason)}">⚑</span>` : '';
+    const rowHtml = `<div class="shift-row${isToday ? ' shift-today' : ''}${isLeave ? ' shift-leave' : ''}"><div class="sched-day-col${isToday ? ' is-today' : ''}"><span class="sched-day-abbr">${DAY_ABBR[i]}</span><span class="sched-day-num">${dayNum}</span>${dayFlagMark}</div>${isLeave ? `<div class="sched-leave-label">Annual leave</div>` : `<button type="button" class="sched-time-wrap sched-time-btn${isRest ? ' is-rest' : ''}" data-action="edit-shift" data-day="${dk}" aria-label="Set ${d.toLocaleDateString('en-GB', { weekday: 'long' })}'s shift times">${isRest ? `<span class="sched-rest-label">Rest day</span>` : `<span class="sched-time-val">${s.start || '--:--'}</span><span class="shift-sep">–</span><span class="sched-time-val">${s.end || '--:--'}</span>`}</button>`}<span class="sched-hrs${isToday ? ' is-today' : ''}">${isLeave ? 'AL' : hrs !== null ? hrs.toFixed(1) + 'h' : '—'}</span><div class="sched-day-btns"><button class="al-btn rest-btn${isRest ? ' active' : ''}" data-day="${dk}" data-action="toggle-rest" aria-pressed="${isRest}">${isRest ? '✓ Rest' : 'Rest'}</button><button class="al-btn${isLeave ? ' active' : ''}" data-day="${dk}" data-action="toggle-leave">${isLeave ? '✓ Leave' : 'Leave'}</button></div><button class="sched-note-btn${hasNote ? ' has-note' : ''}${isNoteOpen ? ' is-open' : ''}" data-day="${dk}" data-action="toggle-note" title="Day note and flag" aria-label="Day note and flag">${hasNote ? '●' : '+'}</button></div>`;
     const notePanel = isNoteOpen
-      ? `<div class="sched-note-panel"><textarea class="sched-note-input" data-day="${dk}" rows="2" placeholder="What happened today? Stuck in traffic, customer reschedule, training…">${note.replace(/</g, '&lt;')}</textarea><p class="sched-note-hint">Saves automatically</p></div>`
+      ? `<div class="sched-note-panel"><textarea class="sched-note-input" data-day="${dk}" rows="2" placeholder="What happened today? Stuck in traffic, customer reschedule, training…">${note.replace(/</g, '&lt;')}</textarea><p class="sched-note-hint">Saves automatically</p><div class="sched-flag-wrap">${buildFlagControl('day:' + dk)}</div></div>`
       : '';
     return `<div class="shift-row-wrap">${rowHtml}${notePanel}</div>`;
   }
@@ -724,7 +731,10 @@ function buildSchedule() {
   const schedAtCap = currentWeekKey >= getWeekKey(maxFutureSched);
 
   return `
-    <div class="st-section-label">WEEK SHIFT</div>
+    <div class="sched-head">
+      <div class="st-section-label">WEEK SHIFT</div>
+      <button type="button" id="open-flags" class="flags-btn">⚑ Flagged${flagsToCheck() ? ` <span class="flags-count">${flagsToCheck()}</span>` : ''}</button>
+    </div>
     <div class="sched-nav-row">
       <div class="sched-nav-week">
         <button id="sched-prev-week" class="sched-nav-btn">&#8249;</button>
@@ -733,6 +743,7 @@ function buildSchedule() {
       </div>
       <button id="apply-default" class="sched-standard-btn">Standard week</button>
     </div>
+    <div class="sched-week-flag">${buildFlagControl('week:' + currentWeekKey)}</div>
     <div class="autosave-bar">
       <span id="autosave-check" class="autosave-check">✓</span>
       <span class="autosave-text">Tap a day's times to change them · Lunch deducted from daily target</span>
@@ -971,6 +982,143 @@ function buildLogWeekStrip() {
     <div class="lj-strip" role="group" aria-label="Pick a day to log into">${cells}</div>`;
 }
 
+// ── Flags (see listFlags in data.cjs) ──────────────────────────────────────
+// A target is 'day:YYYY-MM-DD' or 'week:YYYY-MM-DD' (the week's Monday).
+function flagHolder(target, create) {
+  const i = target.indexOf(':');
+  const kind = target.slice(0, i), key = target.slice(i + 1);
+  const wk = kind === 'week' ? key : getWeekKey(new Date(key + 'T00:00:00'));
+  const week = create ? getOrCreateWeek(state, wk) : state.weeks[wk];
+  if (!week) return null;
+  if (kind === 'week') return { holder: week, weekKey: wk };
+  if (!week.shifts) { if (!create) return null; week.shifts = {}; }
+  if (!week.shifts[key]) { if (!create) return null; week.shifts[key] = {}; }
+  return { holder: week.shifts[key], weekKey: wk };
+}
+
+function flagOf(target) {
+  const h = flagHolder(target, false);
+  return h && h.holder.flag && h.holder.flag.reason ? h.holder.flag : null;
+}
+
+function changeFlag(target, fn) {
+  const h = flagHolder(target, true);
+  fn(h.holder);
+  saveState(state);
+  if (window.__ctapSyncWeek) window.__ctapSyncWeek(h.weekKey);
+}
+
+// The one control for flagging, used on Log Job, on a Shift day and on a Shift
+// week: a "Flag this day" button, the reason chips, or the flag itself with
+// its checked tick and a ✕.
+function buildFlagControl(target) {
+  const kind = target.startsWith('week:') ? 'week' : 'day';
+  const flag = flagOf(target);
+  if (flag) {
+    return `<div class="flag-line${flag.checked ? ' is-checked' : ''}">
+      <span class="flag-mark" aria-hidden="true">⚑</span>
+      <span class="flag-text"><b>${flagReasonLabel(flag.reason)}</b> · ${flag.checked ? 'checked' : 'to check'}</span>
+      <button type="button" class="flag-check" data-flag-check="${target}" aria-pressed="${!!flag.checked}">${flag.checked ? '✓ Checked' : 'Mark checked'}</button>
+      <button type="button" class="flag-clear" data-flag-clear="${target}" aria-label="Remove the flag">✕</button>
+    </div>`;
+  }
+  if (flagPickerFor === target) {
+    return `<div class="flag-picker">
+      <span class="flag-picker-q">What happened ${kind === 'week' ? 'this week' : 'today'}?</span>
+      <div class="flag-chips">${FLAG_REASONS.map(r =>
+        `<button type="button" class="flag-chip" data-flag-set="${target}" data-reason="${r.id}">${r.label}</button>`).join('')}</div>
+      <button type="button" class="flag-cancel" data-flag-cancel>Cancel</button>
+    </div>`;
+  }
+  return `<button type="button" class="flag-add" data-flag-open="${target}">⚑ Flag this ${kind}</button>`;
+}
+
+function flagsToCheck() {
+  return listFlags(state).filter(f => !f.checked).length;
+}
+
+function flagItemLabel(f) {
+  if (f.kind === 'week') {
+    const start = new Date(f.weekKey + 'T00:00:00');
+    const end = new Date(start); end.setDate(start.getDate() + 6);
+    const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    return `Week ${weekNumber(start)} · ${fmt(start)} – ${fmt(end)}`;
+  }
+  return new Date(f.dayKey + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+// A month of days with the flagged ones marked, and everything still to check
+// listed underneath — the page to open when the CTAP update comes in.
+function buildFlagSheet() {
+  if (!flagSheet) return '';
+  const flags = listFlags(state);
+  const [y, m] = flagSheet.month.split('-').map(Number);
+  const first = new Date(y, m - 1, 1);
+  const monthLabel = first.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  const todayKey = getTodayKey();
+  const byDay = {}, byWeek = {};
+  flags.forEach(f => { if (f.kind === 'day') byDay[f.dayKey] = f; else byWeek[f.weekKey] = f; });
+
+  const gridStart = new Date(first); gridStart.setDate(1 - (first.getDay() + 6) % 7);
+  const rows = [];
+  for (const d = new Date(gridStart); d.getMonth() === m - 1 || d < first; ) {
+    const wk = localDateStr(d);
+    const wf = byWeek[wk];
+    const cells = [];
+    for (let i = 0; i < 7; i++, d.setDate(d.getDate() + 1)) {
+      const dk = localDateStr(d);
+      const f = byDay[dk];
+      const cls = ['flagcal-day',
+        d.getMonth() !== m - 1 ? 'is-out' : '',
+        dk === todayKey ? 'is-today' : '',
+        f ? (f.checked ? 'is-flag is-checked' : 'is-flag') : ''].filter(Boolean).join(' ');
+      cells.push(f || wf
+        ? `<button type="button" class="${cls}" data-flag-go="${f ? 'day:' + dk : 'week:' + wk}" aria-label="${f ? flagReasonLabel(f.reason) : 'Week flagged'}, ${dk}">${d.getDate()}${f ? '<i>⚑</i>' : ''}</button>`
+        : `<span class="${cls}">${d.getDate()}</span>`);
+    }
+    rows.push(`<div class="flagcal-week${wf ? (wf.checked ? ' wk-flag is-checked' : ' wk-flag') : ''}">${cells.join('')}</div>`);
+  }
+
+  const item = f => {
+    const target = (f.kind === 'week' ? 'week:' : 'day:') + f.dayKey;
+    return `<div class="flag-item${f.checked ? ' is-checked' : ''}">
+      <button type="button" class="flag-item-main" data-flag-go="${target}">
+        <span class="flag-item-date">⚑ ${flagItemLabel(f)}</span>
+        <span class="flag-item-reason">${flagReasonLabel(f.reason)}${f.note ? ` — <span class="flag-item-note">${escAttr(f.note)}</span>` : ''}</span>
+      </button>
+      <button type="button" class="flag-check" data-flag-check="${target}" aria-pressed="${f.checked}">${f.checked ? '✓ Checked' : 'Mark checked'}</button>
+    </div>`;
+  };
+  const toCheck = flags.filter(f => !f.checked);
+  const checkedHere = flags.filter(f => f.checked && f.dayKey.slice(0, 7) === flagSheet.month);
+
+  return `
+    <div class="forecast-sheet" id="flag-sheet">
+      <div class="forecast-backdrop" id="flag-backdrop"></div>
+      <div class="forecast-panel" role="dialog" aria-modal="true" aria-labelledby="flag-sheet-title">
+        <div class="forecast-handle"></div>
+        <div class="forecast-header">
+          <span class="forecast-title" id="flag-sheet-title">Flagged days</span>
+          <button class="forecast-close" id="flag-close" aria-label="Close">✕</button>
+        </div>
+        <div class="forecast-body">
+          <div class="flagcal-nav">
+            <button type="button" class="sched-nav-btn" data-flag-month="-1" aria-label="Previous month">&#8249;</button>
+            <span class="flagcal-month">${monthLabel}</span>
+            <button type="button" class="sched-nav-btn" data-flag-month="1" aria-label="Next month">&#8250;</button>
+          </div>
+          <div class="flagcal">
+            <div class="flagcal-head">${['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(x => `<span>${x}</span>`).join('')}</div>
+            ${rows.join('')}
+          </div>
+          <div class="flag-list-head">Still to check${toCheck.length ? ` <span class="flags-count">${toCheck.length}</span>` : ''}</div>
+          ${toCheck.length ? toCheck.map(item).join('') : '<p class="flag-list-empty">Nothing to check. Flag a day on Log Job or here on Shift when something out of the ordinary happens.</p>'}
+          ${checkedHere.length ? `<div class="flag-list-head">Checked in ${first.toLocaleDateString('en-GB', { month: 'long' })}</div>${checkedHere.map(item).join('')}` : ''}
+        </div>
+      </div>
+    </div>`;
+}
+
 // What is already on the selected day. Engineers could tap a job, get a flash
 // of colour, and have no way to tell whether it landed — or on which day. The
 // day's entries sit directly under the strip, so tapping a day answers "what
@@ -1005,14 +1153,24 @@ function buildLogDayEntries() {
           <button type="button" class="lj-log-credit lj-note-edit" data-lj-note-open aria-label="Edit the note for this day">Edit</button>
           <button type="button" class="lj-log-del" data-lj-note-del="${activeLogDay}" aria-label="Delete the note for this day">&#10005;</button>
         </div>`
-      : `<button type="button" class="lj-note-add" data-lj-note-open>+ Add a note</button>`;
+      : '';
+  // Flag the day as it happens — systems down, laptop broken — to check later.
+  const flagTarget = 'day:' + activeLogDay;
+  const flagged = !!flagOf(flagTarget);
+  const flagOpen = flagPickerFor === flagTarget;
+  const flagRow = flagged || flagOpen ? `<div class="lj-flag-row">${buildFlagControl(flagTarget)}</div>` : '';
+  const actions = [
+    !note && !noteOpen ? `<button type="button" class="lj-note-add" data-lj-note-open>+ Add a note</button>` : '',
+    !flagged && !flagOpen ? buildFlagControl(flagTarget) : ''
+  ].join('');
+  const actionsRow = actions ? `<div class="lj-day-actions">${actions}</div>` : '';
 
-  if (jobs.length === 0 && deds.length === 0 && !mentor && !isLeave && !note && !noteOpen) {
+  if (jobs.length === 0 && deds.length === 0 && !mentor && !isLeave && !note && !noteOpen && !flagged && !flagOpen) {
     return `<div class="lj-log lj-log-empty">
       <span class="lj-log-day">${isToday ? 'Today' : dayName}</span>
       <span class="lj-log-none">Nothing logged yet — pick a job below</span>
     </div>
-    <button type="button" class="lj-note-add lj-note-add-solo" data-lj-note-open>+ Add a note</button>`;
+    <div class="lj-day-actions lj-day-actions-solo">${actions}</div>`;
   }
 
   const rows = jobs.map((j, i) => {
@@ -1061,7 +1219,7 @@ function buildLogDayEntries() {
       <span class="lj-log-day">${isToday ? 'Today' : dayName}</span>
       <span class="lj-log-sum">${count} logged<span class="lj-log-hrs">+${hours.toFixed(2)}h</span></span>
     </summary>
-    <div class="lj-log-list">${leaveRow}${rows}${dedRows}${mentorRow}${noteRow}</div>
+    <div class="lj-log-list">${leaveRow}${rows}${dedRows}${mentorRow}${noteRow}${flagRow}${actionsRow}</div>
   </details>`;
 }
 
@@ -3886,6 +4044,62 @@ function attachListeners() {
     renderKeepingScroll();
   });
 
+  // Flags — the same controls on Log Job, on a Shift day and a Shift week,
+  // and in the Flagged sheet.
+  const redrawFlags = () => renderKeepingScroll();
+  document.querySelectorAll('[data-flag-open]').forEach(b => b.addEventListener('click', e => {
+    e.preventDefault(); e.stopPropagation();
+    flagPickerFor = b.dataset.flagOpen; redrawFlags();
+  }));
+  document.querySelectorAll('[data-flag-cancel]').forEach(b => b.addEventListener('click', e => {
+    e.preventDefault(); e.stopPropagation();
+    flagPickerFor = null; redrawFlags();
+  }));
+  document.querySelectorAll('[data-flag-set]').forEach(b => b.addEventListener('click', e => {
+    e.preventDefault(); e.stopPropagation();
+    const target = b.dataset.flagSet;
+    changeFlag(target, h => { h.flag = { reason: b.dataset.reason, checked: false }; });
+    flagPickerFor = null; redrawFlags();
+    showToast(target.startsWith('week:') ? 'Week flagged' : 'Day flagged');
+  }));
+  document.querySelectorAll('[data-flag-check]').forEach(b => b.addEventListener('click', e => {
+    e.preventDefault(); e.stopPropagation();
+    changeFlag(b.dataset.flagCheck, h => { if (h.flag) h.flag.checked = !h.flag.checked; });
+    redrawFlags();
+  }));
+  document.querySelectorAll('[data-flag-clear]').forEach(b => b.addEventListener('click', e => {
+    e.preventDefault(); e.stopPropagation();
+    changeFlag(b.dataset.flagClear, h => { delete h.flag; });
+    redrawFlags();
+    showToast('Flag removed');
+  }));
+  const openFlags = document.getElementById('open-flags');
+  if (openFlags) openFlags.addEventListener('click', () => {
+    flagSheet = { month: getTodayKey().slice(0, 7) }; render();
+  });
+  const flagSheetEl = document.getElementById('flag-sheet');
+  if (flagSheetEl) {
+    const closeFlags = () => { flagSheet = null; render(); };
+    addSheetSwipe(flagSheetEl.querySelector('.forecast-panel'), closeFlags);
+    document.getElementById('flag-close').addEventListener('click', closeFlags);
+    document.getElementById('flag-backdrop').addEventListener('click', closeFlags);
+    flagSheetEl.querySelectorAll('[data-flag-month]').forEach(b => b.addEventListener('click', () => {
+      const [y, m] = flagSheet.month.split('-').map(Number);
+      const d = new Date(y, m - 1 + Number(b.dataset.flagMonth), 1);
+      flagSheet.month = localDateStr(d).slice(0, 7);
+      render();
+    }));
+    // Straight to that week on Shift, with the day's note and flag open.
+    flagSheetEl.querySelectorAll('[data-flag-go]').forEach(b => b.addEventListener('click', () => {
+      const target = b.dataset.flagGo;
+      const key = target.slice(target.indexOf(':') + 1);
+      currentWeekKey = getWeekKey(new Date(key + 'T00:00:00'));
+      scheduleNoteOpenDay = target.startsWith('day:') ? key : null;
+      flagSheet = null;
+      render();
+    }));
+  }
+
   // Job search
   const searchInput = document.getElementById('job-search');
   const searchClear = document.getElementById('search-clear');
@@ -4069,7 +4283,11 @@ function attachListeners() {
     const days = weekDays(currentWeekKey);
     days.forEach((dk, i) => {
       if (i < 5) {
+        // Replaces the times, not the day: a note or flag on it stays.
+        const keep = week.shifts[dk] || {};
         week.shifts[dk] = { start: '08:00', end: '16:30', lunch: String(state.defaultLunch !== undefined ? state.defaultLunch : 30) };
+        if (keep.note) week.shifts[dk].note = keep.note;
+        if (keep.flag) week.shifts[dk].flag = keep.flag;
       }
     });
     saveState(state);

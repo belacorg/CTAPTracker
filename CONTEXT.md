@@ -60,6 +60,10 @@ _Avoid_: "schedule", "roster" (singular; the day-level concept is a **Shift**)
 A whole-day flag on a **Shift** indicating the engineer was not on the roster — covers sickness, annual leave, volunteer days, and similar. Reduces **Rostered hours** by that day's shift hours. Authoritative system of record is Workday; mirrored manually into CTAP Tracker so the local math is correct.
 _Avoid_: "absence" (overloaded with NPT in the UI; in the domain, **Leave** is specifically the whole-day Workday-style absence)
 
+**Flag**:
+A marker on a day or a whole week saying something out of the ordinary happened (systems down, laptop/kit, van, downtime, other), to be checked against the CTAP update. Starts "to check", is ticked off as "checked", and changes no numbers. The detail goes in the day note. Listed in the Flagged calendar on the **Shift** tab. See ADR-0027.
+_Avoid_: "issue", "query", "dispute" (a flag is a reminder to check, not a claim)
+
 **Rest day**:
 A normal non-working day in the engineer's rota — Friday off in a Monday-to-Thursday-and-Saturday week, or an ordinary weekend. Not **Leave**: it does *not* reduce **Rostered hours**, and it carries no daily target. Once any day in a week has **Shift** times, every day without times is a rest day; a week with no times at all reads as Monday to Friday worked and the weekend as rest days. Can also be marked outright with the Schedule's **Rest** button (stored as `rest: true` on the day). Shown as "Rest day" on the Schedule and "Rest" in the Weekly Forecast. See ADR-0017.
 _Avoid_: "day off" (ambiguous with **Leave**)
