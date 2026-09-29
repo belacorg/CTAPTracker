@@ -97,14 +97,14 @@ describe('flags on the Shift tab', () => {
     expect(h.$('.sched-week-flag').textContent).toContain('Week flagged');
   });
 
-  it('counts what is still to check on the Flagged button', () => {
+  it('counts what is still to check on the Calendar button', () => {
     const h = boot({
       [WEEK]: { deductionMins: 0, days: {}, flag: { checked: true },
         shifts: { [TUE]: { flag: { checked: false } } } },
       [LAST]: { deductionMins: 0, days: {}, shifts: { [LAST_THU]: { flag: { checked: false } } } }
     });
     tab(h, 'schedule');
-    expect(h.$('#open-flags .flags-count').textContent).toBe('2');
+    expect(h.$('#open-flags').textContent).toMatch(/Calendar\s*⚑ 2/);
   });
 
   it('keeps a day’s flag and note when Standard week is applied', () => {
@@ -115,7 +115,7 @@ describe('flags on the Shift tab', () => {
   });
 });
 
-describe('the Flagged calendar', () => {
+describe('the Calendar', () => {
   const seeded = () => boot({
     [WEEK]: { deductionMins: 0, days: {}, shifts: { [TUE]: { note: 'Systems off till 11', flag: { checked: false } } } },
     [LAST]: { deductionMins: 0, days: {}, flag: { checked: false },
@@ -125,7 +125,8 @@ describe('the Flagged calendar', () => {
 
   it('opens on this month with flagged days marked', () => {
     const h = seeded();
-    expect(open(h).querySelector('.flagcal-month').textContent).toBe('September 2026');
+    expect(open(h).querySelector('#flag-sheet-title').textContent).toBe('Calendar');
+    expect(h.$('.flagcal-month').textContent).toBe('September 2026');
     const day = h.$(`#flag-sheet [data-flag-go="day:${TUE}"]`);
     expect(day.classList.contains('is-flag')).toBe(true);
     expect(day.classList.contains('is-checked')).toBe(false);
@@ -133,9 +134,10 @@ describe('the Flagged calendar', () => {
     expect(h.$$('#flag-sheet .flagcal-week.wk-flag')).toHaveLength(1);
   });
 
-  it('lists what is still to check, oldest first, with the day note', () => {
+  it('lists the flagged days still to check, oldest first, with the day note', () => {
     const h = seeded();
     open(h);
+    expect(h.$('#flag-sheet .flag-list-head').textContent).toMatch(/Flagged days\s*2 to check/);
     const items = h.$$('#flag-sheet .flag-item:not(.is-checked)').map(i => i.textContent.replace(/\s+/g, ' '));
     expect(items).toHaveLength(2);
     expect(items[0]).toMatch(/Week 38/);
@@ -150,25 +152,37 @@ describe('the Flagged calendar', () => {
     expect(h.$('#flag-sheet')).toBeTruthy();                       // stays open to carry on checking
   });
 
-  it('goes to a flagged week from the list', () => {
+  it('takes a flagged day straight to its jobs on Log Job', () => {
+    const h = seeded();
+    open(h);
+    h.click(`#flag-sheet .flagcal-day[data-flag-go="day:${TUE}"]`);
+    expect(h.$('#flag-sheet')).toBeNull();
+    expect(h.$('.bottom-nav button[data-tab="log"]').classList.contains('active')).toBe(true);
+    expect(h.$('[data-log-day-pick="' + TUE + '"]').getAttribute('aria-pressed')).toBe('true');
+    expect(h.$('.lj-flag-row').textContent).toMatch(/Flagged\s*·\s*to check/);
+    expect(h.$('.lj-note-row').textContent).toContain('Systems off till 11');
+  });
+
+  it('takes a day in an earlier week to that week on Log Job', () => {
+    const h = seeded();
+    open(h);
+    h.click(`#flag-sheet .flag-item-main[data-flag-go="day:${LAST_THU}"]`);
+    expect(h.$('.lj-weeknav-label').textContent).toContain('Week 38');
+    expect(h.$('[data-log-day-pick="' + LAST_THU + '"]').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('takes a flagged week to its Monday on Log Job', () => {
     const h = seeded();
     open(h);
     h.click(`#flag-sheet .flag-item-main[data-flag-go="week:${LAST}"]`);
-    expect(h.$('#flag-sheet')).toBeNull();
-    expect(h.$('.sched-nav-wk').textContent).toBe('Week 38');
-    expect(h.$('.sched-week-flag').textContent).toContain('Week flagged');
+    expect(h.$('[data-log-day-pick="' + LAST + '"]').getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('jumps to a flagged day’s week with its note and flag open', () => {
+  it('opens any past day\u2019s jobs, flagged or not, but not days to come', () => {
     const h = seeded();
     open(h);
-    h.click('[data-flag-month="-1"]');
-    h.click('[data-flag-month="1"]');
-    h.click(`#flag-sheet .flagcal-day[data-flag-go="day:${LAST_THU}"]`);
-    expect(h.$('#flag-sheet')).toBeNull();
-    expect(h.$('.sched-nav-wk').textContent).toBe('Week 38');
-    expect(h.$(`.sched-note-input[data-day="${LAST_THU}"]`)).toBeTruthy();
-    expect(h.$('.sched-note-panel .flag-line').textContent).toMatch(/Flagged\s*·\s*checked/);
+    expect(h.$('#flag-sheet button.flagcal-day[data-flag-go="day:2026-09-15"]')).toBeTruthy();
+    expect(h.$('#flag-sheet button.flagcal-day[data-flag-go="day:2026-09-29"]')).toBeNull();
   });
 
   it('moves between months', () => {

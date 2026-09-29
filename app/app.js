@@ -731,7 +731,7 @@ function buildSchedule() {
   return `
     <div class="sched-head">
       <div class="st-section-label">WEEK SHIFT</div>
-      <button type="button" id="open-flags" class="flags-btn">⚑ Flagged${flagsToCheck() ? ` <span class="flags-count">${flagsToCheck()}</span>` : ''}</button>
+      <button type="button" id="open-flags" class="flags-btn">Calendar${flagsToCheck() ? ` <span class="flags-count" aria-label="${flagsToCheck()} flagged to check">⚑ ${flagsToCheck()}</span>` : ''}</button>
     </div>
     <div class="sched-nav-row">
       <div class="sched-nav-week">
@@ -1061,8 +1061,9 @@ function buildFlagSheet() {
         d.getMonth() !== m - 1 ? 'is-out' : '',
         dk === todayKey ? 'is-today' : '',
         f ? (f.checked ? 'is-flag is-checked' : 'is-flag') : ''].filter(Boolean).join(' ');
-      cells.push(f || wf
-        ? `<button type="button" class="${cls}" data-flag-go="${f ? 'day:' + dk : 'week:' + wk}" aria-label="${f ? 'Flagged' : 'Week flagged'}, ${dk}">${d.getDate()}${f ? '<i>⚑</i>' : ''}</button>`
+      // Any day up to today opens its jobs; a flagged one is marked.
+      cells.push(f || wf || dk <= todayKey
+        ? `<button type="button" class="${cls}" data-flag-go="day:${dk}" aria-label="${f ? 'Flagged, ' : ''}${dk}">${d.getDate()}${f ? '<i>⚑</i>' : ''}</button>`
         : `<span class="${cls}">${d.getDate()}</span>`);
     }
     rows.push(`<div class="flagcal-week${wf ? (wf.checked ? ' wk-flag is-checked' : ' wk-flag') : ''}">${cells.join('')}</div>`);
@@ -1087,7 +1088,7 @@ function buildFlagSheet() {
       <div class="forecast-panel" role="dialog" aria-modal="true" aria-labelledby="flag-sheet-title">
         <div class="forecast-handle"></div>
         <div class="forecast-header">
-          <span class="forecast-title" id="flag-sheet-title">Flagged days</span>
+          <span class="forecast-title" id="flag-sheet-title">Calendar</span>
           <button class="forecast-close" id="flag-close" aria-label="Close">✕</button>
         </div>
         <div class="forecast-body">
@@ -1100,8 +1101,8 @@ function buildFlagSheet() {
             <div class="flagcal-head">${['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(x => `<span>${x}</span>`).join('')}</div>
             ${rows.join('')}
           </div>
-          <div class="flag-list-head">Still to check${toCheck.length ? ` <span class="flags-count">${toCheck.length}</span>` : ''}</div>
-          ${toCheck.length ? toCheck.map(item).join('') : '<p class="flag-list-empty">Nothing to check. Want to be reminded to check a day when your CTAP update comes in? Flag it on Log Job, or with the + on any day here.</p>'}
+          <div class="flag-list-head">Flagged days${toCheck.length ? ` <span class="flags-count">${toCheck.length} to check</span>` : ''}</div>
+          ${toCheck.length ? toCheck.map(item).join('') : '<p class="flag-list-empty">No flagged days to check. Want to be reminded to check a day when your CTAP update comes in? Flag it on Log Job, or with the + on any day in Shift.</p>'}
           ${checkedHere.length ? `<div class="flag-list-head">Checked in ${first.toLocaleDateString('en-GB', { month: 'long' })}</div>${checkedHere.map(item).join('')}` : ''}
         </div>
       </div>
@@ -4074,14 +4075,22 @@ function attachListeners() {
       flagSheet.month = localDateStr(d).slice(0, 7);
       render();
     }));
-    // Straight to that week on Shift, with the day's note and flag open.
+    // Straight to that day's jobs on Log Job (a week goes to its Monday). A
+    // day still to come has no jobs, so that goes to its week on Shift.
     flagSheetEl.querySelectorAll('[data-flag-go]').forEach(b => b.addEventListener('click', () => {
       const target = b.dataset.flagGo;
       const key = target.slice(target.indexOf(':') + 1);
-      currentWeekKey = getWeekKey(new Date(key + 'T00:00:00'));
-      scheduleNoteOpenDay = target.startsWith('day:') ? key : null;
       flagSheet = null;
+      if (key > getTodayKey()) {
+        currentWeekKey = getWeekKey(new Date(key + 'T00:00:00'));
+        scheduleNoteOpenDay = target.startsWith('day:') ? key : null;
+      } else {
+        activeTab = 'log';
+        setLogDay(key);
+        logCategory = null; jobSearch = ''; logSearchOpen = false;
+      }
       render();
+      window.scrollTo(0, 0);
     }));
   }
 

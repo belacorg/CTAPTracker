@@ -403,7 +403,7 @@ const CHANGELOG = [
     'Rest days: tap Rest on any day in the Shift tab. A rest day keeps your week\u2019s hours; Leave is still for annual leave.',
     'Add a note straight after a job on Log Job. It\u2019s the same day note as the Shift tab, so you can write it in either place.',
     'Flag a day if you want to double-check it when your CTAP update comes in. Tap \u2691 Flag on Log Job, or the + on any day in the Shift tab. You can flag a whole week too.',
-    'Tap \u2691 Flagged on the Shift tab to see your flagged days on a calendar, with a list of what\u2019s still to check. Tick each one off as you check it.',
+    'Tap Calendar on the Shift tab to see your flagged days, and tick each one off as you check it. Tap any day to go straight to its jobs.',
     'The Schedule tab is now called Shift, and the week number shows on Log Job and Shift.',
     'The app now shows its version number (this is 0.8.3) instead of a build number.'
   ] },

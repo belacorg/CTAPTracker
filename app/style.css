@@ -4642,7 +4642,7 @@ body.light .lj-sec-sticky { background: var(--bg); }
   display: inline-flex; align-items: center; gap: 6px;
   padding: 5px 11px; border-radius: 99px;
   border: 1.5px solid var(--surface3); background: none;
-  font: inherit; font-size: 0.74rem; font-weight: 600; color: var(--amber);
+  font: inherit; font-size: 0.74rem; font-weight: 600; color: var(--fg);
   cursor: pointer;
 }
 .flags-count {
