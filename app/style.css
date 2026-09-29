@@ -4140,19 +4140,18 @@ body.light .cashout-result-modelled .cashout-result-net-val { color: #8a5a00; }
   cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
 .lj-note-add-solo { width: auto; padding: 8px 2px 0; }
-.lj-note-row {
-  width: 100%; background: none; border: none; border-bottom: none;
-  font: inherit; text-align: left; cursor: pointer;
-  align-items: flex-start;
-  -webkit-tap-highlight-color: transparent;
-}
-.lj-note-row .lj-log-ts { padding-top: 2px; color: var(--accent); }
+.lj-note-row .lj-log-ts { color: var(--accent); }
 .lj-note-text {
   flex: 1; min-width: 0;
   font-size: 0.84rem; color: var(--fg);
   white-space: pre-wrap; overflow-wrap: anywhere;
+  cursor: pointer;
 }
-.lj-note-edit { flex: none; font-size: 0.72rem; font-weight: 600; color: var(--accent); padding-top: 2px; }
+.lj-note-edit {
+  background: none; border: none; padding: 0;
+  font-family: inherit; color: var(--accent);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
 .lj-note-panel { padding: 8px 14px 10px; }
 .lj-note-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
 .lj-note-done {

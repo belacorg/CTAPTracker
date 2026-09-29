@@ -1004,11 +1004,12 @@ function buildLogDayEntries() {
         <div class="lj-note-foot"><span class="sched-note-hint">Saves as you type · also on the Schedule</span><button type="button" class="lj-note-done" data-lj-note-done>Done</button></div>
       </div>`
     : note
-      ? `<button type="button" class="lj-log-row lj-note-row" data-lj-note-open aria-label="Edit the note for this day">
+      ? `<div class="lj-log-row lj-note-row">
           <span class="lj-log-ts">Note</span>
-          <span class="lj-note-text">${escAttr(note)}</span>
-          <span class="lj-note-edit">Edit</span>
-        </button>`
+          <span class="lj-note-text" data-lj-note-open>${escAttr(note)}</span>
+          <button type="button" class="lj-log-credit lj-note-edit" data-lj-note-open aria-label="Edit the note for this day">Edit</button>
+          <button type="button" class="lj-log-del" data-lj-note-del="${activeLogDay}" aria-label="Delete the note for this day">&#10005;</button>
+        </div>`
       : `<button type="button" class="lj-note-add" data-lj-note-open>+ Add a note</button>`;
 
   if (jobs.length === 0 && deds.length === 0 && !mentor && !isLeave && !note && !noteOpen) {
@@ -3868,6 +3869,19 @@ function attachListeners() {
     if (val) wk.shifts[dk].note = val; else delete wk.shifts[dk].note;
     saveState(state);
     if (window.__ctapSyncWeek) window.__ctapSyncWeek(weekKey);
+  });
+  document.querySelectorAll('[data-lj-note-del]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      const dk = btn.dataset.ljNoteDel;
+      const weekKey = getWeekKey(new Date(dk + 'T00:00:00'));
+      const s = ((getOrCreateWeek(state, weekKey).shifts) || {})[dk];
+      if (s) delete s.note;
+      saveState(state);
+      if (window.__ctapSyncWeek) window.__ctapSyncWeek(weekKey);
+      renderKeepingScroll();
+      showToast('Note deleted');
+    });
   });
   const ljNoteDone = document.querySelector('[data-lj-note-done]');
   if (ljNoteDone) ljNoteDone.addEventListener('click', e => {

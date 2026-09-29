@@ -144,6 +144,20 @@ describe('a note after the job on Log Job', () => {
     expect(shift(h, WED).note).toBe('Training day');
   });
 
+  it('shows Edit where a job shows its hours, and a ✕ that deletes the note', () => {
+    const h = boot({ [WEEK]: { deductionMins: 0, days: {}, shifts: { [WED]: { ...nineToFive, note: 'Van MOT' } } } });
+    const row = h.$('.lj-note-row');
+    expect(row.querySelector('.lj-log-credit').textContent.trim()).toBe('Edit');
+    h.click(row.querySelector('.lj-log-credit'));
+    expect(h.$('.lj-note-input').value).toBe('Van MOT');
+    h.click('[data-lj-note-done]');
+    h.click('.lj-note-row .lj-log-del');
+    expect(shift(h, WED).note).toBeUndefined();
+    expect(shift(h, WED)).toMatchObject(nineToFive);
+    expect(h.$('.lj-note-row')).toBeNull();
+    expect(h.$('[data-lj-note-open]').textContent).toContain('Add a note');
+  });
+
   it('removes the note when it is emptied', () => {
     const h = boot({ [WEEK]: { deductionMins: 0, days: {}, shifts: { [WED]: { note: 'x' } } } });
     h.click('[data-lj-note-open]');
