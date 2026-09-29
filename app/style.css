@@ -4258,6 +4258,12 @@ body.light .lj-sec-sticky { background: var(--bg); }
   image-rendering: pixelated;
 }
 
+/* On the greeting line he stood on the baseline, but he is taller than the
+   capitals, so his middle sat above the words' and he looked to float. Down
+   4px puts his middle level with theirs. Only the empty rows under his feet
+   drop below the lane, so nothing of him is clipped. */
+#pixel-lane .pixel-eng { bottom: -4px; }
+
 /* Coach card — he fronts it, so the animation reads as the coach talking. */
 .coach-card-header {
   display: flex;
