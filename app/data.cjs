@@ -412,11 +412,11 @@ const CHANGELOG = [
     // A few lines from Jake, in his own words, shown above the list.
     note: null,
     items: [
-    'Wait Work is now entered in minutes \u2014 11, 20, 30 \u2014 instead of hours. Anything you logged before is unchanged.',
+    'Wait Work has changed from hours to minutes. Anything you logged before is unchanged.',
     'Rest days: tap Rest on any day in the Shift tab. A rest day keeps your week\u2019s hours; Leave is still for annual leave.',
     'Add a note straight after a job on Log Job. It\u2019s the same day note as the Shift tab, so you can write it in either place.',
-    'Flag a day, or a whole week, when something out of the ordinary happens \u2014 systems down, laptop broken, downtime. Tap \u2691 Flag this day on Log Job, or use the + on any day in the Shift tab.',
-    'When your CTAP update comes in, tap \u2691 Flagged on the Shift tab: a calendar of your flagged days and a list of what\u2019s still to check. Tick each one off as you check it.',
+    'Flag a day, or a whole week, that you\u2019ll want to check when your CTAP update comes in, so you can go back to it easily. Tap \u2691 Flag this day on Log Job, or the + on any day in the Shift tab.',
+    'Tap \u2691 Flagged on the Shift tab to see your flagged days on a calendar, with a list of what\u2019s still to check. Tick each one off as you check it.',
     'The Schedule tab is now called Shift, and the week number shows on Log Job and Shift.',
     'The app now shows its version number (this is 0.8.3) instead of a build number.'
   ] },
