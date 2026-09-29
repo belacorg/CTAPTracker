@@ -4273,10 +4273,11 @@ body.light .lj-sec-sticky { background: var(--bg); }
 }
 
 /* On the greeting line he stood on the baseline, but he is taller than the
-   capitals, so his middle sat above the words' and he looked to float. Down
-   4px puts his middle level with theirs. Only the empty rows under his feet
-   drop below the lane, so nothing of him is clipped. */
-#pixel-lane .pixel-eng { bottom: -4px; }
+   capitals, so he looked to float. Down 7px puts his eyes level with the
+   middle of the lowercase letters, which is where the eye reads the line.
+   Only the empty rows under his feet (8px of them) drop below the lane, so
+   nothing of him is clipped. */
+#pixel-lane .pixel-eng { bottom: -7px; }
 
 /* Coach card — he fronts it, so the animation reads as the coach talking. */
 .coach-card-header {

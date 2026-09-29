@@ -8,6 +8,8 @@
 //   belongs after the job on Log Job, where it reads in order.
 import { describe, it, expect } from 'vitest';
 import { bootApp } from './helpers/app-harness.js';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 
 const WEDNESDAY = '2026-09-23T12:00:00';
 const WEEK = '2026-09-21';
@@ -200,6 +202,26 @@ describe('the Shift tab and the week number', () => {
 });
 
 describe('a note from Jake on an update', () => {
+  // Engineers only ever see what Jake actually wrote. No note, no box — never
+  // a "your note goes here" left over from building it.
+  it('shows nothing at all when there is no note', () => {
+    const h = boot();
+    const e = h.window.eval('CHANGELOG')[0];
+    const saved = e.note;
+    e.note = null;
+    tab(h, 'settings');
+    h.click('#open-changelog');
+    expect(h.$('#whatsnew-sheet .whatsnew-note')).toBeNull();
+    e.note = saved;
+  });
+
+  it('never ships placeholder text as a note', () => {
+    const { CHANGELOG } = require('../app/data.cjs');
+    CHANGELOG.filter(e => e.note).forEach(e => {
+      expect(e.note, `version ${e.version}`).not.toMatch(/\[|\]|goes here|placeholder|todo|tbc|lorem/i);
+    });
+  });
+
   it('shows above the changes, signed, and as text', () => {
     const h = boot();
     const e = h.window.eval('CHANGELOG')[0];
