@@ -1695,6 +1695,12 @@ details[open] .info-chevron { transform: rotate(90deg); }
   letter-spacing: -0.2px;
   padding: 0 4px;
 }
+/* "Week 40" over the dates — CTAP updates go by the week number. */
+.sched-nav-label { display: flex; flex-direction: column; align-items: center; line-height: 1.15; }
+.sched-nav-wk {
+  font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--muted);
+}
 .sched-standard-btn {
   background: var(--surface2);
   border: 1px solid var(--tile-border);
@@ -2354,6 +2360,14 @@ body.light .cashout-result-modelled .cashout-result-net-val { color: #8a5a00; }
   font-size: 0.6rem; font-weight: 700; letter-spacing: 0.04em;
   background: var(--accent); color: #fff; vertical-align: middle;
 }
+/* Jake's own few words on an update, above the list of changes. */
+.whatsnew-note {
+  margin: 0 0 10px; padding: 10px 12px;
+  border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0;
+  background: var(--surface2);
+  font-size: 0.82rem; line-height: 1.5; white-space: pre-line;
+}
+.whatsnew-note-by { display: block; margin-top: 6px; font-size: 0.74rem; font-weight: 600; color: var(--muted); }
 .whatsnew-items { margin: 0; padding-left: 18px; }
 .whatsnew-items li { font-size: 0.8rem; line-height: 1.45; margin-bottom: 6px; }
 .whatsnew-done {

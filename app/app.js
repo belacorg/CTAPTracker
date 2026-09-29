@@ -389,7 +389,7 @@ function buildBottomNav() {
   const tabs = [
     { id: 'log',       label: 'Log Job',   icon: iconPlus() },
     { id: 'dashboard', label: 'Dashboard', icon: iconChart() },
-    { id: 'schedule',  label: 'Schedule',  icon: iconCalendar() },
+    { id: 'schedule',  label: 'Shift',     icon: iconCalendar() },
     { id: 'history',   label: 'History',   icon: iconClock() },
     { id: 'settings',  label: 'Settings',  icon: iconGear() },
   ];
@@ -523,13 +523,7 @@ function buildDashboard() {
   const todayPFMins = estimatedDailyPFMins(dailyRawOutputHours(state, week, todayKey));
 
   // ── Greeting + date header ──
-  const isoWeekOf = function(dateObj) {
-    const d = new Date(dateObj); d.setHours(0,0,0,0);
-    const dow = d.getDay();
-    d.setDate(d.getDate() + 3 - (dow + 6) % 7);
-    const w1 = new Date(d.getFullYear(), 0, 4);
-    return 1 + Math.round(((d - w1) / 86400000 - 3 + (w1.getDay() + 6) % 7) / 7);
-  };
+  const isoWeekOf = weekNumber;
 
   const greetHour = new Date().getHours();
   const _name = localDisplayName();
@@ -730,11 +724,11 @@ function buildSchedule() {
   const schedAtCap = currentWeekKey >= getWeekKey(maxFutureSched);
 
   return `
-    <div class="st-section-label">WEEK SCHEDULE</div>
+    <div class="st-section-label">WEEK SHIFT</div>
     <div class="sched-nav-row">
       <div class="sched-nav-week">
         <button id="sched-prev-week" class="sched-nav-btn">&#8249;</button>
-        <span class="sched-nav-label">${schedWeekLabel(currentWeekKey)}</span>
+        <span class="sched-nav-label"><span class="sched-nav-wk">Week ${weekNumber(new Date(currentWeekKey + 'T00:00:00'))}</span>${schedWeekLabel(currentWeekKey)}</span>
         <button id="sched-next-week" class="sched-nav-btn" ${schedAtCap ? 'disabled' : ''}>&#8250;</button>
       </div>
       <button id="apply-default" class="sched-standard-btn">Standard week</button>
@@ -743,7 +737,7 @@ function buildSchedule() {
       <span id="autosave-check" class="autosave-check">✓</span>
       <span class="autosave-text">Tap a day's times to change them · Lunch deducted from daily target</span>
     </div>
-    ${isFuture ? `<div style="background:rgba(255,165,36,0.08);border:1px solid rgba(255,165,36,0.2);border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:0.76rem;color:var(--accent);line-height:1.5"><strong>Future week</strong> — Set your schedule in advance.</div>` : ''}
+    ${isFuture ? `<div style="background:rgba(255,165,36,0.08);border:1px solid rgba(255,165,36,0.2);border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:0.76rem;color:var(--accent);line-height:1.5"><strong>Future week</strong> — Set your shifts in advance.</div>` : ''}
     <div class="dashboard-card" style="padding:2px 12px">
       ${weekdayRows}
     </div>
@@ -964,12 +958,13 @@ function buildLogWeekStrip() {
     ? `${start.getDate()} – ${endStr}`
     : `${start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${endStr}`;
   const isThisWeek = logWeekKey === getWeekKey(new Date());
+  const wkNo = `Week ${weekNumber(start)}`;
 
   return `
     <div class="lj-weeknav">
       <button class="lj-weeknav-btn" data-log-week="-1" aria-label="Previous week">‹</button>
       <button class="lj-weeknav-label${isThisWeek ? ' current' : ''}" data-log-week="0">
-        ${isThisWeek ? 'This week' : range}${isThisWeek ? `<span class="lj-weeknav-range">${range}</span>` : ''}
+        ${isThisWeek ? 'This week' : wkNo}<span class="lj-weeknav-range">${isThisWeek ? `${wkNo} · ${range}` : range}</span>
       </button>
       <button class="lj-weeknav-btn" data-log-week="1" aria-label="Next week" ${isThisWeek ? 'disabled' : ''}>›</button>
     </div>
@@ -1001,7 +996,7 @@ function buildLogDayEntries() {
   const noteRow = noteOpen
     ? `<div class="lj-note-panel">
         <textarea class="lj-note-input sched-note-input" data-lj-note-day="${activeLogDay}" rows="2" placeholder="What happened? Stuck in traffic, customer reschedule, parts…">${escAttr(note)}</textarea>
-        <div class="lj-note-foot"><span class="sched-note-hint">Saves as you type · also on the Schedule</span><button type="button" class="lj-note-done" data-lj-note-done>Done</button></div>
+        <div class="lj-note-foot"><span class="sched-note-hint">Saves as you type · also on the Shift tab</span><button type="button" class="lj-note-done" data-lj-note-done>Done</button></div>
       </div>`
     : note
       ? `<div class="lj-log-row lj-note-row">
@@ -1405,7 +1400,7 @@ function buildSettings() {
       </button>
       ${howToExpanded ? `<div class="st-how-to-body">
         <ol class="info-steps">
-          <li><div><span class="info-step-title">Set up your schedule</span>Go to the <b>Schedule</b> tab and tap a day's times to set them, then <b>Confirm</b>. <b>Also apply to</b> puts the same times on other days. Tap <b>Standard week</b> for Mon–Fri 08:00–16:30 with default lunch. Tap <b>Rest</b> for a day off in your rota, or <b>Leave</b> for annual leave. Saves automatically.</div></li>
+          <li><div><span class="info-step-title">Set up your shifts</span>Go to the <b>Shift</b> tab and tap a day's times to set them, then <b>Confirm</b>. <b>Also apply to</b> puts the same times on other days. Tap <b>Standard week</b> for Mon–Fri 08:00–16:30 with default lunch. Tap <b>Rest</b> for a day off in your rota, or <b>Leave</b> for annual leave. Saves automatically.</div></li>
           <li><div><span class="info-step-title">Log your jobs</span>Tap <b>Log Job</b> and pick a category — Core, Hive, Sales, or Absence. Tap a tile to log instantly; dashed tiles ask for extra input. You can also tap <b>+ Add a job</b> at the bottom of <b>Today's Jobs</b> on the Dashboard.</div></li>
           <li><div><span class="info-step-title">Track on the Dashboard</span>See today's credit hours, the week's progress and a day-by-day chart. Tap the <b>CTAP</b> tile to open the cash-out sheet (what your balance is worth after tax). Tap the <b>Week</b> tile for the full weekly forecast with per-day detail.</div></li>
           <li><div><span class="info-step-title">Understand your CTAP balance</span>CTAP is your running credit or deficit. It starts from your starting balance, then each completed week's surplus or shortfall is added. Green = in credit. You can only cash out when in credit.</div></li>
@@ -1420,7 +1415,7 @@ function buildSettings() {
       <div class="st-row">
         <span class="st-row-label">Version</span>
         <div class="st-row-value-stack">
-          <span class="st-row-value" id="app-build">Build ${APP_BUILD}</span>
+          <span class="st-row-value" id="app-build">Version ${APP_VERSION}</span>
           <span class="st-row-value-sub">Updated ${formatChangeDate(CHANGELOG[0].date)}</span>
         </div>
       </div>
@@ -2288,7 +2283,8 @@ function buildWhatsNewSheet() {
   const title = whatsNewMode === 'all' ? 'Updates' : 'What\u2019s new';
   const blocks = entries.map(e => `
     <div class="whatsnew-entry">
-      <div class="whatsnew-build">Build ${e.build} <span class="whatsnew-date">\u00b7 ${formatChangeDate(e.date)}</span>${e.build === APP_BUILD ? ' <span class="whatsnew-current">This phone</span>' : ''}</div>
+      <div class="whatsnew-build">Version ${e.version} <span class="whatsnew-date">\u00b7 ${formatChangeDate(e.date)}</span>${e.build === APP_BUILD ? ' <span class="whatsnew-current">This phone</span>' : ''}</div>
+      ${e.note ? `<blockquote class="whatsnew-note">${escAttr(e.note)}<span class="whatsnew-note-by">\u2014 Jake</span></blockquote>` : ''}
       <ul class="whatsnew-items">${e.items.map(i => `<li>${i}</li>`).join('')}</ul>
     </div>`).join('');
   return `
@@ -2301,7 +2297,7 @@ function buildWhatsNewSheet() {
           <button class="forecast-close" id="whatsnew-close" aria-label="Close">\u2715</button>
         </div>
         <div class="forecast-body">
-          <div class="whatsnew-running">You\u2019re on <b>build ${APP_BUILD}</b>.</div>
+          <div class="whatsnew-running">You\u2019re on <b>version ${APP_VERSION}</b>.</div>
           ${blocks}
           <button class="whatsnew-done" id="whatsnew-done">Got it</button>
         </div>

@@ -171,3 +171,47 @@ describe('a note after the job on Log Job', () => {
     expect(h.$('.lj-note-row').textContent).toContain('<img');
   });
 });
+
+describe('the Shift tab and the week number', () => {
+  it('calls the tab Shift and the week on it Week Shift', () => {
+    const h = boot();
+    const btn = h.$$('.bottom-nav button').find(b => b.dataset.tab === 'schedule');
+    expect(btn.textContent.trim()).toBe('Shift');
+    tab(h, 'schedule');
+    expect(h.$('.st-section-label').textContent).toBe('WEEK SHIFT');
+    expect(h.$('#app').textContent).not.toMatch(/schedule/i);
+  });
+
+  it('shows the week number on Shift and on Log Job, the one the Dashboard shows', () => {
+    const h = boot();
+    expect(h.$('.lj-weeknav-label').textContent).toMatch(/This week\s*Week 39 · 21 – 27 Sept/);
+    tab(h, 'schedule');
+    expect(h.$('.sched-nav-wk').textContent).toBe('Week 39');
+    tab(h, 'dashboard');
+    expect(h.$('.date-header').textContent).toContain('WK 39');
+  });
+
+  it('numbers weeks the ISO way, across a new year too', () => {
+    expect(h0().weekNumber(new Date('2026-09-23T12:00:00'))).toBe(39);
+    expect(h0().weekNumber(new Date('2026-12-31T12:00:00'))).toBe(53);
+    expect(h0().weekNumber(new Date('2027-01-04T12:00:00'))).toBe(1);
+  });
+  const h0 = () => boot().window;
+});
+
+describe('a note from Jake on an update', () => {
+  it('shows above the changes, signed, and as text', () => {
+    const h = boot();
+    const e = h.window.eval('CHANGELOG')[0];
+    const saved = e.note;
+    e.note = 'Thanks for the feedback <b>lads</b>';
+    h.window.localStorage.setItem('jcpd_seen_build', '200');
+    tab(h, 'settings');
+    h.click('#open-changelog');
+    const note = h.$('#whatsnew-sheet .whatsnew-note');
+    expect(note.textContent).toContain('Thanks for the feedback <b>lads</b>');
+    expect(note.textContent).toContain('— Jake');
+    expect(note.querySelector('b')).toBeNull();
+    e.note = saved;
+  });
+});

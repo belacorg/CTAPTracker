@@ -53,6 +53,7 @@ _Avoid_: "contracted hours", "base hours" (use **Rostered hours** when describin
 
 **Shift**:
 A per-day record of when an engineer is scheduled to work — `{start, end, lunch, leave}`. Used by the daily-target display and by **Leave** detection.
+Set on the **Shift** tab (called "Schedule" until 0.8.3), headed "Week Shift".
 _Avoid_: "schedule", "roster" (singular; the day-level concept is a **Shift**)
 
 **Leave**:

@@ -157,6 +157,14 @@ function calcVariableCredits(mins) {
   return +(mins / 83.58).toFixed(4);
 }
 
+// The ISO week number — "Week 40" — the same one the Dashboard header shows.
+function weekNumber(date) {
+  const d = new Date(date); d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);          // the week's Thursday
+  const w1 = new Date(d.getFullYear(), 0, 4);
+  return 1 + Math.round(((d - w1) / 86400000 - 3 + (w1.getDay() + 6) % 7) / 7);
+}
+
 function localDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
@@ -353,18 +361,26 @@ function saveState(state) {
 // update. Builds that change nothing an engineer would notice get no entry,
 // and so no popup. Newest first; written for engineers, not for us.
 const APP_BUILD = 201;
+// What engineers see. APP_BUILD stays underneath: it is the number the phone
+// remembers to decide which updates it has been shown.
+const APP_VERSION = '0.8.3';
 const CHANGELOG = [
-  { build: 201, date: '2026-09-29', items: [
+  { build: 201, version: '0.8.3', date: '2026-09-29',
+    // A few lines from Jake, in his own words, shown above the list.
+    note: null,
+    items: [
     'Wait Work is now entered in minutes \u2014 11, 20, 30 \u2014 instead of hours. Anything you logged before is unchanged.',
-    'Rest days: tap Rest on any day in the Schedule. A rest day keeps your week\u2019s hours; Leave is still for annual leave.',
-    'Add a note straight after a job on Log Job. It\u2019s the same day note as the Schedule, so you can write it in either place.'
+    'Rest days: tap Rest on any day in the Shift tab. A rest day keeps your week\u2019s hours; Leave is still for annual leave.',
+    'Add a note straight after a job on Log Job. It\u2019s the same day note as the Shift tab, so you can write it in either place.',
+    'The Schedule tab is now called Shift, and the week number shows on Log Job and Shift.',
+    'The app now shows its version number (this is 0.8.3) instead of a build number.'
   ] },
-  { build: 200, date: '2026-09-23', items: [
+  { build: 200, version: '0.8.2', date: '2026-09-23', items: [
     'Every job now shows the minutes it\u2019s worth as well as the hours \u2014 a gas repair is 56 min, a CHB service 40.',
     'You can now see which version you\u2019re on in Settings \u2192 About, and what changed in each update.',
     'Extra protection for your data: if your saved data ever can\u2019t be read, the app keeps it safe and won\u2019t save over it.'
   ] },
-  { build: 199, date: '2026-09-23', items: [
+  { build: 199, version: '0.8.1', date: '2026-09-23', items: [
     'SGO sales now count as fulfilment plus SGO credit, the way CTAP has paid them since March. Each sale shows its split, and the Weekly Forecast shows your week\u2019s SGO total.',
     'A reflush (HIM-HE) is credited at 8 hours, and upgrades quoted over 240 minutes get +10%.',
     'The duplicate \u201cHive Fit\u201d and \u201cCO Alarm Fit\u201d tiles are gone. Anything you logged with them is kept.'
@@ -2417,6 +2433,8 @@ if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     paceProjection: paceProjection,
     isStateUnreadable: isStateUnreadable,
     APP_BUILD: APP_BUILD,
+    APP_VERSION: APP_VERSION,
+    weekNumber: weekNumber,
     CHANGELOG: CHANGELOG,
     unseenChanges: unseenChanges,
     jobCredit: jobCredit,

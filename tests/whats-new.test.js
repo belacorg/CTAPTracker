@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { APP_BUILD, CHANGELOG, unseenChanges } from '../app/data.cjs';
+import { APP_BUILD, APP_VERSION, CHANGELOG, unseenChanges } from '../app/data.cjs';
 import { bootApp } from './helpers/app-harness.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -31,10 +31,23 @@ describe('the build number is the one the phone actually loaded', () => {
     expect([...builds].sort((a, b) => b - a)).toEqual(builds);   // newest first
   });
 
-  it('shows the build in Settings', () => {
+  // Engineers see a version number, not the build. So that it can't go stale
+  // the way "v0.8.0" did, it has to move with every build that is shipped.
+  it('gives every update its own version, newest first, the latest being this one', () => {
+    CHANGELOG.forEach(e => expect(e.version, `build ${e.build}`).toMatch(/^\d+\.\d+\.\d+$/));
+    const versions = CHANGELOG.map(e => e.version);
+    expect(new Set(versions).size).toBe(versions.length);
+    const n = v => v.split('.').map(Number).reduce((a, x) => a * 1000 + x, 0);
+    expect([...versions].sort((a, b) => n(b) - n(a))).toEqual(versions);
+    expect(CHANGELOG[0].build).toBe(APP_BUILD);
+    expect(CHANGELOG[0].version).toBe(APP_VERSION);
+    expect(JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version).toBe(APP_VERSION);
+  });
+
+  it('shows the version in Settings', () => {
     const h = bootApp({ now: NOW, storage: { ...EXISTING, jcpd_seen_build: String(APP_BUILD) } });
     h.click(h.$$('.bottom-nav button').find(b => b.dataset.tab === 'settings'));
-    expect(h.$('#app-build').textContent).toBe(`Build ${APP_BUILD}`);
+    expect(h.$('#app-build').textContent).toBe(`Version ${APP_VERSION}`);
     expect(h.$('.settings-content, main').textContent).not.toContain('v0.8.0');
   });
 });
@@ -61,7 +74,8 @@ describe('the "What’s new" sheet', () => {
   it('opens by itself after an update', () => {
     const h = bootApp({ now: NOW, storage: EXISTING });
     expect(sheet(h)).toBeTruthy();
-    expect(sheet(h).textContent).toContain(`build ${APP_BUILD}`);
+    expect(sheet(h).textContent).toContain(`version ${APP_VERSION}`);
+    expect(sheet(h).textContent).not.toMatch(/build \d/i);
   });
 
   it('does not come back once dismissed', () => {
