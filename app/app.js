@@ -49,8 +49,6 @@ let scheduleNoteOpenDay = null;
 // The day whose note is open for typing on Log Job (the same day note the
 // Schedule's + edits — one note per day, reachable from both).
 let logNoteOpenDay = null;
-// Which flag's reason chips are open: 'day:YYYY-MM-DD' or 'week:YYYY-MM-DD'.
-let flagPickerFor = null;
 // The Flagged calendar on the Shift tab: { month: 'YYYY-MM' } while open.
 let flagSheet = null;
 // The day whose times are being set in the shift sheet, with the times and the
@@ -714,8 +712,8 @@ function buildSchedule() {
     const note = (s.note || '').trim();
     const hasNote = note.length > 0;
     const isNoteOpen = scheduleNoteOpenDay === dk;
-    const dayFlag = s.flag && s.flag.reason ? s.flag : null;
-    const dayFlagMark = dayFlag ? `<span class="sched-flag${dayFlag.checked ? ' is-checked' : ''}" title="${flagReasonLabel(dayFlag.reason)}">⚑</span>` : '';
+    const dayFlag = s.flag || null;
+    const dayFlagMark = dayFlag ? `<span class="sched-flag${dayFlag.checked ? ' is-checked' : ''}" title="Flagged">⚑</span>` : '';
     const rowHtml = `<div class="shift-row${isToday ? ' shift-today' : ''}${isLeave ? ' shift-leave' : ''}"><div class="sched-day-col${isToday ? ' is-today' : ''}"><span class="sched-day-abbr">${DAY_ABBR[i]}</span><span class="sched-day-num">${dayNum}</span>${dayFlagMark}</div>${isLeave ? `<div class="sched-leave-label">Annual leave</div>` : `<button type="button" class="sched-time-wrap sched-time-btn${isRest ? ' is-rest' : ''}" data-action="edit-shift" data-day="${dk}" aria-label="Set ${d.toLocaleDateString('en-GB', { weekday: 'long' })}'s shift times">${isRest ? `<span class="sched-rest-label">Rest day</span>` : `<span class="sched-time-val">${s.start || '--:--'}</span><span class="shift-sep">–</span><span class="sched-time-val">${s.end || '--:--'}</span>`}</button>`}<span class="sched-hrs${isToday ? ' is-today' : ''}">${isLeave ? 'AL' : hrs !== null ? hrs.toFixed(1) + 'h' : '—'}</span><div class="sched-day-btns"><button class="al-btn rest-btn${isRest ? ' active' : ''}" data-day="${dk}" data-action="toggle-rest" aria-pressed="${isRest}">${isRest ? '✓ Rest' : 'Rest'}</button><button class="al-btn${isLeave ? ' active' : ''}" data-day="${dk}" data-action="toggle-leave">${isLeave ? '✓ Leave' : 'Leave'}</button></div><button class="sched-note-btn${hasNote ? ' has-note' : ''}${isNoteOpen ? ' is-open' : ''}" data-day="${dk}" data-action="toggle-note" title="Day note and flag" aria-label="Day note and flag">${hasNote ? '●' : '+'}</button></div>`;
     const notePanel = isNoteOpen
       ? `<div class="sched-note-panel"><textarea class="sched-note-input" data-day="${dk}" rows="2" placeholder="What happened today? Stuck in traffic, customer reschedule, training…">${note.replace(/</g, '&lt;')}</textarea><p class="sched-note-hint">Saves automatically</p><div class="sched-flag-wrap">${buildFlagControl('day:' + dk)}</div></div>`
@@ -998,7 +996,7 @@ function flagHolder(target, create) {
 
 function flagOf(target) {
   const h = flagHolder(target, false);
-  return h && h.holder.flag && h.holder.flag.reason ? h.holder.flag : null;
+  return h && h.holder.flag ? h.holder.flag : null;
 }
 
 function changeFlag(target, fn) {
@@ -1009,28 +1007,19 @@ function changeFlag(target, fn) {
 }
 
 // The one control for flagging, used on Log Job, on a Shift day and on a Shift
-// week: a "Flag this day" button, the reason chips, or the flag itself with
-// its checked tick and a ✕.
+// week: a Flag button, or the flag itself with its checked tick and a ✕.
 function buildFlagControl(target) {
   const kind = target.startsWith('week:') ? 'week' : 'day';
   const flag = flagOf(target);
   if (flag) {
     return `<div class="flag-line${flag.checked ? ' is-checked' : ''}">
       <span class="flag-mark" aria-hidden="true">⚑</span>
-      <span class="flag-text"><b>${flagReasonLabel(flag.reason)}</b> · ${flag.checked ? 'checked' : 'to check'}</span>
+      <span class="flag-text"><b>${kind === 'week' ? 'Week flagged' : 'Flagged'}</b> · ${flag.checked ? 'checked' : 'to check'}</span>
       <button type="button" class="flag-check" data-flag-check="${target}" aria-pressed="${!!flag.checked}">${flag.checked ? '✓ Checked' : 'Mark checked'}</button>
       <button type="button" class="flag-clear" data-flag-clear="${target}" aria-label="Remove the flag">✕</button>
     </div>`;
   }
-  if (flagPickerFor === target) {
-    return `<div class="flag-picker">
-      <span class="flag-picker-q">What happened ${kind === 'week' ? 'this week' : 'today'}?</span>
-      <div class="flag-chips">${FLAG_REASONS.map(r =>
-        `<button type="button" class="flag-chip" data-flag-set="${target}" data-reason="${r.id}">${r.label}</button>`).join('')}</div>
-      <button type="button" class="flag-cancel" data-flag-cancel>Cancel</button>
-    </div>`;
-  }
-  return `<button type="button" class="flag-add" data-flag-open="${target}">⚑ Flag this ${kind}</button>`;
+  return `<button type="button" class="flag-add" data-flag-set="${target}">⚑ ${kind === 'week' ? 'Flag this week' : 'Flag'}</button>`;
 }
 
 function flagsToCheck() {
@@ -1073,7 +1062,7 @@ function buildFlagSheet() {
         dk === todayKey ? 'is-today' : '',
         f ? (f.checked ? 'is-flag is-checked' : 'is-flag') : ''].filter(Boolean).join(' ');
       cells.push(f || wf
-        ? `<button type="button" class="${cls}" data-flag-go="${f ? 'day:' + dk : 'week:' + wk}" aria-label="${f ? flagReasonLabel(f.reason) : 'Week flagged'}, ${dk}">${d.getDate()}${f ? '<i>⚑</i>' : ''}</button>`
+        ? `<button type="button" class="${cls}" data-flag-go="${f ? 'day:' + dk : 'week:' + wk}" aria-label="${f ? 'Flagged' : 'Week flagged'}, ${dk}">${d.getDate()}${f ? '<i>⚑</i>' : ''}</button>`
         : `<span class="${cls}">${d.getDate()}</span>`);
     }
     rows.push(`<div class="flagcal-week${wf ? (wf.checked ? ' wk-flag is-checked' : ' wk-flag') : ''}">${cells.join('')}</div>`);
@@ -1084,7 +1073,7 @@ function buildFlagSheet() {
     return `<div class="flag-item${f.checked ? ' is-checked' : ''}">
       <button type="button" class="flag-item-main" data-flag-go="${target}">
         <span class="flag-item-date">⚑ ${flagItemLabel(f)}</span>
-        <span class="flag-item-reason">${flagReasonLabel(f.reason)}${f.note ? ` — <span class="flag-item-note">${escAttr(f.note)}</span>` : ''}</span>
+        ${f.note ? `<span class="flag-item-reason"><span class="flag-item-note">${escAttr(f.note)}</span></span>` : ''}
       </button>
       <button type="button" class="flag-check" data-flag-check="${target}" aria-pressed="${f.checked}">${f.checked ? '✓ Checked' : 'Mark checked'}</button>
     </div>`;
@@ -1112,7 +1101,7 @@ function buildFlagSheet() {
             ${rows.join('')}
           </div>
           <div class="flag-list-head">Still to check${toCheck.length ? ` <span class="flags-count">${toCheck.length}</span>` : ''}</div>
-          ${toCheck.length ? toCheck.map(item).join('') : '<p class="flag-list-empty">Nothing to check. Flag a day on Log Job or here on Shift when something out of the ordinary happens.</p>'}
+          ${toCheck.length ? toCheck.map(item).join('') : '<p class="flag-list-empty">Nothing to check. Want to be reminded to check a day when your CTAP update comes in? Flag it on Log Job, or with the + on any day here.</p>'}
           ${checkedHere.length ? `<div class="flag-list-head">Checked in ${first.toLocaleDateString('en-GB', { month: 'long' })}</div>${checkedHere.map(item).join('')}` : ''}
         </div>
       </div>
@@ -1157,20 +1146,23 @@ function buildLogDayEntries() {
   // Flag the day as it happens — systems down, laptop broken — to check later.
   const flagTarget = 'day:' + activeLogDay;
   const flagged = !!flagOf(flagTarget);
-  const flagOpen = flagPickerFor === flagTarget;
-  const flagRow = flagged || flagOpen ? `<div class="lj-flag-row">${buildFlagControl(flagTarget)}</div>` : '';
+  const flagRow = flagged ? `<div class="lj-flag-row">${buildFlagControl(flagTarget)}</div>` : '';
   const actions = [
     !note && !noteOpen ? `<button type="button" class="lj-note-add" data-lj-note-open>+ Add a note</button>` : '',
-    !flagged && !flagOpen ? buildFlagControl(flagTarget) : ''
+    !flagged ? buildFlagControl(flagTarget) : ''
   ].join('');
   const actionsRow = actions ? `<div class="lj-day-actions">${actions}</div>` : '';
 
-  if (jobs.length === 0 && deds.length === 0 && !mentor && !isLeave && !note && !noteOpen && !flagged && !flagOpen) {
+  // Nothing on the day yet: the same card, so a note or a flag still has a
+  // home, with the prompt to log where the count would be.
+  if (jobs.length === 0 && deds.length === 0 && !mentor && !isLeave && !note && !noteOpen && !flagged) {
     return `<div class="lj-log lj-log-empty">
-      <span class="lj-log-day">${isToday ? 'Today' : dayName}</span>
-      <span class="lj-log-none">Nothing logged yet — pick a job below</span>
-    </div>
-    <div class="lj-day-actions lj-day-actions-solo">${actions}</div>`;
+      <div class="lj-log-head">
+        <span class="lj-log-day">${isToday ? 'Today' : dayName}</span>
+        <span class="lj-log-none">Nothing logged yet — pick a job below</span>
+      </div>
+      <div class="lj-log-list">${actionsRow}</div>
+    </div>`;
   }
 
   const rows = jobs.map((j, i) => {
@@ -1217,7 +1209,8 @@ function buildLogDayEntries() {
   return `<details class="lj-log" open>
     <summary class="lj-log-head">
       <span class="lj-log-day">${isToday ? 'Today' : dayName}</span>
-      <span class="lj-log-sum">${count} logged<span class="lj-log-hrs">+${hours.toFixed(2)}h</span></span>
+      ${count || hours ? `<span class="lj-log-sum">${count} logged<span class="lj-log-hrs">+${hours.toFixed(2)}h</span></span>`
+        : `<span class="lj-log-none">Nothing logged yet — pick a job below</span>`}
     </summary>
     <div class="lj-log-list">${leaveRow}${rows}${dedRows}${mentorRow}${noteRow}${flagRow}${actionsRow}</div>
   </details>`;
@@ -4047,19 +4040,11 @@ function attachListeners() {
   // Flags — the same controls on Log Job, on a Shift day and a Shift week,
   // and in the Flagged sheet.
   const redrawFlags = () => renderKeepingScroll();
-  document.querySelectorAll('[data-flag-open]').forEach(b => b.addEventListener('click', e => {
-    e.preventDefault(); e.stopPropagation();
-    flagPickerFor = b.dataset.flagOpen; redrawFlags();
-  }));
-  document.querySelectorAll('[data-flag-cancel]').forEach(b => b.addEventListener('click', e => {
-    e.preventDefault(); e.stopPropagation();
-    flagPickerFor = null; redrawFlags();
-  }));
   document.querySelectorAll('[data-flag-set]').forEach(b => b.addEventListener('click', e => {
     e.preventDefault(); e.stopPropagation();
     const target = b.dataset.flagSet;
-    changeFlag(target, h => { h.flag = { reason: b.dataset.reason, checked: false }; });
-    flagPickerFor = null; redrawFlags();
+    changeFlag(target, h => { h.flag = { checked: false }; });
+    redrawFlags();
     showToast(target.startsWith('week:') ? 'Week flagged' : 'Day flagged');
   }));
   document.querySelectorAll('[data-flag-check]').forEach(b => b.addEventListener('click', e => {

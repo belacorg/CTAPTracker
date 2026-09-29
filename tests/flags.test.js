@@ -1,13 +1,12 @@
-// Flagging a day, or a week, to check against the CTAP update.
+// Flagging a day, or a week, to double-check against the CTAP update.
 //
-// Something out of the ordinary — systems shut down, the laptop broken, a
-// morning of downtime — and the engineer wants to be sure it was allowed for
-// when the CTAP update lands. A flag marks the day with why, shows on Shift,
-// and a calendar of flagged days is one tap away to check through. Checking a
-// flag ticks it off; it stays on record. Nothing about the numbers changes.
+// An engineer wants to be reminded to check a day when the CTAP update comes
+// in, and to find it again easily. One tap flags it (the day note says why, if
+// they want), it shows on Shift, and a calendar of flagged days is one tap
+// away. Checking a flag ticks it off; it stays on record. No numbers change.
 import { describe, it, expect } from 'vitest';
 import { bootApp } from './helpers/app-harness.js';
-import { listFlags, FLAG_REASONS } from '../app/data.cjs';
+import { listFlags } from '../app/data.cjs';
 
 const WEDNESDAY = '2026-09-23T12:00:00';
 const WEEK = '2026-09-21', LAST = '2026-09-14';
@@ -23,26 +22,32 @@ const tab = (h, t) => h.click(h.$$('.bottom-nav button').find(b => b.dataset.tab
 const shift = (h, wk, dk) => (((h.state().weeks[wk] || {}).shifts) || {})[dk] || {};
 
 describe('flagging a day on Log Job', () => {
-  it('flags today with a reason in two taps', () => {
+  it('flags today in one tap, asking for no reason', () => {
     const h = boot();
-    h.click('[data-flag-open="day:' + WED + '"]');
-    expect(h.$$('[data-flag-set]').map(b => b.textContent)).toEqual(FLAG_REASONS.map(r => r.label));
-    h.click('[data-flag-set="day:' + WED + '"][data-reason="kit"]');
-    expect(shift(h, WEEK, WED).flag).toEqual({ reason: 'kit', checked: false });
-    expect(h.$('.lj-flag-row').textContent).toMatch(/Laptop \/ kit\s*·\s*to check/);
+    h.click('[data-flag-set="day:' + WED + '"]');
+    expect(shift(h, WEEK, WED).flag).toEqual({ checked: false });
+    expect(h.$('.lj-flag-row').textContent).toMatch(/Flagged\s*·\s*to check/);
+  });
+
+  it('sits inside the day\u2019s card when nothing is logged yet', () => {
+    const h = boot();
+    expect(h.$('.lj-log-empty [data-flag-set]')).toBeTruthy();
+    expect(h.$('.lj-log-empty [data-lj-note-open]')).toBeTruthy();
+    h.click('[data-flag-set="day:' + WED + '"]');
+    expect(h.$('.lj-log-head').textContent).toContain('Nothing logged yet');
+    expect(h.$('.lj-log-head').textContent).not.toContain('0 logged');
   });
 
   it('flags the day being logged into, not always today', () => {
     const h = boot();
     h.click('[data-log-day-pick="' + TUE + '"]');
-    h.click('[data-flag-open="day:' + TUE + '"]');
-    h.click('[data-flag-set="day:' + TUE + '"][data-reason="systems"]');
-    expect(shift(h, WEEK, TUE).flag.reason).toBe('systems');
+    h.click('[data-flag-set="day:' + TUE + '"]');
+    expect(shift(h, WEEK, TUE).flag).toEqual({ checked: false });
     expect(shift(h, WEEK, WED).flag).toBeUndefined();
   });
 
   it('can be ticked off as checked and back, and removed', () => {
-    const h = boot({ [WEEK]: { deductionMins: 0, days: {}, shifts: { [WED]: { flag: { reason: 'van', checked: false } } } } });
+    const h = boot({ [WEEK]: { deductionMins: 0, days: {}, shifts: { [WED]: { flag: { checked: false } } } } });
     h.click('.lj-flag-row [data-flag-check]');
     expect(shift(h, WEEK, WED).flag.checked).toBe(true);
     h.click('.lj-flag-row [data-flag-check]');
@@ -53,8 +58,7 @@ describe('flagging a day on Log Job', () => {
 
   it('keeps the day’s times and note when flagged or unflagged', () => {
     const h = boot({ [WEEK]: { deductionMins: 0, days: {}, shifts: { [WED]: { ...nineToFive, note: 'Laptop died at 10' } } } });
-    h.click('[data-flag-open="day:' + WED + '"]');
-    h.click('[data-flag-set="day:' + WED + '"][data-reason="kit"]');
+    h.click('[data-flag-set="day:' + WED + '"]');
     h.click('.lj-flag-row [data-flag-clear]');
     expect(shift(h, WEEK, WED)).toEqual({ ...nineToFive, note: 'Laptop died at 10' });
   });
@@ -63,15 +67,14 @@ describe('flagging a day on Log Job', () => {
     const h = boot({ [WEEK]: { deductionMins: 0, days: {}, shifts: { [WED]: nineToFive, [TUE]: nineToFive } } });
     const w = () => h.state().weeks[WEEK];
     const before = [h.window.weekTargetHours(h.state(), WEEK), h.window.getDailyTarget(h.state(), w(), WED)];
-    h.click('[data-flag-open="day:' + WED + '"]');
-    h.click('[data-flag-set="day:' + WED + '"][data-reason="downtime"]');
+    h.click('[data-flag-set="day:' + WED + '"]');
     expect([h.window.weekTargetHours(h.state(), WEEK), h.window.getDailyTarget(h.state(), w(), WED)]).toEqual(before);
   });
 });
 
 describe('flags on the Shift tab', () => {
   it('marks a flagged day under its date', () => {
-    const h = boot({ [WEEK]: { deductionMins: 0, days: {}, shifts: { [TUE]: { ...nineToFive, flag: { reason: 'systems', checked: false } } } } });
+    const h = boot({ [WEEK]: { deductionMins: 0, days: {}, shifts: { [TUE]: { ...nineToFive, flag: { checked: false } } } } });
     tab(h, 'schedule');
     const row = h.$(`[data-action="edit-shift"][data-day="${TUE}"]`).closest('.shift-row');
     expect(row.querySelector('.sched-flag')).toBeTruthy();
@@ -82,43 +85,41 @@ describe('flags on the Shift tab', () => {
     const h = boot();
     tab(h, 'schedule');
     h.click(`[data-action="toggle-note"][data-day="${TUE}"]`);
-    h.click('.sched-note-panel [data-flag-open]');
-    h.click('.sched-note-panel [data-reason="systems"]');
-    expect(shift(h, WEEK, TUE).flag).toEqual({ reason: 'systems', checked: false });
+    h.click('.sched-note-panel [data-flag-set]');
+    expect(shift(h, WEEK, TUE).flag).toEqual({ checked: false });
   });
 
   it('flags a whole week', () => {
     const h = boot();
     tab(h, 'schedule');
-    h.click('[data-flag-open="week:' + WEEK + '"]');
-    h.click('[data-flag-set="week:' + WEEK + '"][data-reason="systems"]');
-    expect(h.state().weeks[WEEK].flag).toEqual({ reason: 'systems', checked: false });
-    expect(h.$('.sched-week-flag').textContent).toContain('Systems down');
+    h.click('[data-flag-set="week:' + WEEK + '"]');
+    expect(h.state().weeks[WEEK].flag).toEqual({ checked: false });
+    expect(h.$('.sched-week-flag').textContent).toContain('Week flagged');
   });
 
   it('counts what is still to check on the Flagged button', () => {
     const h = boot({
-      [WEEK]: { deductionMins: 0, days: {}, flag: { reason: 'other', checked: true },
-        shifts: { [TUE]: { flag: { reason: 'systems', checked: false } } } },
-      [LAST]: { deductionMins: 0, days: {}, shifts: { [LAST_THU]: { flag: { reason: 'van', checked: false } } } }
+      [WEEK]: { deductionMins: 0, days: {}, flag: { checked: true },
+        shifts: { [TUE]: { flag: { checked: false } } } },
+      [LAST]: { deductionMins: 0, days: {}, shifts: { [LAST_THU]: { flag: { checked: false } } } }
     });
     tab(h, 'schedule');
     expect(h.$('#open-flags .flags-count').textContent).toBe('2');
   });
 
   it('keeps a day’s flag and note when Standard week is applied', () => {
-    const h = boot({ [WEEK]: { deductionMins: 0, days: {}, shifts: { [TUE]: { note: 'IT outage', flag: { reason: 'systems', checked: false } } } } });
+    const h = boot({ [WEEK]: { deductionMins: 0, days: {}, shifts: { [TUE]: { note: 'IT outage', flag: { checked: false } } } } });
     tab(h, 'schedule');
     h.click('#apply-default');
-    expect(shift(h, WEEK, TUE)).toMatchObject({ start: '08:00', note: 'IT outage', flag: { reason: 'systems' } });
+    expect(shift(h, WEEK, TUE)).toMatchObject({ start: '08:00', note: 'IT outage', flag: { checked: false } });
   });
 });
 
 describe('the Flagged calendar', () => {
   const seeded = () => boot({
-    [WEEK]: { deductionMins: 0, days: {}, shifts: { [TUE]: { note: 'Systems off till 11', flag: { reason: 'systems', checked: false } } } },
-    [LAST]: { deductionMins: 0, days: {}, flag: { reason: 'kit', checked: false },
-      shifts: { [LAST_THU]: { flag: { reason: 'van', checked: true } } } }
+    [WEEK]: { deductionMins: 0, days: {}, shifts: { [TUE]: { note: 'Systems off till 11', flag: { checked: false } } } },
+    [LAST]: { deductionMins: 0, days: {}, flag: { checked: false },
+      shifts: { [LAST_THU]: { flag: { checked: true } } } }
   });
   const open = (h) => { tab(h, 'schedule'); h.click('#open-flags'); return h.$('#flag-sheet'); };
 
@@ -137,8 +138,8 @@ describe('the Flagged calendar', () => {
     open(h);
     const items = h.$$('#flag-sheet .flag-item:not(.is-checked)').map(i => i.textContent.replace(/\s+/g, ' '));
     expect(items).toHaveLength(2);
-    expect(items[0]).toMatch(/Week 38 .* Laptop \/ kit/);
-    expect(items[1]).toMatch(/Tue 22 Sept.*Systems down — Systems off till 11/);
+    expect(items[0]).toMatch(/Week 38/);
+    expect(items[1]).toMatch(/Tue 22 Sept.*Systems off till 11/);
   });
 
   it('ticks a flag off from the list', () => {
@@ -155,7 +156,7 @@ describe('the Flagged calendar', () => {
     h.click(`#flag-sheet .flag-item-main[data-flag-go="week:${LAST}"]`);
     expect(h.$('#flag-sheet')).toBeNull();
     expect(h.$('.sched-nav-wk').textContent).toBe('Week 38');
-    expect(h.$('.sched-week-flag').textContent).toContain('Laptop / kit');
+    expect(h.$('.sched-week-flag').textContent).toContain('Week flagged');
   });
 
   it('jumps to a flagged day’s week with its note and flag open', () => {
@@ -167,7 +168,7 @@ describe('the Flagged calendar', () => {
     expect(h.$('#flag-sheet')).toBeNull();
     expect(h.$('.sched-nav-wk').textContent).toBe('Week 38');
     expect(h.$(`.sched-note-input[data-day="${LAST_THU}"]`)).toBeTruthy();
-    expect(h.$('.sched-note-panel .flag-line').textContent).toContain('Van');
+    expect(h.$('.sched-note-panel .flag-line').textContent).toMatch(/Flagged\s*·\s*checked/);
   });
 
   it('moves between months', () => {
@@ -183,15 +184,16 @@ describe('the Flagged calendar', () => {
   it('says so when nothing is flagged', () => {
     const h = boot();
     open(h);
-    expect(h.$('#flag-sheet .flag-list-empty')).toBeTruthy();
+    expect(h.$('#flag-sheet .flag-list-empty').textContent).toContain('Want to be reminded to check a day');
+    expect(h.$('#flag-sheet').textContent).not.toMatch(/out of the ordinary/i);
   });
 });
 
 describe('listFlags', () => {
   it('collects day and week flags from every week, oldest first', () => {
     const f = listFlags({ weeks: {
-      [WEEK]: { shifts: { [TUE]: { flag: { reason: 'systems' } }, [WED]: { note: 'no flag' } } },
-      [LAST]: { flag: { reason: 'kit', checked: true } }
+      [WEEK]: { shifts: { [TUE]: { flag: { checked: false } }, [WED]: { note: 'no flag' } } },
+      [LAST]: { flag: { checked: true } }
     } });
     expect(f.map(x => [x.kind, x.dayKey, x.checked])).toEqual([['week', LAST, true], ['day', TUE, false]]);
   });

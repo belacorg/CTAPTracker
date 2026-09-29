@@ -4136,12 +4136,13 @@ body.light .cashout-result-modelled .cashout-result-net-val { color: #8a5a00; }
 }
 .lj-log-del:active { background: var(--surface2); color: var(--red); }
 .lj-log-del-spacer { flex: none; width: 26px; }
+/* Nothing logged yet: dashed, but still the day's card, so + Add a note and
+   ⚑ Flag sit inside it rather than floating loose under it. */
 .lj-log-empty {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 10px; padding: 11px 14px;
   background: none;
   border: 1px dashed var(--sep);
 }
+.lj-log-empty .lj-log-head { cursor: default; }
 .lj-log-none { font-size: 0.76rem; color: var(--muted2); text-align: right; }
 
 /* ── Day note on Log Job, after the day's jobs ── */
@@ -4629,28 +4630,10 @@ body.light .lj-sec-sticky { background: var(--bg); }
   flex: none; width: 26px; height: 26px; border: none; background: none;
   color: var(--muted2); font-size: 0.72rem; cursor: pointer; border-radius: 8px;
 }
-.flag-picker { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; }
-.flag-picker-q { font-size: 0.78rem; font-weight: 600; color: var(--muted); }
-.flag-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.flag-chip {
-  padding: 7px 12px; border-radius: 99px;
-  border: 1.5px solid rgba(255,165,36,0.45); background: none;
-  font: inherit; font-size: 0.78rem; font-weight: 600; color: var(--fg);
-  cursor: pointer; -webkit-tap-highlight-color: transparent;
-}
-.flag-chip:active { background: rgba(255,165,36,0.15); }
-.flag-cancel {
-  align-self: flex-start; padding: 2px 0; border: none; background: none;
-  font: inherit; font-size: 0.74rem; color: var(--muted); cursor: pointer;
-}
-
 /* Log Job: the flag sits after the note, then the add buttons. */
 .lj-flag-row { padding: 8px 10px; border-bottom: 0.5px solid var(--sep); }
-.lj-flag-row .flag-picker { padding: 2px 4px; }
 .lj-day-actions { display: flex; align-items: center; justify-content: space-between; }
 .lj-day-actions .lj-note-add { width: auto; }
-.lj-day-actions-solo { margin-top: 2px; }
-.lj-day-actions-solo .lj-note-add, .lj-day-actions-solo .flag-add { padding: 8px 2px 0; }
 
 /* Shift: header with the Flagged button, a ⚑ under a flagged day's date. */
 .sched-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
