@@ -388,7 +388,7 @@ const APP_BUILD = 201;
 // remembers to decide which updates it has been shown.
 const APP_VERSION = '0.8.3';
 const CHANGELOG = [
-  { build: 201, version: '0.8.3', date: '2026-09-29',
+  { build: 201, version: '0.8.3', date: '2026-09-30',
     // A few lines from Jake, in his own words, shown above the list.
     note: null,
     items: [
