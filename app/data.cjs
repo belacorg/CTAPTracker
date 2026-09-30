@@ -158,33 +158,26 @@ function calcVariableCredits(mins) {
 }
 
 // ── Flags ──────────────────────────────────────────────────────────────────
-// A **Flag** marks a day, or a whole week, the engineer wants to double-check
-// when the CTAP update comes in, so they can go back to it easily. It changes
-// no numbers. Stored beside the day note — week.shifts[day].flag, or week.flag
-// for a week — as { checked }. No reason is asked for: the day note says why.
-// Ticked off as checked, never deleted by checking.
+// A **Flag** marks a day the engineer wants to double-check when the CTAP
+// update comes in, so they can go back to it easily. It changes no numbers.
+// Stored beside the day note, week.shifts[day].flag, as { checked }. No reason
+// is asked for: the day note says why. Ticked off as checked, never deleted
+// by checking.
 
-// Every flag on the phone, oldest first. A week's flag sorts as its Monday.
-//   { kind: 'day'|'week', weekKey, dayKey, checked, note }
+// Every flagged day on the phone, oldest first.
+//   { weekKey, dayKey, checked, note }
 function listFlags(state) {
   const out = [];
   Object.keys(state.weeks || {}).forEach(function(wk) {
-    const week = state.weeks[wk] || {};
-    if (week.flag) {
-      out.push({ kind: 'week', weekKey: wk, dayKey: wk, checked: !!week.flag.checked, note: '' });
-    }
-    const shifts = week.shifts || {};
+    const shifts = (state.weeks[wk] || {}).shifts || {};
     Object.keys(shifts).forEach(function(dk) {
       const f = shifts[dk] && shifts[dk].flag;
       if (f) {
-        out.push({ kind: 'day', weekKey: wk, dayKey: dk, checked: !!f.checked,
-          note: (shifts[dk].note || '').trim() });
+        out.push({ weekKey: wk, dayKey: dk, checked: !!f.checked, note: (shifts[dk].note || '').trim() });
       }
     });
   });
-  return out.sort(function(a, b) {
-    return a.dayKey < b.dayKey ? -1 : a.dayKey > b.dayKey ? 1 : (a.kind === 'week' ? -1 : 1);
-  });
+  return out.sort(function(a, b) { return a.dayKey < b.dayKey ? -1 : a.dayKey > b.dayKey ? 1 : 0; });
 }
 
 // The ISO week number — "Week 40" — the same one the Dashboard header shows.
@@ -402,7 +395,7 @@ const CHANGELOG = [
     'Wait Work has changed from hours to minutes. Anything you logged before is unchanged.',
     'Rest days: tap Rest on any day in the Shift tab. A rest day keeps your week\u2019s hours; Leave is still for annual leave.',
     'Add a note straight after a job on Log Job. It\u2019s the same day note as the Shift tab, so you can write it in either place.',
-    'Flag a day if you want to double-check it when your CTAP update comes in. Tap \u2691 Flag on Log Job, or the + on any day in the Shift tab. You can flag a whole week too.',
+    'Flag a day if you want to double-check it when your CTAP update comes in. Tap \u2691 Flag on Log Job, or the + on any day in the Shift tab.',
     'Tap Calendar on the Shift tab to see your flagged days, and tick each one off as you check it. Tap any day to go straight to its jobs.',
     'The Schedule tab is now called Shift, and the week number shows on Log Job and Shift.',
     'The app now shows its version number (this is 0.8.3) instead of a build number.'

@@ -61,7 +61,7 @@ A whole-day flag on a **Shift** indicating the engineer was not on the roster â€
 _Avoid_: "absence" (overloaded with NPT in the UI; in the domain, **Leave** is specifically the whole-day Workday-style absence)
 
 **Flag**:
-A marker on a day or a whole week the engineer wants to double-check when the CTAP update comes in. One tap, no reason asked (the day note says why, if anything). Starts "to check", is ticked off as "checked", and changes no numbers. Listed under Flagged days in the Calendar on the **Shift** tab; tapping one opens that day on Log Job. See ADR-0027.
+A marker on a day the engineer wants to double-check when the CTAP update comes in (days only; no week flag). One tap, no reason asked (the day note says why, if anything). Starts "to check", is ticked off as "checked", and changes no numbers. Listed under Flagged days in the Calendar on the **Shift** tab; tapping one opens that day on Log Job. See ADR-0027.
 _Avoid_: "issue", "query", "dispute" (a flag is a reminder to check, not a claim)
 
 **Rest day**:

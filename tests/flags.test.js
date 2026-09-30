@@ -1,4 +1,4 @@
-// Flagging a day, or a week, to double-check against the CTAP update.
+// Flagging a day to double-check against the CTAP update.
 //
 // An engineer wants to be reminded to check a day when the CTAP update comes
 // in, and to find it again easily. One tap flags it (the day note says why, if
@@ -24,7 +24,7 @@ const shift = (h, wk, dk) => (((h.state().weeks[wk] || {}).shifts) || {})[dk] ||
 describe('flagging a day on Log Job', () => {
   it('flags today in one tap, asking for no reason', () => {
     const h = boot();
-    h.click('[data-flag-set="day:' + WED + '"]');
+    h.click('[data-flag-set="' + WED + '"]');
     expect(shift(h, WEEK, WED).flag).toEqual({ checked: false });
     expect(h.$('.lj-flag-row').textContent).toMatch(/Flagged\s*·\s*to check/);
   });
@@ -33,7 +33,7 @@ describe('flagging a day on Log Job', () => {
     const h = boot();
     expect(h.$('.lj-log-empty [data-flag-set]')).toBeTruthy();
     expect(h.$('.lj-log-empty [data-lj-note-open]')).toBeTruthy();
-    h.click('[data-flag-set="day:' + WED + '"]');
+    h.click('[data-flag-set="' + WED + '"]');
     expect(h.$('.lj-log-head').textContent).toContain('Nothing logged yet');
     expect(h.$('.lj-log-head').textContent).not.toContain('0 logged');
   });
@@ -41,7 +41,7 @@ describe('flagging a day on Log Job', () => {
   it('flags the day being logged into, not always today', () => {
     const h = boot();
     h.click('[data-log-day-pick="' + TUE + '"]');
-    h.click('[data-flag-set="day:' + TUE + '"]');
+    h.click('[data-flag-set="' + TUE + '"]');
     expect(shift(h, WEEK, TUE).flag).toEqual({ checked: false });
     expect(shift(h, WEEK, WED).flag).toBeUndefined();
   });
@@ -58,7 +58,7 @@ describe('flagging a day on Log Job', () => {
 
   it('keeps the day’s times and note when flagged or unflagged', () => {
     const h = boot({ [WEEK]: { deductionMins: 0, days: {}, shifts: { [WED]: { ...nineToFive, note: 'Laptop died at 10' } } } });
-    h.click('[data-flag-set="day:' + WED + '"]');
+    h.click('[data-flag-set="' + WED + '"]');
     h.click('.lj-flag-row [data-flag-clear]');
     expect(shift(h, WEEK, WED)).toEqual({ ...nineToFive, note: 'Laptop died at 10' });
   });
@@ -67,7 +67,7 @@ describe('flagging a day on Log Job', () => {
     const h = boot({ [WEEK]: { deductionMins: 0, days: {}, shifts: { [WED]: nineToFive, [TUE]: nineToFive } } });
     const w = () => h.state().weeks[WEEK];
     const before = [h.window.weekTargetHours(h.state(), WEEK), h.window.getDailyTarget(h.state(), w(), WED)];
-    h.click('[data-flag-set="day:' + WED + '"]');
+    h.click('[data-flag-set="' + WED + '"]');
     expect([h.window.weekTargetHours(h.state(), WEEK), h.window.getDailyTarget(h.state(), w(), WED)]).toEqual(before);
   });
 });
@@ -89,18 +89,17 @@ describe('flags on the Shift tab', () => {
     expect(shift(h, WEEK, TUE).flag).toEqual({ checked: false });
   });
 
-  it('flags a whole week', () => {
+  it('has no week flag, only days', () => {
     const h = boot();
     tab(h, 'schedule');
-    h.click('[data-flag-set="week:' + WEEK + '"]');
-    expect(h.state().weeks[WEEK].flag).toEqual({ checked: false });
-    expect(h.$('.sched-week-flag').textContent).toContain('Week flagged');
+    expect(h.$('[data-flag-set^="week"]')).toBeNull();
+    expect(h.$('#app').textContent).not.toMatch(/flag this week/i);
   });
 
   it('counts what is still to check on the Calendar button', () => {
     const h = boot({
-      [WEEK]: { deductionMins: 0, days: {}, flag: { checked: true },
-        shifts: { [TUE]: { flag: { checked: false } } } },
+      [WEEK]: { deductionMins: 0, days: {},
+        shifts: { [TUE]: { flag: { checked: false } }, [WED]: { flag: { checked: true } } } },
       [LAST]: { deductionMins: 0, days: {}, shifts: { [LAST_THU]: { flag: { checked: false } } } }
     });
     tab(h, 'schedule');
@@ -118,8 +117,8 @@ describe('flags on the Shift tab', () => {
 describe('the Calendar', () => {
   const seeded = () => boot({
     [WEEK]: { deductionMins: 0, days: {}, shifts: { [TUE]: { note: 'Systems off till 11', flag: { checked: false } } } },
-    [LAST]: { deductionMins: 0, days: {}, flag: { checked: false },
-      shifts: { [LAST_THU]: { flag: { checked: true } } } }
+    [LAST]: { deductionMins: 0, days: {},
+      shifts: { [LAST]: { flag: { checked: false } }, [LAST_THU]: { flag: { checked: true } } } }
   });
   const open = (h) => { tab(h, 'schedule'); h.click('#open-flags'); return h.$('#flag-sheet'); };
 
@@ -131,7 +130,7 @@ describe('the Calendar', () => {
     expect(day.classList.contains('is-flag')).toBe(true);
     expect(day.classList.contains('is-checked')).toBe(false);
     expect(h.$(`#flag-sheet .flagcal-day.is-checked[data-flag-go="day:${LAST_THU}"]`)).toBeTruthy();
-    expect(h.$$('#flag-sheet .flagcal-week.wk-flag')).toHaveLength(1);
+    expect(h.$(`#flag-sheet .flagcal-day.is-flag[data-flag-go="day:${LAST}"]`)).toBeTruthy();
   });
 
   it('lists the flagged days still to check, oldest first, with the day note', () => {
@@ -140,14 +139,14 @@ describe('the Calendar', () => {
     expect(h.$('#flag-sheet .flag-list-head').textContent).toMatch(/Flagged days\s*2 to check/);
     const items = h.$$('#flag-sheet .flag-item:not(.is-checked)').map(i => i.textContent.replace(/\s+/g, ' '));
     expect(items).toHaveLength(2);
-    expect(items[0]).toMatch(/Week 38/);
+    expect(items[0]).toMatch(/Mon 14 Sept/);
     expect(items[1]).toMatch(/Tue 22 Sept.*Systems off till 11/);
   });
 
   it('ticks a flag off from the list', () => {
     const h = seeded();
     open(h);
-    h.click(`#flag-sheet [data-flag-check="day:${TUE}"]`);
+    h.click(`#flag-sheet [data-flag-check="${TUE}"]`);
     expect(shift(h, WEEK, TUE).flag.checked).toBe(true);
     expect(h.$('#flag-sheet')).toBeTruthy();                       // stays open to carry on checking
   });
@@ -169,13 +168,6 @@ describe('the Calendar', () => {
     h.click(`#flag-sheet .flag-item-main[data-flag-go="day:${LAST_THU}"]`);
     expect(h.$('.lj-weeknav-label').textContent).toContain('Week 38');
     expect(h.$('[data-log-day-pick="' + LAST_THU + '"]').getAttribute('aria-pressed')).toBe('true');
-  });
-
-  it('takes a flagged week to its Monday on Log Job', () => {
-    const h = seeded();
-    open(h);
-    h.click(`#flag-sheet .flag-item-main[data-flag-go="week:${LAST}"]`);
-    expect(h.$('[data-log-day-pick="' + LAST + '"]').getAttribute('aria-pressed')).toBe('true');
   });
 
   it('opens any past day\u2019s jobs, flagged or not, but not days to come', () => {
@@ -204,11 +196,14 @@ describe('the Calendar', () => {
 });
 
 describe('listFlags', () => {
-  it('collects day and week flags from every week, oldest first', () => {
+  it('collects flagged days from every week, oldest first, with their notes', () => {
     const f = listFlags({ weeks: {
-      [WEEK]: { shifts: { [TUE]: { flag: { checked: false } }, [WED]: { note: 'no flag' } } },
-      [LAST]: { flag: { checked: true } }
+      [WEEK]: { shifts: { [TUE]: { flag: { checked: false }, note: ' Laptop ' }, [WED]: { note: 'no flag' } } },
+      [LAST]: { shifts: { [LAST_THU]: { flag: { checked: true } } } }
     } });
-    expect(f.map(x => [x.kind, x.dayKey, x.checked])).toEqual([['week', LAST, true], ['day', TUE, false]]);
+    expect(f).toEqual([
+      { weekKey: LAST, dayKey: LAST_THU, checked: true, note: '' },
+      { weekKey: WEEK, dayKey: TUE, checked: false, note: 'Laptop' }
+    ]);
   });
 });

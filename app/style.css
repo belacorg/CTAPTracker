@@ -81,7 +81,7 @@ body.light {
   --tile-border: rgba(74,134,216,0.18);
 }
 body.light .top-bar {
-  background: rgba(242,242,247,0.92);
+  background: #f2f2f7;
   border-bottom-color: rgba(0,0,0,0.1);
 }
 body.light .bottom-nav {
@@ -115,9 +115,10 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
-  background: rgba(0, 0, 0, 0.85);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  backdrop-filter: saturate(180%) blur(20px);
+  /* Solid, not frosted glass. Saved to the home screen, the bar runs up
+     behind the phone's clock, and a see-through blurred bar there showed the
+     page scrolling under it as a fuzzy smear around "CTAP Tracker". */
+  background: var(--bg);
   border-bottom: 0.5px solid var(--sep);
   position: sticky;
   top: 0;
@@ -1667,10 +1668,12 @@ details[open] .info-chevron { transform: rotate(90deg); }
   justify-content: space-between;
   margin-bottom: 10px;
 }
-.sched-nav-week {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+/* Standard week and Calendar share one row, equal halves, so the header
+   lines up with the day rows below it rather than trailing off to the right. */
+.sched-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.sched-actions .sched-standard-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 9px 12px; font-size: 0.8rem;
 }
 .sched-nav-btn {
   background: var(--surface2);
@@ -4635,22 +4638,11 @@ body.light .lj-sec-sticky { background: var(--bg); }
 .lj-day-actions { display: flex; align-items: center; justify-content: space-between; }
 .lj-day-actions .lj-note-add { width: auto; }
 
-/* Shift: header with the Flagged button, a ⚑ under a flagged day's date. */
-.sched-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.sched-head .st-section-label { margin-bottom: 0; }
-.flags-btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 5px 11px; border-radius: 99px;
-  border: 1.5px solid var(--surface3); background: none;
-  font: inherit; font-size: 0.74rem; font-weight: 600; color: var(--fg);
-  cursor: pointer;
-}
+/* Shift: a ⚑ under a flagged day's date. */
 .flags-count {
   display: inline-block; min-width: 18px; padding: 1px 6px; border-radius: 99px;
   background: var(--amber); color: #000; font-size: 0.66rem; font-weight: 700; text-align: center;
 }
-.sched-week-flag { margin: 2px 0 10px; }
-.sched-week-flag .flag-add { padding: 4px 2px; }
 .sched-flag { font-size: 0.72rem; line-height: 1; margin-top: 2px; color: var(--amber); }
 .sched-flag.is-checked { color: var(--green); }
 .sched-flag-wrap { margin-top: 8px; }
@@ -4662,8 +4654,6 @@ body.light .lj-sec-sticky { background: var(--bg); }
 .flagcal-head, .flagcal-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
 .flagcal-head span { text-align: center; font-size: 0.62rem; font-weight: 700; color: var(--muted); padding-bottom: 4px; }
 .flagcal-week { padding: 2px; border-radius: 10px; margin-bottom: 2px; }
-.flagcal-week.wk-flag { background: rgba(255,165,36,0.12); box-shadow: inset 3px 0 0 var(--amber); }
-.flagcal-week.wk-flag.is-checked { background: rgba(52,199,89,0.08); box-shadow: inset 3px 0 0 var(--green); }
 .flagcal-day {
   position: relative; display: flex; align-items: center; justify-content: center;
   height: 38px; border-radius: 9px; border: none; background: none;
